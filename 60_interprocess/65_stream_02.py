@@ -13,7 +13,6 @@ Msg = namedtuple( "origin", "message" )
 
 class Hub:
     """ Distributes each message to the queue of each all subscription """
-    # FIXME: ROUTING / SORTING SHOULD TAKE PLACE HERE
 
     def __init__( self ):
         """ Maintain subscriptions as a set """
@@ -66,13 +65,23 @@ class Node:
 
 ########## PUBLISHER & SUBSCRIBER PROCESSES ########################################################
 
-async def start_shell_subprocess( cmd ): #, stdout_cb, stderr_cb ):
-    """ Kick off a subprocess """
-    return await asyncio.create_subprocess_shell(
+async def manage_shell_subprocess( name, hub, cmd ): #, stdout_cb, stderr_cb ):
+    """ Kick off a subprocess and handle messages to and from that porcess """
+    process = await asyncio.create_subprocess_shell( # FIXME: IF THIS HANGS, DOES EXEC NOT HANG?
         cmd,
         stdout = asyncio.subprocess.PIPE, 
         stderr = asyncio.subprocess.PIPE
     )
+    prcNode = Node( name, hub )
+    msgText = ""
+    while True:
+        # FIXME, START HERE: MANAGE THE PROCESS
+        # Wait for a message and hand it to the process
+        # Check for a message from the process
+        # If the process has died, then quit
+        # PAUSE?
+        pass
+    # FIXME: REAP THE PROCESS & RETURN EXIT STATUS
 
 
 async def reader( name, hub ):
