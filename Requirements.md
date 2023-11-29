@@ -18,9 +18,9 @@ Brainstorming / Steering / Planning Document
 * Poses should be expressed in homogeneous coordinates (Numpy array)
 
 ## Preliminaries
-1. `[Y]` Install PDDLStream and test at least one example, 2023-11-07: Only last 2 PyBullet examples and below seem to work.
+1. `[Y]` Install PDDLStream and test at least one example, 2023-11-07: Only last 2 PyBullet examples and below seem to work. (**James**)
     * `[Y]` Document steps including additional dependencies, 2023-11-07: Some examples require PyBullet
-1. `[Y]` Attempt to build simplest PDDLStream example, 2023-11-09: Simple blocksworld solution, no perception
+1. `[Y]` Attempt to build simplest PDDLStream example, 2023-11-09: Simple blocksworld solution, no perception (**James**)
     * Blocks World example, 2023-11-09: We have an IRL blocksworld problem
     * `[N]` Tutorial?, 2023-11-07: No direct tutprial, Move to example
     * `[Y]` Choose simplest example as basis, 2023-11-09: Simple blocksworld solution, no perception
@@ -41,12 +41,12 @@ Brainstorming / Steering / Planning Document
             * Mapping of strings to functions
             * Initial state
             * Goal state
-    * `[Y]` Determine program flow, What is called and when?, 2023-11-09: Use this as a roadmap for building example
+    * `[Y]` Determine program flow, What is called and when?, 2023-11-09: Use this as a roadmap for building example (**James**)
         1. Solve PDDL: `pddlstream_from_state`, `solve`
         1. Associate actions with robot commands: `plan_commands`
         1. Run robot commands: `apply_commands`
 
-1. `[>]` Implement PDDLStream version of the RYB Block Problem, Minimum Viable Prototype (**James**)
+1. `[Y]` Implement PDDLStream version of the RYB Block Problem, Minimum Viable Prototype, 2023-11-28: PDDLStream needs to be stripped for parts (**James**)
     1. `[Y]` Q: WHAT IS EVEN HAPPENING? --> Get better understanding of the PDDLStream workflow.
         * 2023-11-20: See synopsis below: "**How does the solver work?**"
         * 2023-11-20: This is a wider issue, See items below
@@ -57,23 +57,23 @@ Brainstorming / Steering / Planning Document
         * REMEMBER: Streams should `yield` instead of `return`!
         - `[Y]` "Dummy" IK Solver, 2023-11-21: Just use the pose
     1. `[Y]` PDDLStream Solution <-from-- "Incremental", 2023-11-21: Solution obtained!
-    1. `[ ]` Visualize
-        * `[ ]` Visualize `move_free` action
-        * `[ ]` Visualize `pick` action
-        * `[ ]` ISSUE: Blocks are BELOW the table level!
-            - `[ ]` Check the camera transform
-        * `[ ]` ISSUE: Red and Yellow blocks occupy the same space!
-            - `[ ]` Is there a different way to define the color filter?
-    1. `[ ]` Execute
-        * `[ ]` Behavior Tree for one action
-        * `[ ]` Behavior Tree for all actions
-    1. `[ ]` Postmortem Question: How will MAGPIE differ from PDDLStream?
-        * `[ ]` Discuss required engineering with team
-        * `[ ]` Discuss GPL3 licensing with advisor/team
-    1. `[ ]` PDDLStream --to--> MAGPIE Investigation
-        * `[ ]` De-tangle camera from detector
-        * `[ ]` Create a local copy of "incremental.py" to allow inspection and debugging of PDDLStream pipeline
-            - `[ ]` Display which solver was chosen by `solve_finite`
+    1. `[Y]` Visualize
+        * `[Y]` Visualize `move_free` action, 2023-11-28: Visualized in Open3D
+        * `[Y]` Visualize `pick` action, 2023-11-28: Visualized in Open3D
+        * `[Y]` ISSUE: Blocks are BELOW the table level!, 2023-11-28: Visualized in Open3D
+            - `[Y]` Check the camera transform, 2023-11-28: Visualized in Open3D
+        * `[Y]` ISSUE: Red and Yellow blocks occupy the same space!, 2023-11-28: Visualized in Open3D
+            - `[Y]` Is there a different way to define the color filter?, 2023-11-28: Visualized in Open3D
+    1. `[Y]` Execute, 2023-11-28: Executed
+        * `[Y]` Behavior Tree for one action, 2023-11-28: Executed
+        * `[Y]` Behavior Tree for all actions, 2023-11-28: Executed
+    1. `[Y]` Postmortem Question: How will MAGPIE differ from PDDLStream?, 2023-11-28: Discussed
+        * `[Y]` Discuss required engineering with team, 2023-11-28: Discussed
+        * `[N]` Discuss GPL3 licensing with advisor/team, 2023-11-28: Not Discussed
+    1. `[Y]` PDDLStream --to--> MAGPIE Investigation, 2023-11-28: PDDLStream needs to be stripped for parts
+        * `[Y]` De-tangle camera from detector, 2023-11-28: Simple detector, No YOLO
+        * `[N]` Create a local copy of "incremental.py" to allow inspection and debugging of PDDLStream pipeline, 2023-11-28: New solver required
+            - `[N]` Display which solver was chosen by `solve_finite`, 2023-11-28: New solver required
 
 
 ### How does the solver work?
@@ -179,6 +179,14 @@ Location: focused.py
 1. Get and print summary
 1. Store statistics
 1. Return solution
+
+
+### Interprocess Communication
+(**James**)  
+* `[ ]` Q: How will different parts of the architecture talk to each other?
+* `[ ]` Q: What is the data exchange format?
+* `[ ]` Q: Publisher/Subscriber, or some other model?
+1. `[ ]` Python `asynchio` tests
 
 ## Camera Process
 * The Camera Process maintains a live feed from the RealSense D405 in the MAGPIE palm.
