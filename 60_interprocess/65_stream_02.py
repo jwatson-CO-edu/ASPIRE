@@ -4,85 +4,46 @@
 
 import asyncio
 import random
-from collections import namedtuple
 
 
 
 ########## UTILITY CLASSES #########################################################################
-Msg = namedtuple( "origin", "message" )
 
-class Hub:
+class Hub():
     """ Distributes each message to the queue of each all subscription """
+    # FIXME: ROUTING / SORTING SHOULD TAKE PLACE HERE
 
     def __init__( self ):
         """ Maintain subscriptions as a set """
-        self.queue = asyncio.Queue() # Input from nodes
-        self.nodes = {} # ------------ All nodes on the network
+        self.subscriptions = set()
 
     def publish( self, message ):
         """ For each queue referenced, push message """
-        for name, node in self.nodes.items():
-            if message.origin != name:
-                node.queue.put_nowait( message )
-
-    def process_input( self ):
-        while not self.queue.empty():
-            msg = self.queue.get_nowait()
-            self.publish( msg )
+        for queue in self.subscriptions:
+            queue.put_nowait( message )
 
 
-class Node:
-    """ Both publishes and consumes """
+class Subscription():
+    """ Message subscriber connected to its message queue by reference """
 
-    def __init__( self, name, hub ):
+    def __init__( self, hub ):
         """ Connect to `hub` and init `queue` """
-        self.name  = name
         self.hub   = hub # ----------- Reference to message distributor
         self.queue = asyncio.Queue() # Personal message queue
 
     def __enter__( self ):
         """ Add own queue to the hub when this subscription enters _____ """
         # FIXME: WHEN IS THIS CALLED?
-        self.hub.nodes.add( self.queue )
+        self.hub.subscriptions.add( self.queue )
         return self.queue
 
     def __exit__( self, type, value, traceback ):
         """ Remove own queue to the hub when this subscription exits """
-        self.hub.nodes.remove( self.queue )
-        print( "Node has exited!\n", type, '\n', value, '\n', traceback, '\n' )
-
-    def send( self, msgStr ):
-        """ Send message text back to the hub """
-        message = Msg( self.name, msgStr )
-        self.hub.queue.put_nowait( message )
-
-    async def recv( self ):
-        """ Wait for one message text from the hub """
-        msg    = await self.queue.get()
-        return msg.message
+        self.hub.subscriptions.remove( self.queue )
 
 
 
 ########## PUBLISHER & SUBSCRIBER PROCESSES ########################################################
-
-async def manage_shell_subprocess( name, hub, cmd ): #, stdout_cb, stderr_cb ):
-    """ Kick off a subprocess and handle messages to and from that porcess """
-    process = await asyncio.create_subprocess_shell( # FIXME: IF THIS HANGS, DOES EXEC NOT HANG?
-        cmd,
-        stdout = asyncio.subprocess.PIPE, 
-        stderr = asyncio.subprocess.PIPE
-    )
-    prcNode = Node( name, hub )
-    msgText = ""
-    while True:
-        # FIXME, START HERE: MANAGE THE PROCESS
-        # Wait for a message and hand it to the process
-        # Check for a message from the process
-        # If the process has died, then quit
-        # PAUSE?
-        pass
-    # FIXME: REAP THE PROCESS & RETURN EXIT STATUS
-
 
 async def reader( name, hub ):
     """ Function implements a Subscriber, Manages a `Subscription` """
@@ -112,7 +73,7 @@ async def writer( iterations, hub ):
     """ Function implements a Publisher, Sends messages to the `hub` """
     for x in range( iterations ):
         # Report number of current subscribers
-        print( f'Writer: I have {len(hub.nodes)} subscribers now' )
+        print( f'Writer: I have {len(hub.subscriptions)} subscribers now' )
         # Push a message with the current itertion
         hub.publish(f'Hello world - {x}')
         # Let other things happen
