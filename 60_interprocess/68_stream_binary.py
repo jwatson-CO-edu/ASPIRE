@@ -5,6 +5,24 @@ from threading import Thread
 from time import sleep
 now = time.time
 
+########## BINARY DATA #############################################################################
+
+class PBJSON_IO:
+    _BGN_BYTES = bytearray( [42,42] )
+    _END_BYTES = bytearray( [86,86] )
+    """ Pack and Unpack Binary JSON (PBJSON) """
+
+    def __init__( self ):
+        """ Init buffer """
+        self.buf = bytearray()
+
+    def pack( self, inpt ):
+        pass
+
+
+
+########## STREAM COMMUNICATION ####################################################################
+
 def set_non_blocking( output ):
     ''' even in a thread, a normal read with block until the buffer is full '''
     # Original Author, Chase Seibert: https://chase-seibert.github.io/blog/2012/11/16/python-subprocess-asynchronous-read-stdout.html
@@ -22,6 +40,10 @@ def non_block_read( output ):
         return out
     except:
         return ''
+    
+
+
+########## THREADS #################################################################################
 
 def log_worker( stdin, stdout ):
     ''' needs to be in a thread so we can read the stdout w/o blocking '''
@@ -46,6 +68,9 @@ def log_worker( stdin, stdout ):
         i += 1
         sleep( 0.050 )
 
+
+
+########## MAIN ####################################################################################
 
 if __name__ == '__main__':
 
