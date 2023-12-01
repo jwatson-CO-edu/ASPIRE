@@ -1,24 +1,13 @@
 # https://chase-seibert.github.io/blog/2012/11/16/python-subprocess-asynchronous-read-stdout.html
 
 import os, time, fcntl, subprocess
+from queue import Queue
 from threading import Thread
 from time import sleep
 now = time.time
-
-########## BINARY DATA #############################################################################
-
-class PBJSON_IO:
-    _BGN_BYTES = bytearray( [42,42] )
-    _END_BYTES = bytearray( [86,86] )
-    """ Pack and Unpack Binary JSON (PBJSON) """
-
-    def __init__( self ):
-        """ Init buffer """
-        self.buf = bytearray()
-
-    def pack( self, inpt ):
-        pass
-
+import pbjson
+from pbjson_io import PBJSON_IO
+from random import choice, randrange
 
 
 ########## STREAM COMMUNICATION ####################################################################
@@ -43,6 +32,20 @@ def non_block_read( output ):
     
 
 
+########## SILLY THINGS ############################################################################
+
+def character_factory():
+    return {
+    "name" : choice( ["Thing 1", "Thing 2", "Foo", "Bar", "Baz", "Xur",] ),
+    "attr" : {
+        "int": randrange(11),
+        "str": randrange(11),
+        "dex": randrange(11),
+        "cha": randrange(11),
+    },
+}
+
+
 ########## THREADS #################################################################################
 
 def log_worker( stdin, stdout ):
@@ -50,19 +53,24 @@ def log_worker( stdin, stdout ):
     set_non_blocking( stdout )
     bgn = now()
     i   = 0
+    pbj = PBJSON_IO()
     while True:
         try:
-            stdin.write( str.encode( str(i), 'ascii' ) )
+            cObj = pbj.pack( character_factory() )
+            stdin.write( cObj )
             stdin.flush()
         except:
             pass
         # stdin.drain()
         print( "Sent:", i )
-        output = non_block_read( stdout ).strip()
-        if len( output ):
-            print( "Process Said:", output, '\n' )
+        output = bytearray( non_block_read( stdout ) )
+        pbj.write( output )
+        if pbj.unpack():
+            msgs = pbj.get_all()
+            for msg in msgs:
+                print( "Process Said:", msg['message'], '\n' )
         else:
-            print()
+            print( "!! NO DATA !!" )
         if (now()-bgn) > 10:
             break
         i += 1
