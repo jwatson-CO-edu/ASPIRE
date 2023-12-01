@@ -67,8 +67,9 @@ def log_worker( stdin, stdout ):
         pbj.write( output )
         if pbj.unpack():
             msgs = pbj.get_all()
+            print( "++ YES DATA ++" )
             for msg in msgs:
-                print( "Process Said:", msg['message'], '\n' )
+                print( "\tProcess Said:", msg['message'] )
         else:
             print( "!! NO DATA !!" )
         if (now()-bgn) > 10:
