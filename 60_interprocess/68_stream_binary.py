@@ -1,7 +1,9 @@
 # https://chase-seibert.github.io/blog/2012/11/16/python-subprocess-asynchronous-read-stdout.html
 
+########## INIT ####################################################################################
+
+##### Imports #####
 import time, subprocess
-from queue import Queue
 from threading import Thread
 from time import sleep
 now = time.time
