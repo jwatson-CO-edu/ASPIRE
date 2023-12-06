@@ -28,21 +28,33 @@ class PointCloudTransmissionFormat:
         pointcloud.normals = o3d.utility.Vector3dVector(self.normals)
         return pointcloud
 
+def PCD_JSON( pcd ):
+    return {
+        "points" : np.array( pcd.points  ).tobytes(),
+        "colors" : np.array( pcd.colors  ).tobytes(),
+        "normals": np.array( pcd.normals ).tobytes(),
+    }
+
+def RGBD_JSON( rgbd ):
+    return {
+        "color": np.array( rgbd.color ).tobytes(),
+        "depth": np.array( rgbd.depth ).tobytes(),
+    }
 
 class RGBDTransmissionFormat:
     """ PCD that is able to be pickled """
     # Original Author: Florian Bruggisser, https://github.com/isl-org/Open3D/issues/218#issuecomment-923016145
     def __init__( self, rgbd ):
-        self.dimension  = np.array( rgbd.dimension  )
+        # self.dimension  = np.array( rgbd.dimension  )
         self.color      = np.array( rgbd.color      )
         self.depth      = np.array( rgbd.depth      )
 
     def create_rgbd( self ):
-        rgbd = o3d.RGBDImage()
-        rgbd.dimension  = o3d.utility.Vector3dVector( self.dimension )
-        rgbd.color      = o3d.utility.Vector3dVector( self.color )
-        rgbd.depth      = o3d.utility.Vector3dVector( self.depth )
-        return rgbd
+        rgbdImg = o3d.RGBDImage()
+        # rgbdImg.dimension  = o3d.utility.Vector3dVector( self.dimension )
+        rgbdImg.color      = o3d.utility.Vector3dVector( self.color )
+        rgbdImg.depth      = o3d.utility.Vector3dVector( self.depth )
+        return rgbdImg
 
 
 ########## INTEL REALSENSE 2 #######################################################################

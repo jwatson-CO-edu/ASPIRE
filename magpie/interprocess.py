@@ -1,6 +1,14 @@
-import os, fcntl
-import pbjson
+########## INIT ####################################################################################
+
+##### Imports #####
+### Standard ###
+import os, fcntl, sys
 from queue import Queue
+from time import sleep
+### Special ###
+import pbjson
+
+
 
 ########## STREAM COMMUNICATION ####################################################################
 
@@ -25,6 +33,7 @@ def non_block_read( output ):
 
 
 ########## BINARY DATA #############################################################################
+_CHUNK_LIM = 873816 / 2
 
 class PBJSON_IO:
     """ Pack and Unpack Binary JSON (PBJSON) """
@@ -38,15 +47,58 @@ class PBJSON_IO:
     def __init__( self ):
         """ Init buffer """
         self.erase()
-        self.que = Queue()
+        self.Ique = Queue()
+        self.Oque = Queue()
+
+    def chunkify( self, packet, chunkSize = _CHUNK_LIM ):
+        """ Break the `packet` into pieces of `chunkSize` or smaller """
+        Nbyte = len( packet )
+        if Nbyte > chunkSize:
+            pktLst = []
+            i      = 0
+            bgn    = 0
+            while bgn < Nbyte:
+                i += 1
+                end = min( i*chunkSize, Nbyte )
+                pktLst.append( packet[ bgn : end ] )
+                bgn = end
+            return pktLst
+        else:
+            return [packet,]
 
     def pack( self, inpt ):
         packet = PBJSON_IO._BGN_BYTES[:]
         packet.extend( pbjson.dumps( inpt ) )
         packet.extend( PBJSON_IO._END_BYTES )
         return packet
+        # return self.chunkify( packet, chunkSize )
+
+    def output_bytes( self, *objs, **kwargs ):
+        """ Pack objects into chunks and enqueue """
+        if "chunkSize" in kwargs:
+            chunkSize = kwargs["chunkSize"]
+        else:
+            chunkSize = _CHUNK_LIM
+        for obj in objs:
+            pckt = self.pack( obj )
+            pkts = self.chunkify( pckt, chunkSize )
+            for pkt in pkts:
+                self.Oque.put( pkt )
+
+    def mass_pack_and_send( self, stream, *objs, **kwargs ):
+        """ Pack (possibly) many objects into packets and send each packet as (possibly) many chunks """
+        if "pause" in kwargs:
+            pause = kwargs["pause"]
+        else:
+            pause = False
+        self.output_bytes( *objs, **kwargs )
+        while not self.Oque.empty():
+            stream.write( self.Oque.get() )
+            stream.flush()
+            if pause:
+                sleep( pause )
     
-    def write( self, inByteArr ):
+    def input_bytes( self, inByteArr ):
         """ Copy bytes to the buffer """
         self.buf.extend( inByteArr )
 
@@ -83,7 +135,7 @@ class PBJSON_IO:
                     index = i+1
                     found = True
                     try:
-                        self.que.put( pbjson.loads( packet ) )
+                        self.Ique.put( pbjson.loads( packet ) )
                         packet = bytearray()
                     except:
                         pass
@@ -105,25 +157,34 @@ class PBJSON_IO:
     
     def pop( self ):
         """ Get one unpacked object, Return None if empty """
-        if not self.que.empty():
-            return self.que.get()
+        if not self.Ique.empty():
+            return self.Ique.get()
         else:
             return None
         
     def __len__( self ):
         """ Get the number of unpacked objects """
-        return self.que.qsize()
+        return self.Ique.qsize()
         
     def get_all( self ):
         """ Get all unpacked objects in a list """
         rtnLst = []
-        while not self.que.empty():
-            rtnLst.append( self.que.get() )
+        while not self.Ique.empty():
+            rtnLst.append( self.Ique.get() )
         return rtnLst
     
-    def read_and_unpack( self, stream ):
+    def recv_and_unpack( self, stream ):
         """ Perform a non-blocking read, Unpack messages, Return all messages (if any) """
         inpt = non_block_read( stream )
-        self.write( inpt )
+        self.input_bytes( inpt )
+        self.unpack()
+        return self.get_all()
+    
+    def mass_recv_and_unpack( self, stream ):
+        """ Perform many reads, Unpack messages, Return all messages (if any) """
+        inpt = [1,2]
+        while len( inpt ):
+            inpt = non_block_read( stream )
+            self.input_bytes( inpt )
         self.unpack()
         return self.get_all()

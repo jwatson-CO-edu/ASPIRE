@@ -31,7 +31,7 @@ def cam_connection( stdin, stdout, timeout = 10.0 ):
     while (now()-bgn) < timeout:
         
         ### INPUT ###
-        msgs = pbj.read_and_unpack( stdout )
+        msgs = pbj.recv_and_unpack( stdout )
         Nfr += len( msgs )
 
         ### PAUSE ###
@@ -39,13 +39,15 @@ def cam_connection( stdin, stdout, timeout = 10.0 ):
 
     end = now()
         
-    print( f"Got {Nfr} in {end-bgn} seconds! Rate: {(end-bgn)/Nfr}" )
+    print( f"Got {Nfr} in {end-bgn} seconds! Rate: {Nfr*1.0/(end-bgn)}" )
 
     for _ in range(3):
         cObj = pbj.pack( {"message" : "SHUTDOWN"} )
         stdin.write( cObj )
         stdin.flush()
         sleep( 0.005 )
+    
+    return None
 
 
 
@@ -67,12 +69,15 @@ if __name__ == '__main__':
     thread.daemon = True
     thread.start()
 
-    # sleep( 0.050 )
+    thread.join()
+    print( "Thread ENDED!" )
 
+    process.kill()
     process.wait()
     print( f"Process {process.pid} ended with status: {process.returncode}" )
-    print( f"Errors: {process.stderr.read()}" )
-    thread.join( timeout = 1 )
+    if process.stderr.read(1):
+        print( f"Errors: {process.stderr.read()}" )
+    
 
 
 

@@ -1,11 +1,11 @@
 ########## INIT ####################################################################################
 
 ##### Imports #####
-import sys, time, pickle
+import sys, time, pickle # Python 3 pickle uses cPickle
 from time import sleep
 now = time.time
 sys.path.append( "../" )
-from magpie.Camera import DepthCam, PointCloudTransmissionFormat, RGBDTransmissionFormat
+from magpie.Camera import DepthCam, PointCloudTransmissionFormat, RGBDTransmissionFormat, PCD_JSON, RGBD_JSON
 from magpie.interprocess import set_non_blocking, non_block_read, PBJSON_IO
 from magpie.utils import HeartRate
 
@@ -34,13 +34,11 @@ except:
 def check_shutdown():
     """ Return True if SHUTDOWN message was received """
     # WARNING: CONSUMES ALL MESSAGES
-    inpt = non_block_read( sys.stdin.buffer )
-    pbj.write( inpt )
-    if pbj.unpack():
-        msgs = pbj.get_all()
-        for msg in msgs:
-            if ('message' in msg) and (msg['message'] == "SHUTDOWN"):
-                return True
+    msgs = pbj.recv_and_unpack( sys.stdin.buffer )
+    for msg in msgs:
+        # raise ValueError( str(msg) )
+        if ('message' in msg) and (msg['message'] == "SHUTDOWN"):
+            return True
     return False
 
 
@@ -50,8 +48,10 @@ def get_frame_message():
     # raise ValueError( str( dir( rgbd ) ) )
     return {
         "origin" : "camera",
-        "pc"     : pickle.dumps( PointCloudTransmissionFormat( pc ) ),
-        "rgbd"   : pickle.dumps( RGBDTransmissionFormat( rgbd )     ),
+        # "pc"     : pickle.dumps( PointCloudTransmissionFormat( pc ) ),
+        # "rgbd"   : pickle.dumps( RGBDTransmissionFormat( rgbd )     ),
+        "pc"     : PCD_JSON(  pc   ),
+        "rgbd"   : RGBD_JSON( rgbd ),
     }
 
 
