@@ -32,7 +32,6 @@ from Perception import DepthCam, PlanarEnv
 
 def magpie_init():
     """ Start MAGPIE-related hardware """
-    # QUESTION: SHOULD THERE BE A SINGLETON MAGPIE "MANAGER" OBJECT?
     for _ in range(3):
         try:
             robot = UR5_Interface()
@@ -82,7 +81,6 @@ class BodyConf:
         self.cnfg = config
         self.index = next( self.num )
     def __repr__( self ):
-        # return f"<Config: {self.name}, [{self.cnfg[0,3]}, {self.cnfg[1,3]}, {self.cnfg[2,3]}]>"
         return f"<Config: {self.name}, {self.index}>"
     @property
     def value( self ):
