@@ -1,3 +1,10 @@
+""" ##### DEV PLAN #####
+[ ] What about negative indications? (Lack of relevant evidence at a pose?)
+
+"""
+
+########## INIT ####################################################################################
+
 import time
 from random import random, choice
 from pprint import pprint
@@ -146,6 +153,23 @@ class ObjectBelief:
             np.random.multivariate_normal( self.pose, self.covar ) 
         )
     
+    def integrate_belief( self, objBelief ):
+        """ if `objBelief` is relevant, then Update this belief with evidence and return True, Otherwise return False """
+        # NOTE: THIS WILL NOT BE AS CLEAN IF THE CLASSIFIER DOES NO PROVIDE A DIST ACROSS ALL CLASSES
+        if self.p_pose_relevant( objBelief ):
+            Nclass = len( _BLOCK_NAMES )
+            cnfMtx = get_confusion_matx( Nclass )
+            priorB = [ self.labels[ label ] for label in _BLOCK_NAMES ] 
+            evidnc = [ objBelief.labels[ label ] for label in _BLOCK_NAMES ]
+            updatB = multiclass_Bayesian_belief_update( cnfMtx, priorB, evidnc )
+            self.labels = {}
+            for i, name in enumerate( _BLOCK_NAMES ):
+                self.labels[ name ] = updatB[i]
+            self.pHist.append( objBelief.pose )
+            return True
+        else:
+            return False
+    
     
 
 
@@ -226,6 +250,30 @@ class PB_BlocksWorld:
 
 ########## MOCK PLANNER ############################################################################
 
+def get_confusion_matx( Nclass, confuseProb = 0.10 ):
+    """ Get the confusion matrix from the label list """
+    Pt = 1.0-confuseProb*(Nclass-1)
+    Pf = confuseProb
+    rtnMtx = np.eye( Nclass )
+    for i in range( Nclass ):
+        for j in range( Nclass ):
+            if i == j:
+                rtnMtx[i,j] = Pt
+            else:
+                rtnMtx[i,j] = Pf
+    return rtnMtx
+
+def multiclass_Bayesian_belief_update( cnfMtx, priorB, evidnc ):
+    """ Update the prior belief using probabilistic evidence given the weight of that evidence """
+    Nclass = cnfMtx.shape[0]
+    priorB = np.array( priorB ).reshape( (Nclass,1,) )
+    evidnc = np.array( evidnc ).reshape( (Nclass,1,) )
+    P_e    = cnfMtx.dot( priorB ).reshape( (Nclass,) )
+    P_hGe  = np.zeros( (Nclass,Nclass,) )
+    for i in range( Nclass ):
+        P_hGe[i,:] = (cnfMtx[i,:]*priorB[i,0]).reshape( (Nclass,) ) / P_e
+    return P_hGe.dot( evidnc ).reshape( (Nclass,) )
+
 class MockAction:
     """ Least Behavior """
     def __init__( self, objName, dest ):
@@ -236,8 +284,11 @@ class MockAction:
 
 class MockPlanner:
     """ Least structure needed to compare plans """
+
     def __init__( self ):
-        self.poses = { # Intended destinations
+        """ Create a pre-determined collection of poses and plan skeletons """
+        self.beliefs = [] # Distributions over objects
+        self.poses = { # -- Intended destinations
             "P1" : [ 0.300,0.000,0.150,1,0,0,0],
             "P2" : [ 0.600,0.000,0.150,1,0,0,0],
             "P3" : [ 0.450,0.000,0.300,1,0,0,0],
@@ -249,6 +300,19 @@ class MockPlanner:
             [MockAction('redBlock',self.poses['P1']),MockAction('ylwBlock',self.poses['P2']),MockAction('bluBlock',self.poses['P3']),],
             [MockAction('grnBlock',self.poses['P4']),MockAction('ornBlock',self.poses['P5']),MockAction('vioBlock',self.poses['P6']),],
         ]
+
+    def integrate_one_segmentation( self, objBelief ):
+        """ Fuse this belief with the current beliefs """
+        # 1. Determine if this belief provides evidence for an existing belief
+        relevant = False
+        for belief in self.beliefs:
+            if belief.integrate_belief( objBelief ):
+                relevant = True
+                # Assume that this is the only relevant match, break
+                break
+        if not relevant:
+            self.beliefs.append( objBelief )
+        
 
 ########## MAIN ####################################################################################
 ##### Env. Settings #####
