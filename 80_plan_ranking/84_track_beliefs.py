@@ -138,9 +138,10 @@ class ObjectSymbol:
     """ Determinized object """
     def __init__( self, ref, label, pose ):
         """ Assign members """
-        self.ref   = ref
-        self.label = label
-        self.pose  = pose
+        self.ref    = ref # - Belief from which this symbols was sampled
+        self.label  = label # Sampled object label
+        self.pose   = pose #- Sampled object pose
+        self.action = None #- Action to which this symbol was assigned
     def prob( self ):
         """ Get the current belief this symbol is true based on the belief this symbol was drawn from """
         return self.ref.labels[self.label]
@@ -335,15 +336,34 @@ class MockAction:
         self.status  = "INVALID" # Current status of this behavior
         self.symbol  = None # ---- Symbol on which this behavior relies
 
+    def copy( self ):
+        """ Deep copy """
+        rtnObj = MockAction( self.objName, self.dest )
+        rtnObj.status = self.status
+        rtnObj.symbol = self.symbol
+        return rtnObj
+
     def get_grounded( self, symbol ):
         """ Copy action with a symbol attached """
         rtnAct = MockAction( self.objName, self.dest[:] )
         rtnAct.symbol = symbol
         return rtnAct
+    
+    def p_grounded( self ):
+        """ Return true if a symbol was assigned to this action """
+        return (self.symbol is not None)
 
     def __repr__( self ):
         """ Text representation """
         return f"[{self.objName} --to-> {self.dest}, Symbol: {self.symbol}]"
+    
+
+def p_plan_grounded( plan ):
+    """ Return true if every action in the plan is grounded, Otherwise return False """
+    for action in plan:
+        if not action.p_grounded():
+            return False
+    return True
 
 
 class MockPlanner:
@@ -367,6 +387,16 @@ class MockPlanner:
             [MockAction('redBlock',self.poses['P1']),MockAction('ylwBlock',self.poses['P2']),MockAction('bluBlock',self.poses['P3']),],
             [MockAction('grnBlock',self.poses['P4']),MockAction('ornBlock',self.poses['P5']),MockAction('vioBlock',self.poses['P6']),],
         ]
+
+    def get_skeleton( self, idx ):
+        """ Get the plan skeleton at `idx` """
+        if idx < len( self.skltns ):
+            rtnSkel = []
+            for action in self.skltns[ idx ]:
+                rtnSkel.append( action.copy() )
+            return rtnSkel
+        else:
+            return list()
 
     def ground_plans_true( self ):
         """ Assign fully observable symbols to the plan skeletons """
@@ -402,9 +432,75 @@ class MockPlanner:
                 break
         if not relevant:
             self.beliefs.append( objBelief )
+        return relevant
+
+    def exec_plans_noisy( self ):
+        """ Execute partially observable plans """
+        N = 20
+        ### Main Planner Loop ###  
+        # 2023-12-11: For now, loop a limited number of times
+        for i in range(N):
+
+            ## Gather Evidence ##
+            # 2023-12-11: For now, imagine a camera that always sees all the blocks
+            objEvidence = self.world.full_scan_noisy()
+            print( f"{i+1}: Got {len(objEvidence)} beliefs!" )
+
+            ## Integrate Beliefs ##
+            cNu = 0
+            cIn = 0
+            for objEv in objEvidence:
+                if self.integrate_one_segmentation( objEv ):
+                    cIn += 1
+                else:
+                    cNu += 1
+            if (cNu or cIn):
+                print( f"\t{cNu} new object beliefs this iteration!" )
+                print( f"\t{cIn} object beliefs updated!" )
+            else:
+                print( f"\tNO belief update!" )
+            
+            ## Sample Symbols ##
+            nuSym = [bel.sample_symbol() for bel in self.beliefs]
+            print( f"There are {len(self.symbols)} total symbols!" )
+
+            ## Ground Plans ##
+            svSym     = [] # Only retain symbols that were assigned to plans!
+            skeletons = [self.get_skeleton( i ) for i in range( len( self.skltns ) )]
+            for sym in nuSym:
+                for i, skel in enumerate( skeletons ):
+                    for j, action in enumerate( skel ):
+                        if not action.p_grounded():
+                            # FIXME, START HERE: CHECK IF THE SYMBOL IS CORRECT
+
+
+            self.symbols.extend( svSym )
+
+            ## Grade Plans ##
+
+            ## Destroy Degraded Plans ##
+            savSym = []
+            cDel   = 0
+            for sym in self.symbols:
+                if sym.prob() > 0.02:
+                    savSym.append( sym )
+                else:
+                    cDel += 1
+            self.symbols = savSym
+            print( f"\tRetained {len(self.symbols)} symbols, and deleted {cDel}!" )
+
+
+            ## Enqueue Plans ##
+
+            ## Step ##
+            self.world.spin_for( 20 )
+            print()
+            
+
+            
 
     # FIXME, START HERE: PARTIALLY OBSERVABLE EXECUTION WITH LIVE-RANKED PLANS
-    # LOOP
+    
         # GATHER EVIDENCE
         # INTEGRATE BELIEFS
         # SAMPLE SYMBOLS
@@ -423,8 +519,7 @@ if __name__ == "__main__":
 
     world   = PB_BlocksWorld()
     planner = MockPlanner( world )
-    planner.ground_plans_true()
     print('\n')
-    planner.exec_plans_true()
-    world.spin_for( 2000 )
+    planner.exec_plans_noisy()
+    # world.spin_for( 2000 )
     print('\n')
