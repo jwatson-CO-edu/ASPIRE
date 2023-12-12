@@ -9,6 +9,8 @@
 import time, sys
 from random import random, choice
 from pprint import pprint
+from math import log
+from queue import PriorityQueue
 
 import numpy as np
 
@@ -409,6 +411,30 @@ def plan_cost( plan ):
         total += action.cost()
     return total
 
+def release_plan_symbols( plan ):
+    """ Detach symbols from all actions in the plan """
+    for action in plan:
+        action.symbol.action = None
+        action.symbol = None
+
+
+class MockPlan( list ):
+    """ Special list with priority """
+
+    def __init__( self, *args, **kwargs ):
+        """ Set default priority """
+        super().__init__( *args, **kwargs )
+        self.rank = 0.0
+        self.rand = random() * 10000.0
+
+    def __lt__(self, other):
+        """ Compare to another plan """
+        # Original Author: Jiew Meng, https://stackoverflow.com/a/9345618
+        selfPriority  = (self.rank , self.rand )
+        otherPriority = (other.rank, other.rand)
+        return selfPriority < otherPriority
+
+
 class MockPlanner:
     """ Least structure needed to compare plans """
 
@@ -417,7 +443,7 @@ class MockPlanner:
         self.world   = world
         self.beliefs = [] # Distributions over objects
         self.symbols = []
-        self.plans   = []
+        self.plans   = [] # PriorityQueue()
         self.poses   = { # -- Intended destinations
             "P1" : [ 0.300,0.000,0.150,1,0,0,0],
             "P2" : [ 0.600,0.000,0.150,1,0,0,0],
@@ -427,14 +453,14 @@ class MockPlanner:
             "P6" : [-0.450,0.000,0.300,1,0,0,0],
         }
         self.skltns = [ # Plan skeletons, Each builds an arch
-            [MockAction('redBlock',self.poses['P1']),MockAction('ylwBlock',self.poses['P2']),MockAction('bluBlock',self.poses['P3']),],
-            [MockAction('grnBlock',self.poses['P4']),MockAction('ornBlock',self.poses['P5']),MockAction('vioBlock',self.poses['P6']),],
+            MockPlan([MockAction('redBlock',self.poses['P1']),MockAction('ylwBlock',self.poses['P2']),MockAction('bluBlock',self.poses['P3']),]),
+            MockPlan([MockAction('grnBlock',self.poses['P4']),MockAction('ornBlock',self.poses['P5']),MockAction('vioBlock',self.poses['P6']),]),
         ]
 
     def get_skeleton( self, idx ):
         """ Get the plan skeleton at `idx` """
         if idx < len( self.skltns ):
-            rtnSkel = []
+            rtnSkel = MockPlan()
             for action in self.skltns[ idx ]:
                 rtnSkel.append( action.copy() )
             return rtnSkel
@@ -521,36 +547,38 @@ class MockPlanner:
             for k, skel in enumerate( skeletons ):
                 if p_plan_grounded( skel ):
                     self.plans.append( skel )
-                    skeletons[k] = self.get_skeleton( k )
+                    # skeletons[k] = self.get_skeleton( k ) # This doesn't actually do anything!
             self.symbols.extend( svSym )
             print( f"There are {len(self.plans)} plans!" )
 
             ## Grade Plans ##
             savPln = []
             for m, plan in enumerate( self.plans ):
-                cost = plan_cost(plan)
-                prob = plan_confidence(plan)
+                cost  = plan_cost(plan)
+                prob  = plan_confidence(plan)
+                score = cost - 5 * log( prob, 2.0 )
+                plan.rank = score
+                # Destroy Degraded Plans #
                 if prob > 0.02:
                     savPln.append( plan )
                 else:
-                    # FIXME: RELEASE SYMBOLS
-                    pass
-
-                print( f"\tPlan {m+1} --> Cost: {cost}, P = {prob}, {'Retain' if (prob > 0.02) else 'DELETE'}" )
+                    release_plan_symbols( plan )
+                
             self.plans = savPln
+            self.plans.sort()
+            for plan in self.plans:
+                print( f"\tPlan {m+1} --> Cost: {cost}, P = {prob}, {'Retain' if (prob > 0.02) else 'DELETE'}, Priority = {plan.rank}" )
 
-            ## Destroy Degraded Plans ##
-            savSym = []
+            ## Destroy Unlikely Symbols ##
+            savSym = [] # Only save likely symbols attached to plans
             cDel   = 0
             for sym in self.symbols:
-                # FIXME: DESTROY UNATTACHED SYMBOLS
-                if sym.prob() > 0.02:
+                if (sym.prob() > 0.02) and sym.p_attached():
                     savSym.append( sym )
                 else:
                     cDel += 1
             self.symbols = savSym
             print( f"Retained {len(self.symbols)} symbols, and deleted {cDel}!" )
-
 
             ## Enqueue Plans ##
 
