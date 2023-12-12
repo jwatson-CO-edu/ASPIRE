@@ -6,7 +6,7 @@
 
 ########## INIT ####################################################################################
 
-import time
+import time, sys
 from random import random, choice
 from pprint import pprint
 
@@ -20,6 +20,10 @@ from spatialmath.base import tr2angvec, r2q
 from spatialmath.quaternion import UnitQuaternion
 
 from scipy.stats import chi2
+
+sys.path.append( "../" )
+from magpie.poses import translation_diff
+from magpie.homog_utils import posn_from_xform 
 
 
 ########## UTILITY FUNCTIONS #######################################################################
@@ -48,6 +52,12 @@ def row_vec_to_pb_posn_ornt( V ):
     ornt[:3] = V[4:7]
     ornt[-1] = V[3]
     return posn, ornt
+
+
+def row_vec_to_homog( V ):
+    """ Express [Px,Py,Pz,Ow,Ox,Oy,Oz] as homogeneous coordinates """
+    posn, ornt = row_vec_to_pb_posn_ornt( V )
+    return pb_posn_ornt_to_homog( posn, ornt )
 
 
 def homog_to_row_vec( homog ):
@@ -136,18 +146,25 @@ class SimpleBlock:
 
 class ObjectSymbol:
     """ Determinized object """
+
     def __init__( self, ref, label, pose ):
         """ Assign members """
         self.ref    = ref # - Belief from which this symbols was sampled
         self.label  = label # Sampled object label
         self.pose   = pose #- Sampled object pose
         self.action = None #- Action to which this symbol was assigned
+
     def prob( self ):
         """ Get the current belief this symbol is true based on the belief this symbol was drawn from """
         return self.ref.labels[self.label]
+    
     def __repr__( self ):
         """ String representation, Including current symbol belief """
         return f"<{self.label} @ {self.pose}, P={self.prob()}>"
+    
+    def p_attached( self ):
+        """ Return true if this symbol has been assigned to an action """
+        return (self.action is not None)
     
 
 class ObjectBelief:
@@ -347,7 +364,13 @@ class MockAction:
         """ Copy action with a symbol attached """
         rtnAct = MockAction( self.objName, self.dest[:] )
         rtnAct.symbol = symbol
+        symbol.action = rtnAct
         return rtnAct
+    
+    def set_ground( self, symbol ):
+        """ Attach symbol """
+        self.symbol = symbol
+        symbol.action = self
     
     def p_grounded( self ):
         """ Return true if a symbol was assigned to this action """
@@ -357,6 +380,12 @@ class MockAction:
         """ Text representation """
         return f"[{self.objName} --to-> {self.dest}, Symbol: {self.symbol}]"
     
+    def cost( self ):
+        """ Get the linear distance between the symbol pose and the destination """
+        # print( self.dest, '\n', row_vec_to_homog( self.symbol.pose ) )
+        return translation_diff( row_vec_to_homog( self.dest ), row_vec_to_homog( self.symbol.pose ) )
+    
+
 
 def p_plan_grounded( plan ):
     """ Return true if every action in the plan is grounded, Otherwise return False """
@@ -365,6 +394,20 @@ def p_plan_grounded( plan ):
             return False
     return True
 
+def plan_confidence( plan ):
+    """ Return the least object label belief """
+    belMin = 1e6
+    for action in plan:
+        prob   = action.symbol.prob()
+        belMin = min( belMin, prob )
+    return belMin
+
+def plan_cost( plan ):
+    """ Return the total cost of all actions """
+    total = 0.0
+    for action in plan:
+        total += action.cost()
+    return total
 
 class MockPlanner:
     """ Least structure needed to compare plans """
@@ -466,28 +509,47 @@ class MockPlanner:
 
             ## Ground Plans ##
             svSym     = [] # Only retain symbols that were assigned to plans!
-            skeletons = [self.get_skeleton( i ) for i in range( len( self.skltns ) )]
+            skeletons = [self.get_skeleton( j ) for j in range( len( self.skltns ) )]
             for sym in nuSym:
-                for i, skel in enumerate( skeletons ):
+                for l, skel in enumerate( skeletons ):
                     for j, action in enumerate( skel ):
                         if not action.p_grounded():
-                            # FIXME, START HERE: CHECK IF THE SYMBOL IS CORRECT
-
-
+                            if (action.objName == sym.label) and (not sym.p_attached()):
+                                action.set_ground( sym )
+                if sym.p_attached():
+                    svSym.append( sym )
+            for k, skel in enumerate( skeletons ):
+                if p_plan_grounded( skel ):
+                    self.plans.append( skel )
+                    skeletons[k] = self.get_skeleton( k )
             self.symbols.extend( svSym )
+            print( f"There are {len(self.plans)} plans!" )
 
             ## Grade Plans ##
+            savPln = []
+            for m, plan in enumerate( self.plans ):
+                cost = plan_cost(plan)
+                prob = plan_confidence(plan)
+                if prob > 0.02:
+                    savPln.append( plan )
+                else:
+                    # FIXME: RELEASE SYMBOLS
+                    pass
+
+                print( f"\tPlan {m+1} --> Cost: {cost}, P = {prob}, {'Retain' if (prob > 0.02) else 'DELETE'}" )
+            self.plans = savPln
 
             ## Destroy Degraded Plans ##
             savSym = []
             cDel   = 0
             for sym in self.symbols:
+                # FIXME: DESTROY UNATTACHED SYMBOLS
                 if sym.prob() > 0.02:
                     savSym.append( sym )
                 else:
                     cDel += 1
             self.symbols = savSym
-            print( f"\tRetained {len(self.symbols)} symbols, and deleted {cDel}!" )
+            print( f"Retained {len(self.symbols)} symbols, and deleted {cDel}!" )
 
 
             ## Enqueue Plans ##
@@ -497,18 +559,7 @@ class MockPlanner:
             print()
             
 
-            
 
-    # FIXME, START HERE: PARTIALLY OBSERVABLE EXECUTION WITH LIVE-RANKED PLANS
-    
-        # GATHER EVIDENCE
-        # INTEGRATE BELIEFS
-        # SAMPLE SYMBOLS
-        # ATTEMPT TO GROUND PLANS
-        # GRADE PLANS
-        # ENQUEUE PLANS UP TO K
-        # DESTROY DEGRADED PLANS
-        # ??????????????????????
         
 
 ########## MAIN ####################################################################################
