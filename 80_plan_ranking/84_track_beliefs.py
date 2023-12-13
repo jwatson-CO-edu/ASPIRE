@@ -355,6 +355,22 @@ class MockAction:
         self.status  = "INVALID" # Current status of this behavior
         self.symbol  = None # ---- Symbol on which this behavior relies
 
+    def set_wp( self ):
+        """ Build waypoints for the action """
+        self.tStep  =  0
+        self.tDex   =  0
+        self.tDiv   = 10
+        self.waypnt = []
+        if self.p_grounded():    
+            self.waypnt.append( self.symbol.pose )
+            p1 = self.symbol.pose.copy()
+            p1[2] += 0.25
+            self.waypnt.append( p1 )
+            p2 = self.dest.copy()
+            p2[2] += 0.25
+            self.waypnt.append( p2 )
+            self.waypnt.append( self.dest.copy() )
+
     def copy( self ):
         """ Deep copy """
         rtnObj = MockAction( self.objName, self.dest )
@@ -366,6 +382,7 @@ class MockAction:
         """ Copy action with a symbol attached """
         rtnAct = MockAction( self.objName, self.dest[:] )
         rtnAct.symbol = symbol
+        rtnAct.set_wp()
         symbol.action = rtnAct
         return rtnAct
     
@@ -373,6 +390,7 @@ class MockAction:
         """ Attach symbol """
         self.symbol = symbol
         symbol.action = self
+        self.set_wp()
     
     def p_grounded( self ):
         """ Return true if a symbol was assigned to this action """
@@ -386,6 +404,20 @@ class MockAction:
         """ Get the linear distance between the symbol pose and the destination """
         # print( self.dest, '\n', row_vec_to_homog( self.symbol.pose ) )
         return translation_diff( row_vec_to_homog( self.dest ), row_vec_to_homog( self.symbol.pose ) )
+    
+    def tick( self, world ):
+        """ Animate an action """
+        print( f"Tick: {self.status}, {self}" )
+        if self.status == "INVALID":
+            self.status = "RUNNING"
+        if self.status == "RUNNING":
+            posn, ornt = row_vec_to_pb_posn_ornt( self.waypnt[self.tDex] )
+            p.resetBasePositionAndOrientation( world.get_handle( self.objName ), posn, ornt )
+            self.tStep += 1
+            if (self.tStep % self.tDiv == 0):
+                self.tDex += 1
+            if self.tDex >= len( self.waypnt ):
+                self.status = "COMPLETE"
     
 
 
@@ -426,6 +458,7 @@ class MockPlan( list ):
         super().__init__( *args, **kwargs )
         self.rank = 0.0
         self.rand = random() * 10000.0
+        self.goal = -1
 
     def __lt__(self, other):
         """ Compare to another plan """
@@ -461,6 +494,7 @@ class MockPlanner:
         """ Get the plan skeleton at `idx` """
         if idx < len( self.skltns ):
             rtnSkel = MockPlan()
+            rtnSkel.goal = idx
             for action in self.skltns[ idx ]:
                 rtnSkel.append( action.copy() )
             return rtnSkel
@@ -505,7 +539,8 @@ class MockPlanner:
 
     def exec_plans_noisy( self ):
         """ Execute partially observable plans """
-        N = 20
+        N = 20 # Number of iterations for this test
+        K =  5 # Number of top plans to maintain
         ### Main Planner Loop ###  
         # 2023-12-11: For now, loop a limited number of times
         for i in range(N):
@@ -563,10 +598,11 @@ class MockPlanner:
                     savPln.append( plan )
                 else:
                     release_plan_symbols( plan )
-                
-            self.plans = savPln
-            self.plans.sort()
-            for plan in self.plans:
+
+            ## Enqueue Plans ##    
+            savPln.sort()
+            self.plans = savPln[:K]
+            for m, plan in enumerate( self.plans ):
                 print( f"\tPlan {m+1} --> Cost: {cost}, P = {prob}, {'Retain' if (prob > 0.02) else 'DELETE'}, Priority = {plan.rank}" )
 
             ## Destroy Unlikely Symbols ##
@@ -580,7 +616,7 @@ class MockPlanner:
             self.symbols = savSym
             print( f"Retained {len(self.symbols)} symbols, and deleted {cDel}!" )
 
-            ## Enqueue Plans ##
+            
 
             ## Step ##
             self.world.spin_for( 20 )
@@ -602,3 +638,5 @@ if __name__ == "__main__":
     planner.exec_plans_noisy()
     # world.spin_for( 2000 )
     print('\n')
+
+    print( get_confusion_matx( 6 ) )
