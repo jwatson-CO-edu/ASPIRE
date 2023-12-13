@@ -143,6 +143,8 @@ def multiclass_Bayesian_belief_update( cnfMtx, priorB, evidnc ):
 
 ########## UTILITY CLASSES & SYMBOLS ###############################################################
 _POSN_STDDEV = 0.008
+_NULL_NAME   = "NOTHING"
+_NULL_THRESH = 0.75
 
 
 class SimpleBlock:
@@ -190,6 +192,7 @@ class ObjectBelief:
         self.covar   = np.zeros( (7,7,) ) # ------ Pose covariance matrix
         for i, stdDev in enumerate( self.pStdDev ):
             self.covar[i,i] = stdDev * stdDev
+        self.visited = False
 
     def get_posn( self, poseOrBelief ):
         """ Get the position from the object """
@@ -219,6 +222,19 @@ class ObjectBelief:
             np.random.multivariate_normal( self.pose, self.covar ) 
         )
     
+    def sample_nothing( self, confuseProb = 0.1 ):
+        """ Sample a negative indication for this pose """
+        rtnObj = ObjectBelief()
+        for i in range( len( _BLOCK_NAMES ) ):
+            blkName_i = _BLOCK_NAMES[i]
+            if blkName_i == _NULL_NAME:
+                rtnObj.labels[ blkName_i ] = 1.0-confuseProb*(len( _BLOCK_NAMES )-1)
+            else:
+                rtnObj.labels[ blkName_i ] = confuseProb
+        rtnObj.pose = np.array( self.pose )
+        return rtnObj
+
+    
     def integrate_belief( self, objBelief ):
         """ if `objBelief` is relevant, then Update this belief with evidence and return True, Otherwise return False """
         # NOTE: THIS WILL NOT BE AS CLEAN IF THE CLASSIFIER DOES NO PROVIDE A DIST ACROSS ALL CLASSES
@@ -239,7 +255,7 @@ class ObjectBelief:
 
 
 ########## ENVIRONMENT #############################################################################
-_BLOCK_NAMES  = ['redBlock', 'ylwBlock', 'bluBlock', 'grnBlock', 'ornBlock', 'vioBlock', 'NOTHING']
+_BLOCK_NAMES  = ['redBlock', 'ylwBlock', 'bluBlock', 'grnBlock', 'ornBlock', 'vioBlock', _NULL_NAME]
 
 class DummyBelief:
     """ Stand-in for an actual `ObjectBelief` """
@@ -350,6 +366,7 @@ class PB_BlocksWorld:
 
 ########## MOCK PLANNER ############################################################################
 
+##### Mock Action #########################################################
 
 class MockAction:
     """ Least Behavior """
@@ -413,7 +430,7 @@ class MockAction:
     
     def tick( self, world ):
         """ Animate an action """
-        print( f"Tick: {self.status}, {self}" )
+        print( f"\t\tTick: {self.status}, {self}" )
         if self.status == "INVALID":
             self.status = "RUNNING"
         if self.status == "RUNNING":
@@ -424,8 +441,9 @@ class MockAction:
                 self.tDex += 1
             if self.tDex >= len( self.waypnt ):
                 self.status = "COMPLETE"
-    
 
+
+##### Planner Helpers #####################################################
 
 def p_plan_grounded( plan ):
     """ Return true if every action in the plan is grounded, Otherwise return False """
@@ -456,15 +474,21 @@ def release_plan_symbols( plan ):
         action.symbol = None
 
 
+##### Mock Planner ########################################################
+_LOG_PROB_FACTOR = 10.0
+_LOG_BASE        = 2.0
+
 class MockPlan( list ):
     """ Special list with priority """
 
     def __init__( self, *args, **kwargs ):
         """ Set default priority """
         super().__init__( *args, **kwargs )
-        self.rank = 0.0
-        self.rand = random() * 10000.0
-        self.goal = -1
+        self.rank   = 0.0 # -------------- Priority of this plan
+        self.rand   = random() * 10000.0 # Tie-breaker for sorting
+        self.goal   = -1 # --------------- Goal that this plan satisfies if completed
+        self.status = "INVALID" # -------- Current status of this plan
+        self.idx    = -1 # --------------- Current index of the running action
 
     def __lt__(self, other):
         """ Compare to another plan """
@@ -472,6 +496,27 @@ class MockPlan( list ):
         selfPriority  = (self.rank , self.rand )
         otherPriority = (other.rank, other.rand)
         return selfPriority < otherPriority
+    
+    def __repr__( self ):
+        """ String representation of the plan """
+        return f"<MockPlan, Goal: {self.goal}, Status: {self.status}, Index: {self.idx}>"
+    
+    def tick( self ):
+        """ Animate a plan """
+        print( f"\tTick: {self}" )
+        if self.status == "INVALID":
+            self.status = "RUNNING"
+            self.idx    = 0
+        if self.status == "RUNNING":
+            self[ self.idx ].tick()
+            cStat = self[ self.idx ].status
+            if cStat == "COMPLETE":
+                self.idx += 1
+                if self.idx >= len( self ):
+                    self.status = "COMPLETE"
+            else:
+                self.status = cStat
+
 
 
 class MockPlanner:
@@ -537,17 +582,25 @@ class MockPlanner:
         for belief in self.beliefs:
             if belief.integrate_belief( objBelief ):
                 relevant = True
+                belief.visited = True
                 # Assume that this is the only relevant match, break
                 break
         if not relevant:
             self.beliefs.append( objBelief )
         return relevant
+    
+    def unvisit_beliefs( self ):
+        """ Set visited flag to False for all beliefs """
+        for belief in self.beliefs:
+            belief.visited = False
 
     def exec_plans_noisy( self ):
         """ Execute partially observable plans """
         N = 20 # Number of iterations for this test
         K =  5 # Number of top plans to maintain
         ### Main Planner Loop ###  
+        currPlan = None
+        achieved = []
         # 2023-12-11: For now, loop a limited number of times
         for i in range(N):
 
@@ -559,6 +612,7 @@ class MockPlanner:
             ## Integrate Beliefs ##
             cNu = 0
             cIn = 0
+            self.unvisit_beliefs()
             for objEv in objEvidence:
                 if self.integrate_one_segmentation( objEv ):
                     cIn += 1
@@ -570,6 +624,17 @@ class MockPlanner:
             else:
                 print( f"\tNO belief update!" )
             
+            ## Retain only fresh beliefs ##
+            belObj = []
+            for belief in self.beliefs:
+                if belief.visited:
+                    belObj.append( belief )
+                else:
+                    belief.integrate_belief( belief.sample_nothing() )
+                    if belief.labels[ _NULL_NAME ] < _NULL_THRESH:
+                        belObj.append( belief )
+            self.beliefs = belObj
+
             ## Sample Symbols ##
             nuSym = [bel.sample_symbol() for bel in self.beliefs]
             print( f"There are {len(self.symbols)} total symbols!" )
@@ -588,22 +653,23 @@ class MockPlanner:
             for k, skel in enumerate( skeletons ):
                 if p_plan_grounded( skel ):
                     self.plans.append( skel )
-                    # skeletons[k] = self.get_skeleton( k ) # This doesn't actually do anything!
             self.symbols.extend( svSym )
             print( f"There are {len(self.plans)} plans!" )
 
             ## Grade Plans ##
             savPln = []
             for m, plan in enumerate( self.plans ):
-                cost  = plan_cost(plan)
-                prob  = plan_confidence(plan)
-                score = cost - 10.0 * log( prob, 2.0 )
+                cost  = plan_cost( plan )
+                prob  = plan_confidence( plan )
+                score = cost - _LOG_PROB_FACTOR * log( prob, _LOG_BASE )
                 plan.rank = score
                 # Destroy Degraded Plans #
                 if prob > 0.02:
                     savPln.append( plan )
                 else:
                     release_plan_symbols( plan )
+                    print( f"\tReleased {len(plan)} symbols!" )
+
 
             ## Enqueue Plans ##    
             savPln.sort()
@@ -622,7 +688,22 @@ class MockPlanner:
             self.symbols = savSym
             print( f"Retained {len(self.symbols)} symbols, and deleted {cDel}!" )
 
-            
+
+            ## Execute Current Plan ##
+            # Pop top plan
+            if (currPlan is None) and len( self.plans ):
+                currPlan = self.plans[0]
+                self.plans.pop(0)
+                while currPlan.goal in achieved:
+                    currPlan = self.plans[0]
+                    self.plans.pop(0)
+            if currPlan is not None:
+                if currPlan.status == "COMPLETE":
+                    currPlan = None
+                else:
+                    currPlan.tick()
+
+
 
             ## Step ##
             self.world.spin_for( 20 )
