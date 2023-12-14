@@ -384,13 +384,14 @@ class MockAction:
         self.tDex   =  0
         self.tDiv   = 10
         self.waypnt = []
+        liftDist     = 0.500
         if self.p_grounded():    
             self.waypnt.append( self.symbol.pose )
             p1 = self.symbol.pose.copy()
-            p1[2] += 0.25
+            p1[2] += liftDist
             self.waypnt.append( p1 )
             p2 = self.dest.copy()
-            p2[2] += 0.25
+            p2[2] += liftDist
             self.waypnt.append( p2 )
             self.waypnt.append( self.dest.copy() )
 
@@ -501,14 +502,14 @@ class MockPlan( list ):
         """ String representation of the plan """
         return f"<MockPlan, Goal: {self.goal}, Status: {self.status}, Index: {self.idx}>"
     
-    def tick( self ):
+    def tick( self, world ):
         """ Animate a plan """
         print( f"\tTick: {self}" )
         if self.status == "INVALID":
             self.status = "RUNNING"
             self.idx    = 0
         if self.status == "RUNNING":
-            self[ self.idx ].tick()
+            self[ self.idx ].tick( world )
             cStat = self[ self.idx ].status
             if cStat == "COMPLETE":
                 self.idx += 1
@@ -594,10 +595,12 @@ class MockPlanner:
         for belief in self.beliefs:
             belief.visited = False
 
-    def exec_plans_noisy( self ):
+    def exec_plans_noisy( self, Npause = 200 ):
         """ Execute partially observable plans """
-        N = 20 # Number of iterations for this test
-        K =  5 # Number of top plans to maintain
+        self.world.spin_for( Npause )
+
+        N = 300 # Number of iterations for this test
+        K =   5 # Number of top plans to maintain
         ### Main Planner Loop ###  
         currPlan = None
         achieved = []
@@ -692,21 +695,23 @@ class MockPlanner:
             ## Execute Current Plan ##
             # Pop top plan
             if (currPlan is None) and len( self.plans ):
-                currPlan = self.plans[0]
-                self.plans.pop(0)
-                while currPlan.goal in achieved:
+                try:
                     currPlan = self.plans[0]
                     self.plans.pop(0)
+                    while currPlan.goal in achieved:
+                        currPlan = self.plans[0]
+                        self.plans.pop(0)
+                except IndexError:
+                    currPlan = None
             if currPlan is not None:
                 if currPlan.status == "COMPLETE":
+                    achieved.append( currPlan.goal )
                     currPlan = None
                 else:
-                    currPlan.tick()
-
-
+                    currPlan.tick( self.world )
 
             ## Step ##
-            self.world.spin_for( 20 )
+            self.world.spin_for( 10 )
             print()
             
 
@@ -723,7 +728,7 @@ if __name__ == "__main__":
     planner = MockPlanner( world )
     print('\n')
     planner.exec_plans_noisy()
-    # world.spin_for( 2000 )
+    world.spin_for( 2000 )
     print('\n')
 
     # print( get_confusion_matx( 6 ) )
