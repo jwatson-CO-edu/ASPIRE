@@ -171,7 +171,7 @@ class ObjectSymbol:
     
     def __repr__( self ):
         """ String representation, Including current symbol belief """
-        return f"<{self.label} @ {self.pose}, P={self.prob()}>"
+        return f"<{self.label} @ {self.pose}, P={self.prob() if (self.ref is not None) else None}>"
     
     def p_attached( self ):
         """ Return true if this symbol has been assigned to an action """
@@ -196,7 +196,7 @@ class ObjectBelief:
 
     def get_posn( self, poseOrBelief ):
         """ Get the position from the object """
-        if isinstance( poseOrBelief, ObjectBelief ):
+        if isinstance( poseOrBelief, (ObjectBelief, ObjectSymbol) ):
             return poseOrBelief.pose[0:3]
         elif isinstance( poseOrBelief, np.ndarray ):
             if poseOrBelief.size == (4,4,):
@@ -212,6 +212,11 @@ class ObjectBelief:
         m_dist_x = np.dot((x-mu).transpose(),np.linalg.inv(sigma))
         m_dist_x = np.dot(m_dist_x, (x-mu))
         return (1-chi2.cdf( m_dist_x, 3 ) >= self.pThresh)
+    
+    def symbol_confidence( self, symbol ):
+        """ Return the confidence that the symbol is supported by this belief """
+        # FIXME, START HERE: FIRST COMPUTE POSE RELEVANCE THEN RETURN THE BELIEF IN THE SYMBOL LABEL
+        pass
     
     def sample_symbol( self ):
         """ Sample a determinized symbol from the hybrid distribution """
@@ -518,6 +523,13 @@ class MockPlan( list ):
             else:
                 self.status = cStat
 
+    def get_goal_spec( self ):
+        """ Get a fully specified goal for this plan """
+        rtnGoal = []
+        for action in self:
+            rtnGoal.append( ObjectSymbol( None, action.objName, action.dest.copy() ) )
+        return rtnGoal
+
 
 
 class MockPlanner:
@@ -595,6 +607,13 @@ class MockPlanner:
         for belief in self.beliefs:
             belief.visited = False
 
+    def check_symbol( self, symbol ):
+        """ Return true if there is a belief that supports this symbol, Otherwise return false """
+        for belief in self.beliefs:
+            if belief.p_pose_relevant( symbol ):
+                return
+
+
     def exec_plans_noisy( self, Npause = 200 ):
         """ Execute partially observable plans """
         self.world.spin_for( Npause )
@@ -604,6 +623,7 @@ class MockPlanner:
         ### Main Planner Loop ###  
         currPlan = None
         achieved = []
+        oldPlans = []
         # 2023-12-11: For now, loop a limited number of times
         for i in range(N):
 
