@@ -1,9 +1,10 @@
 """ ##### DEV PLAN #####
 [Y] Ground plan with Fully Observable symbols
 [Y] Ground plan with Partially Observable symbols
-[ ] Negative indications (Lack of relevant evidence at a pose)
+[Y] Negative indications (Lack of relevant evidence at a pose)
 [>] Execute noisy plans
-    [>] Simulate grasps such that classification errors are not MASKED
+    [Y] Simulate grasps such that classification errors are not MASKED
+    [>] Update pose distributions and confirm that they NARROW
     [ ] Track action completion
         [ ] Check predicate result: PASS/FAIL 
     [ ] Simulate failed actions
@@ -17,16 +18,13 @@
 
 import time, sys
 from random import random, choice
-from pprint import pprint
 from math import log
-from queue import PriorityQueue
 
 import numpy as np
 
 import pybullet as p
 import pybullet_data
 
-from spatialmath import SO3
 from spatialmath.base import tr2angvec, r2q
 from spatialmath.quaternion import UnitQuaternion
 
@@ -34,7 +32,6 @@ from scipy.stats import chi2
 
 sys.path.append( "../" )
 from magpie.poses import translation_diff
-from magpie.homog_utils import posn_from_xform 
 
 
 ########## UTILITY FUNCTIONS #######################################################################
@@ -309,6 +306,22 @@ class PB_BlocksWorld:
             return self.blocks[ _BLOCK_NAMES.index( name ) ]
         else:
             return None
+        
+    def get_handle_at_pose( self, rowVec, posnErr = _POSN_STDDEV*2.0 ):
+        """ Return the handle of the object nearest to the `rowVec` pose if it is within `posnErr`, Otherwise return `None` """
+        posnQ, _ = row_vec_to_pb_posn_ornt( rowVec )
+        distMin = 1e6
+        indxMin = -1
+        for i, blk in enumerate( self.blocks ):
+            if blk is not None:
+                blockPos, _ = p.getBasePositionAndOrientation( blk )
+                dist = np.linalg.norm( np.array( posnQ ) - np.array( blockPos ) )
+                if dist < distMin:
+                    distMin = dist
+                    indxMin = i
+        if (indxMin > -1) and (distMin <= posnErr):
+            return self.blocks[ indxMin ]
+        return None
 
     def step( self ):
         """ Advance one step and sleep """
@@ -381,6 +394,7 @@ class MockAction:
     def __init__( self, objName, dest ):
         """ Init action without grounding """
         self.objName = objName # - Type of object required
+        self.handle  = None
         self.dest    = dest # ---- Where we will place this object
         self.status  = "INVALID" # Current status of this behavior
         self.symbol  = None # ---- Symbol on which this behavior relies
@@ -441,15 +455,22 @@ class MockAction:
         print( f"\t\tTick: {self.status}, {self}" )
         if self.status == "INVALID":
             self.status = "RUNNING"
+            if self.p_grounded():
+                # print( type( self.symbol.pose ) )
+                self.handle = world.get_handle_at_pose( self.symbol.pose )
         if self.status == "RUNNING":
-            posn, ornt = row_vec_to_pb_posn_ornt( self.waypnt[self.tDex] )
-            p.resetBasePositionAndOrientation( world.get_handle( self.objName ), posn, ornt )
-            self.tStep += 1
-            if (self.tStep % self.tDiv == 0):
-                self.tDex += 1
-            if self.tDex >= len( self.waypnt ):
-                self.status = "COMPLETE"
-
+            if self.handle is None:
+                self.status = "FAILURE"
+            elif self.p_grounded():
+                posn, ornt = row_vec_to_pb_posn_ornt( self.waypnt[self.tDex] )
+                p.resetBasePositionAndOrientation( self.handle, posn, ornt )
+                self.tStep += 1
+                if (self.tStep % self.tDiv == 0):
+                    self.tDex += 1
+                if self.tDex >= len( self.waypnt ):
+                    self.status = "COMPLETE"
+            else:
+                self.status = "FAILURE"
 
 ##### Planner Helpers #####################################################
 
@@ -485,6 +506,7 @@ def release_plan_symbols( plan ):
 ##### Mock Planner ########################################################
 _LOG_PROB_FACTOR = 10.0
 _LOG_BASE        = 2.0
+_PLAN_THRESH     = 0.02
 
 class MockPlan( list ):
     """ Special list with priority """
@@ -620,7 +642,7 @@ class MockPlanner:
         """ Execute partially observable plans """
         self.world.spin_for( Npause )
 
-        N = 300 # Number of iterations for this test
+        N = 600 # Number of iterations for this test
         K =   5 # Number of top plans to maintain
         ### Main Planner Loop ###  
         currPlan = None
@@ -689,7 +711,7 @@ class MockPlanner:
                 score = cost - _LOG_PROB_FACTOR * log( prob, _LOG_BASE )
                 plan.rank = score
                 # Destroy Degraded Plans #
-                if prob > 0.02:
+                if prob > _PLAN_THRESH:
                     savPln.append( plan )
                 else:
                     release_plan_symbols( plan )
@@ -700,13 +722,13 @@ class MockPlanner:
             savPln.sort()
             self.plans = savPln[:K]
             for m, plan in enumerate( self.plans ):
-                print( f"\tPlan {m+1} --> Cost: {cost}, P = {prob}, {'Retain' if (prob > 0.02) else 'DELETE'}, Priority = {plan.rank}" )
+                print( f"\tPlan {m+1} --> Cost: {cost}, P = {prob}, {'Retain' if (prob > _PLAN_THRESH) else 'DELETE'}, Priority = {plan.rank}" )
 
             ## Destroy Unlikely Symbols ##
             savSym = [] # Only save likely symbols attached to plans
             cDel   = 0
             for sym in self.symbols:
-                if (sym.prob() > 0.02) and sym.p_attached():
+                if (sym.prob() > _PLAN_THRESH) and sym.p_attached():
                     savSym.append( sym )
                 else:
                     cDel += 1
@@ -729,13 +751,27 @@ class MockPlanner:
                 if currPlan.status == "COMPLETE":
                     achieved.append( currPlan.goal )
                     currPlan = None
-                else:
+                elif currPlan.status == "FAILURE":
+                    print( f"TRASHING failed plan: {currPlan}" )
+                    currPlan = None
+                elif plan_confidence( currPlan ) >= _PLAN_THRESH:
                     currPlan.tick( self.world )
+                else:
+                    print( f"TRASHING unlikely plan: {currPlan}" )
+                    currPlan = None
+
+            ## Check Win Condition ##
+            if len( achieved ) >= 2:
+                break
 
             ## Step ##
             self.world.spin_for( 10 )
             print()
             
+        if len( achieved ) >= 2:
+            print( "\n### GOALS MET ###\n" )
+        else:
+            print( "\n### TIMEOUT ###\n" )
 
 
         
