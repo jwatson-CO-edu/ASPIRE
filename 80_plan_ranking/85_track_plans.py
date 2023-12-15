@@ -4,14 +4,15 @@
 [Y] Negative indications (Lack of relevant evidence at a pose)
 [>] Execute noisy plans
     [Y] Simulate grasps such that classification errors are not MASKED
-    [>] Update pose distributions and confirm that they NARROW
+    [Y] Discard plans for completed goals
+    [>] Get failure metrics
+    [ ] *Actually* discard symbols that did NOT get assigned to plans!
+    [ ] Update pose distributions and confirm that they NARROW
     [ ] Track action completion
         [ ] Check predicate result: PASS/FAIL 
     [ ] Simulate failed actions
         [ ] Failed grasps
         [ ] Random failure
-    
-    [ ] Discard plans for completed goals
 """
 
 ########## INIT ####################################################################################
@@ -25,7 +26,7 @@ import numpy as np
 import pybullet as p
 import pybullet_data
 
-from spatialmath.base import tr2angvec, r2q
+from spatialmath.base import r2q
 from spatialmath.quaternion import UnitQuaternion
 
 from scipy.stats import chi2
