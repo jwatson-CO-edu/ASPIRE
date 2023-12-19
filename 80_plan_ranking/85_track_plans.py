@@ -697,7 +697,6 @@ class MockPlanner:
             if belief.p_pose_relevant( symbol ):
                 return
 
-
     def exec_plans_noisy( self, Npause = 200 ):
         """ Execute partially observable plans """
         self.world.spin_for( Npause )
@@ -786,7 +785,6 @@ class MockPlanner:
                     release_plan_symbols( plan )
                     print( f"\tReleased {len(plan)} symbols!" )
 
-
             ## Enqueue Plans ##    
             savPln.sort()
             self.plans = savPln[:K]
@@ -805,7 +803,6 @@ class MockPlanner:
                     cDel += 1
             self.symbols = savSym
             print( f"Retained {len(self.symbols)} symbols, and deleted {cDel}!" )
-
 
             ## Execute Current Plan ##
             # Pop top plan
@@ -841,8 +838,12 @@ class MockPlanner:
                     currPlan = None
 
             ## Check Win Condition ##
-            if len( achieved ) >= 2:
-                break
+            nuChieved = []
+            for goalNum in achieved:
+                # FIXME, START HERE: CHECK EACH OF THE PLANS
+                self.skltns
+            # if len( achieved ) >= 2:
+            #     break
 
             ## Step ##
             self.world.spin_for( 10 )
