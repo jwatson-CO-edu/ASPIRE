@@ -5,9 +5,13 @@
 [>] Execute noisy plans
     [Y] Simulate grasps such that classification errors are not MASKED
     [Y] Discard plans for completed goals
-    [>] Get failure metrics
-    [ ] *Actually* discard symbols that did NOT get assigned to plans!
-    [ ] Update pose distributions and confirm that they NARROW
+    [Y] Get failure metrics, 2023-12-18: 
+        * Very first plan based on a belief that became unlikely
+        * Spends significant time recovering from “grasp failures”; sampled a grasp outside of max distance from truth.
+            - Starts a new plan from the beginning 
+    [Y] *Actually* discard symbols that did NOT get assigned to plans!, 2023-12-18: Was not releasing symbols from plans BELOW top K
+    [Y] Update pose distributions and confirm that they NARROW, 2023-12-18: Few pose "grasp" errors
+    [>] Track that goals *remain* completed!
     [ ] Track action completion
         [ ] Check predicate result: PASS/FAIL 
     [ ] Simulate failed actions
@@ -20,6 +24,8 @@
 import time, sys
 from random import random, choice
 from math import log
+from collections import Counter
+from pprint import pprint
 
 import numpy as np
 
@@ -145,6 +151,7 @@ def multiclass_Bayesian_belief_update( cnfMtx, priorB, evidnc ):
 _POSN_STDDEV = 0.008
 _NULL_NAME   = "NOTHING"
 _NULL_THRESH = 0.75
+_N_POSE_UPDT = 25
 
 
 class SimpleBlock:
@@ -183,7 +190,8 @@ class ObjectBelief:
 
     def __init__( self, initStddev = _POSN_STDDEV ):
         """ Initialize with origin poses and uniform, independent variance """
-        stdDev = [initStddev if (i<3) else 0.0 for i in range(7)]
+        # stdDev = [initStddev if (i<3) else 0.0 for i in range(7)]
+        stdDev = [initStddev for i in range(7)]
         self.labels  = {} # ---------------------- Current belief in each class
         self.pose    = np.array([0,0,0,1,0,0,0]) # Mean pose
         self.pStdDev = np.array(stdDev) # -------- Pose variance
@@ -213,11 +221,6 @@ class ObjectBelief:
         m_dist_x = np.dot(m_dist_x, (x-mu))
         return (1-chi2.cdf( m_dist_x, 3 ) >= self.pThresh)
     
-    def symbol_confidence( self, symbol ):
-        """ Return the confidence that the symbol is supported by this belief """
-        # FIXME, START HERE: FIRST COMPUTE POSE RELEVANCE THEN RETURN THE BELIEF IN THE SYMBOL LABEL
-        pass
-    
     def sample_symbol( self ):
         """ Sample a determinized symbol from the hybrid distribution """
         label = roll_outcome( self.labels )
@@ -239,6 +242,29 @@ class ObjectBelief:
         rtnObj.pose = np.array( self.pose )
         return rtnObj
 
+    def update_pose_dist( self ):
+        """ Update the pose distribution from the history of observations """
+        poseHist   = np.array( self.pHist )
+        self.pHist = []
+        nuPose     = np.mean( poseHist, axis = 0 )
+        nuStdDev   = np.std( poseHist, axis = 0 )
+        nuvar      = np.zeros( (7,7,) ) # ------ Pose covariance matrix
+        for i, stdDev in enumerate( nuStdDev ):
+            nuvar[i,i] = stdDev * stdDev
+        self.pose = self.pose + np.dot(
+            np.divide( 
+                self.covar,
+                np.add( self.covar, nuvar ), 
+                where = self.covar != 0.0 
+            ),
+            np.subtract( nuPose, self.pose )
+        )
+        print( self.covar )
+        nuSum = np.add( 
+            np.reciprocal( self.covar, where = self.covar != 0.0 ), 
+            np.reciprocal( nuvar, where = nuvar != 0.0 ) 
+        )
+        self.covar = np.reciprocal( nuSum, where = nuSum != 0.0 )
     
     def integrate_belief( self, objBelief ):
         """ if `objBelief` is relevant, then Update this belief with evidence and return True, Otherwise return False """
@@ -253,6 +279,8 @@ class ObjectBelief:
             for i, name in enumerate( _BLOCK_NAMES ):
                 self.labels[ name ] = updatB[i]
             self.pHist.append( objBelief.pose )
+            if len( self.pHist ) >= _N_POSE_UPDT:
+                self.update_pose_dist()
             return True
         else:
             return False
@@ -383,6 +411,27 @@ class PB_BlocksWorld:
         for name in _BLOCK_NAMES[:-1]:
             rtnBel.append( self.get_block_noisy( name, confuseProb, poseStddev ) )
         return rtnBel
+    
+    def get_handle_name( self, handle ):
+        """ Get the block name that corresponds to the handle """
+        try:
+            idx = self.blocks.index( handle )
+            return _BLOCK_NAMES[ idx ]
+        except ValueError:
+            return None
+
+    def check_predicate( self, symbol, posnErr = _POSN_STDDEV*2.0 ):
+        """ Check that the `symbol` is True """
+        handle = self.get_handle_at_pose( symbol.pose, posnErr )
+        return (self.get_handle_name( handle ) == symbol.label)
+    
+    def validate_goal_spec( self, spec ):
+        """ Return true only if all the predicates in `spec` are true """
+        for p in spec:
+            if not self.check_predicate( p ):
+                return False
+        return True
+
 
 
 ########## MOCK PLANNER ############################################################################
@@ -399,6 +448,8 @@ class MockAction:
         self.dest    = dest # ---- Where we will place this object
         self.status  = "INVALID" # Current status of this behavior
         self.symbol  = None # ---- Symbol on which this behavior relies
+        self.msg     = "" # ------ Message: Reason this action failed -or- OTHER
+
 
     def set_wp( self ):
         """ Build waypoints for the action """
@@ -462,6 +513,7 @@ class MockAction:
         if self.status == "RUNNING":
             if self.handle is None:
                 self.status = "FAILURE"
+                self.msg    = "Object miss"
             elif self.p_grounded():
                 posn, ornt = row_vec_to_pb_posn_ornt( self.waypnt[self.tDex] )
                 p.resetBasePositionAndOrientation( self.handle, posn, ornt )
@@ -472,6 +524,8 @@ class MockAction:
                     self.status = "COMPLETE"
             else:
                 self.status = "FAILURE"
+                self.msg    = "No symbol"
+
 
 ##### Planner Helpers #####################################################
 
@@ -500,14 +554,15 @@ def plan_cost( plan ):
 def release_plan_symbols( plan ):
     """ Detach symbols from all actions in the plan """
     for action in plan:
-        action.symbol.action = None
-        action.symbol = None
+        if action.symbol is not None:
+            action.symbol.action = None
+            action.symbol = None
 
 
 ##### Mock Planner ########################################################
 _LOG_PROB_FACTOR = 10.0
-_LOG_BASE        = 2.0
-_PLAN_THRESH     = 0.02
+_LOG_BASE        =  2.0
+_PLAN_THRESH     =  0.02
 
 class MockPlan( list ):
     """ Special list with priority """
@@ -520,8 +575,9 @@ class MockPlan( list ):
         self.goal   = -1 # --------------- Goal that this plan satisfies if completed
         self.status = "INVALID" # -------- Current status of this plan
         self.idx    = -1 # --------------- Current index of the running action
+        self.msg    = "" # --------------- Message: Reason this plan failed -or- OTHER
 
-    def __lt__(self, other):
+    def __lt__( self, other ):
         """ Compare to another plan """
         # Original Author: Jiew Meng, https://stackoverflow.com/a/9345618
         selfPriority  = (self.rank , self.rand )
@@ -541,12 +597,15 @@ class MockPlan( list ):
         if self.status == "RUNNING":
             self[ self.idx ].tick( world )
             cStat = self[ self.idx ].status
+            cMssg = self[ self.idx ].msg
             if cStat == "COMPLETE":
                 self.idx += 1
                 if self.idx >= len( self ):
                     self.status = "COMPLETE"
             else:
                 self.status = cStat
+                if cStat == "FAILURE":
+                    self.msg = f"(Action) {cMssg}"
 
     def get_goal_spec( self ):
         """ Get a fully specified goal for this plan """
@@ -648,7 +707,7 @@ class MockPlanner:
         ### Main Planner Loop ###  
         currPlan = None
         achieved = []
-        oldPlans = []
+        metrics  = Counter()
         # 2023-12-11: For now, loop a limited number of times
         for i in range(N):
 
@@ -671,6 +730,7 @@ class MockPlanner:
                 print( f"\t{cIn} object beliefs updated!" )
             else:
                 print( f"\tNO belief update!" )
+            print( f"Total Beliefs: {len(self.beliefs)}" )
             
             ## Retain only fresh beliefs ##
             belObj = []
@@ -681,23 +741,31 @@ class MockPlanner:
                     belief.integrate_belief( belief.sample_nothing() )
                     if belief.labels[ _NULL_NAME ] < _NULL_THRESH:
                         belObj.append( belief )
+                    else:
+                        print( "Belief DESTROYED!" )
             self.beliefs = belObj
 
             ## Sample Symbols ##
             nuSym = [bel.sample_symbol() for bel in self.beliefs]
-            print( f"There are {len(self.symbols)} total symbols!" )
 
             ## Ground Plans ##
             svSym     = [] # Only retain symbols that were assigned to plans!
             skeletons = [self.get_skeleton( j ) for j in range( len( self.skltns ) )]
             for sym in nuSym:
+                assigned = False
                 for l, skel in enumerate( skeletons ):
                     for j, action in enumerate( skel ):
                         if not action.p_grounded():
                             if (action.objName == sym.label) and (not sym.p_attached()):
                                 action.set_ground( sym )
+                                assigned = True
+                        if assigned:
+                            break
+                    if assigned:
+                        break
                 if sym.p_attached():
                     svSym.append( sym )
+                
             for k, skel in enumerate( skeletons ):
                 if p_plan_grounded( skel ):
                     self.plans.append( skel )
@@ -722,6 +790,8 @@ class MockPlanner:
             ## Enqueue Plans ##    
             savPln.sort()
             self.plans = savPln[:K]
+            for badPlan in savPln[K:]:
+                release_plan_symbols( badPlan )
             for m, plan in enumerate( self.plans ):
                 print( f"\tPlan {m+1} --> Cost: {cost}, P = {prob}, {'Retain' if (prob > _PLAN_THRESH) else 'DELETE'}, Priority = {plan.rank}" )
 
@@ -744,21 +814,30 @@ class MockPlanner:
                     currPlan = self.plans[0]
                     self.plans.pop(0)
                     while currPlan.goal in achieved:
+                        if currPlan is not None:
+                            release_plan_symbols( currPlan )
                         currPlan = self.plans[0]
                         self.plans.pop(0)
-                except IndexError:
+                except (IndexError, AttributeError):
+                    if currPlan is not None:
+                        release_plan_symbols( currPlan )
                     currPlan = None
             if currPlan is not None:
                 if currPlan.status == "COMPLETE":
                     achieved.append( currPlan.goal )
+                    release_plan_symbols( currPlan )
                     currPlan = None
                 elif currPlan.status == "FAILURE":
                     print( f"TRASHING failed plan: {currPlan}" )
+                    metrics[ currPlan.msg ] += 1
+                    release_plan_symbols( currPlan )
                     currPlan = None
                 elif plan_confidence( currPlan ) >= _PLAN_THRESH:
                     currPlan.tick( self.world )
                 else:
                     print( f"TRASHING unlikely plan: {currPlan}" )
+                    metrics[ "Unlikely Symbol" ] += 1
+                    release_plan_symbols( currPlan )
                     currPlan = None
 
             ## Check Win Condition ##
@@ -773,6 +852,9 @@ class MockPlanner:
             print( "\n### GOALS MET ###\n" )
         else:
             print( "\n### TIMEOUT ###\n" )
+
+        for k, v in metrics.items():
+            print( f"Failure: {k}, Occurrences: {v}" )
 
 
         
