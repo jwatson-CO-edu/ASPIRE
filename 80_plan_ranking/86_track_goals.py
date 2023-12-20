@@ -2,7 +2,7 @@
 [Y] Ground plan with Fully Observable symbols
 [Y] Ground plan with Partially Observable symbols
 [Y] Negative indications (Lack of relevant evidence at a pose)
-[>] Execute noisy plans
+[Y] Execute noisy plans
     [Y] Simulate grasps such that classification errors are not MASKED
     [Y] Discard plans for completed goals
     [Y] Get failure metrics 
@@ -14,9 +14,9 @@
     [Y] Track that goals *remain* completed!
     [Y] Track action completion
         [Y] Check predicate result: PASS/FAIL 
-    [>] Simulate failed actions
+    [Y] Simulate failed actions
         [Y] Failed grasps
-        [ ] Random failure
+        [Y] Random failure
 """
 
 ########## INIT ####################################################################################
