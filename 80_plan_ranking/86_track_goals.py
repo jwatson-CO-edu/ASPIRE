@@ -5,17 +5,17 @@
 [>] Execute noisy plans
     [Y] Simulate grasps such that classification errors are not MASKED
     [Y] Discard plans for completed goals
-    [Y] Get failure metrics, 2023-12-18: 
+    [Y] Get failure metrics 
         * Very first plan based on a belief that became unlikely
         * Spends significant time recovering from “grasp failures”; sampled a grasp outside of max distance from truth.
             - Starts a new plan from the beginning 
     [Y] *Actually* discard symbols that did NOT get assigned to plans!, 2023-12-18: Was not releasing symbols from plans BELOW top K
     [Y] Update pose distributions and confirm that they NARROW, 2023-12-18: Few pose "grasp" errors
-    [>] Track that goals *remain* completed!
-    [ ] Track action completion
-        [ ] Check predicate result: PASS/FAIL 
-    [ ] Simulate failed actions
-        [ ] Failed grasps
+    [Y] Track that goals *remain* completed!
+    [Y] Track action completion
+        [Y] Check predicate result: PASS/FAIL 
+    [>] Simulate failed actions
+        [Y] Failed grasps
         [ ] Random failure
 """
 
@@ -425,10 +425,10 @@ class PB_BlocksWorld:
         handle = self.get_handle_at_pose( symbol.pose, posnErr )
         return (self.get_handle_name( handle ) == symbol.label)
     
-    def validate_goal_spec( self, spec ):
+    def validate_goal_spec( self, spec, posnErr = _POSN_STDDEV*2.0 ):
         """ Return true only if all the predicates in `spec` are true """
         for p in spec:
-            if not self.check_predicate( p ):
+            if not self.check_predicate( p, posnErr ):
                 return False
         return True
 
@@ -437,6 +437,7 @@ class PB_BlocksWorld:
 ########## MOCK PLANNER ############################################################################
 
 ##### Mock Action #########################################################
+_PROB_TICK_FAIL = 0.01
 
 class MockAction:
     """ Least Behavior """
@@ -505,6 +506,9 @@ class MockAction:
     def tick( self, world ):
         """ Animate an action """
         print( f"\t\tTick: {self.status}, {self}" )
+        if random() < _PROB_TICK_FAIL:
+            self.status = "FAILURE"
+            self.msg    = "Action Fault"
         if self.status == "INVALID":
             self.status = "RUNNING"
             if self.p_grounded():
@@ -563,6 +567,7 @@ def release_plan_symbols( plan ):
 _LOG_PROB_FACTOR = 10.0
 _LOG_BASE        =  2.0
 _PLAN_THRESH     =  0.02
+_ACCEPT_POSN_ERR =  0.150
 
 class MockPlan( list ):
     """ Special list with priority """
@@ -588,14 +593,18 @@ class MockPlan( list ):
         """ String representation of the plan """
         return f"<MockPlan, Goal: {self.goal}, Status: {self.status}, Index: {self.idx}>"
     
-    def tick( self, world ):
+    def tick( self, world, posnErr = _POSN_STDDEV*2.0 ):
         """ Animate a plan """
         print( f"\tTick: {self}" )
         if self.status == "INVALID":
             self.status = "RUNNING"
             self.idx    = 0
         if self.status == "RUNNING":
-            self[ self.idx ].tick( world )
+            miniGoal = ObjectSymbol( None, self[ self.idx ].objName, self[ self.idx ].dest.copy() )
+            if world.check_predicate( miniGoal, posnErr ):
+                self[ self.idx ].status = "COMPLETE"
+            else:
+                self[ self.idx ].tick( world )
             cStat = self[ self.idx ].status
             cMssg = self[ self.idx ].msg
             if cStat == "COMPLETE":
@@ -695,7 +704,8 @@ class MockPlanner:
         """ Return true if there is a belief that supports this symbol, Otherwise return false """
         for belief in self.beliefs:
             if belief.p_pose_relevant( symbol ):
-                return
+                return True
+        return False
 
     def exec_plans_noisy( self, Npause = 200 ):
         """ Execute partially observable plans """
@@ -830,7 +840,7 @@ class MockPlanner:
                     release_plan_symbols( currPlan )
                     currPlan = None
                 elif plan_confidence( currPlan ) >= _PLAN_THRESH:
-                    currPlan.tick( self.world )
+                    currPlan.tick( self.world, _ACCEPT_POSN_ERR )
                 else:
                     print( f"TRASHING unlikely plan: {currPlan}" )
                     metrics[ "Unlikely Symbol" ] += 1
@@ -838,18 +848,26 @@ class MockPlanner:
                     currPlan = None
 
             ## Check Win Condition ##
-            # nuChieved = []
-            # for goalNum in achieved:
-            #     # FIXME, START HERE: CHECK EACH OF THE PLANS
-            #     self.skltns
-            if len( achieved ) >= 2:
+            nuChieved = []
+            for goalNum in achieved:
+                skeleton = self.skltns[ goalNum ]
+                goal     = skeleton.get_goal_spec()
+                solved   = world.validate_goal_spec( goal, _ACCEPT_POSN_ERR )
+                if solved:
+                    print( f"Goal {goalNum} is SOLVED!" )
+                    nuChieved.append( goalNum )
+                else:
+                    metrics[ "Goal NOT Met" ] += 1
+            achieved = nuChieved
+
+            if len( achieved ) >= len( self.skltns ):
                 break
 
             ## Step ##
             self.world.spin_for( 10 )
             print()
             
-        if len( achieved ) >= 2:
+        if len( achieved ) >= len( self.skltns ):
             print( "\n### GOALS MET ###\n" )
         else:
             print( "\n### TIMEOUT ###\n" )
