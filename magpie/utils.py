@@ -12,7 +12,7 @@ from time import time as now
 from math import floor
 import numpy as np
 from numpy import sin, cos
-from psutil import sensors_temperatures
+#from psutil import sensors_temperatures
 # from tcp_latency import measure_latency
 
 ##### Aliases #####
@@ -475,21 +475,21 @@ def average_CPU_temp( cpuDct, label = 'avg_temp' ):
     return cpuDct
     
 
-def network_thermal_health( remoteHosts = None ):
-    """ Get the local host temperatures and latency to a remote host """
-    _DEBUG = 0
-    if remoteHosts is None:
-        remoteHosts = ['192.168.0.102']
-    tmpDct = sensors_temperatures()
-    rtnDct = dict( tmpDct )
-    for k, v in tmpDct.items():
-        rtnDct[k] = v[0].current
-    average_CPU_temp( rtnDct )
-    rtnDct['time'] = time.time()
-    rtnDct['network'] = {}
-    for host in remoteHosts:
-        rtnDct[ 'network' ][ host ] = {  'latency' : ping_latency_ms( host ),  }
-    return rtnDct
+#def network_thermal_health( remoteHosts = None ):
+#    """ Get the local host temperatures and latency to a remote host """
+#    _DEBUG = 0
+#    if remoteHosts is None:
+#        remoteHosts = ['192.168.0.102']
+#    tmpDct = sensors_temperatures()
+#    rtnDct = dict( tmpDct )
+#    for k, v in tmpDct.items():
+#        rtnDct[k] = v[0].current
+#    average_CPU_temp( rtnDct )
+#    rtnDct['time'] = time.time()
+#    rtnDct['network'] = {}
+#    for host in remoteHosts:
+#        rtnDct[ 'network' ][ host ] = {  'latency' : ping_latency_ms( host ),  }
+#    return rtnDct
 
 
 def temp_trends( T, series, names = None ):
