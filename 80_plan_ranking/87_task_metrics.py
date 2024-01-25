@@ -931,7 +931,7 @@ if __name__ == "__main__":
     
     ### Trials ###
     for i in range( Nruns ):
-        print(f'\n##### Trial {i+1} #####')
+        print(f'\n##### Trial {i+1} of {Nruns} #####')
         planner.exec_plans_noisy()
         world.spin_for( 200 )
         print('\n')
