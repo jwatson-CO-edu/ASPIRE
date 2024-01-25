@@ -15,7 +15,7 @@ from pprint import pprint
 
 import numpy as np
 
-import pybullet as p
+import pybullet as pb
 import pybullet_data
 
 from spatialmath.base import r2q
@@ -288,33 +288,33 @@ class PB_BlocksWorld:
 
     def __init__( self ):
         """ Create objects """
-        self.physicsClient = p.connect( p.GUI ) # or p.DIRECT for non-graphical version
-        p.setAdditionalSearchPath( pybullet_data.getDataPath() ) #optionally
-        p.setGravity( 0, 0, -10 )
-        self.planeId = p.loadURDF( "plane.urdf" )
+        self.physicsClient = pb.connect( pb.GUI ) # or pb.DIRECT for non-graphical version
+        pb.setAdditionalSearchPath( pybullet_data.getDataPath() ) #optionally
+        pb.setGravity( 0, 0, -10 )
+        self.planeId = pb.loadURDF( "plane.urdf" )
 
-        redBlock = p.loadURDF( "cube.urdf", [ random()*3.0-1.5, random()*3.0-1.5, 0.150 ], globalScaling = 0.25  )
-        p.changeVisualShape( redBlock, -1, rgbaColor=[1.0, 0.0, 0.0, 1] )
+        redBlock = pb.loadURDF( "cube.urdf", [ random()*3.0-1.5, random()*3.0-1.5, 0.150 ], globalScaling = 0.25  )
+        pb.changeVisualShape( redBlock, -1, rgbaColor=[1.0, 0.0, 0.0, 1] )
 
-        ylwBlock = p.loadURDF( "cube.urdf", [ random()*3.0-1.5, random()*3.0-1.5, 0.150 ], globalScaling = 0.25  )
-        p.changeVisualShape( ylwBlock, -1, rgbaColor=[1.0, 1.0, 0.0, 1] )
+        ylwBlock = pb.loadURDF( "cube.urdf", [ random()*3.0-1.5, random()*3.0-1.5, 0.150 ], globalScaling = 0.25  )
+        pb.changeVisualShape( ylwBlock, -1, rgbaColor=[1.0, 1.0, 0.0, 1] )
 
-        bluBlock = p.loadURDF( "cube.urdf", [ random()*3.0-1.5, random()*3.0-1.5, 0.150 ], globalScaling = 0.25  )
-        p.changeVisualShape( bluBlock, -1, rgbaColor=[0.0, 0.0, 1.0, 1] )
+        bluBlock = pb.loadURDF( "cube.urdf", [ random()*3.0-1.5, random()*3.0-1.5, 0.150 ], globalScaling = 0.25  )
+        pb.changeVisualShape( bluBlock, -1, rgbaColor=[0.0, 0.0, 1.0, 1] )
 
-        grnBlock = p.loadURDF( "cube.urdf", [ random()*3.0-1.5, random()*3.0-1.5, 0.150 ], globalScaling = 0.25  )
-        p.changeVisualShape( grnBlock, -1, rgbaColor=[0.0, 1.0, 0.0, 1] )
+        grnBlock = pb.loadURDF( "cube.urdf", [ random()*3.0-1.5, random()*3.0-1.5, 0.150 ], globalScaling = 0.25  )
+        pb.changeVisualShape( grnBlock, -1, rgbaColor=[0.0, 1.0, 0.0, 1] )
 
-        ornBlock = p.loadURDF( "cube.urdf", [ random()*3.0-1.5, random()*3.0-1.5, 0.150 ], globalScaling = 0.25  )
-        p.changeVisualShape( ornBlock, -1, rgbaColor=[1.0, 0.5, 0.0, 1] )
+        ornBlock = pb.loadURDF( "cube.urdf", [ random()*3.0-1.5, random()*3.0-1.5, 0.150 ], globalScaling = 0.25  )
+        pb.changeVisualShape( ornBlock, -1, rgbaColor=[1.0, 0.5, 0.0, 1] )
 
-        vioBlock = p.loadURDF( "cube.urdf", [ random()*3.0-1.5, random()*3.0-1.5, 0.150 ], globalScaling = 0.25  )
-        p.changeVisualShape( vioBlock, -1, rgbaColor=[0.5, 0.0, 1.0, 1] )
+        vioBlock = pb.loadURDF( "cube.urdf", [ random()*3.0-1.5, random()*3.0-1.5, 0.150 ], globalScaling = 0.25  )
+        pb.changeVisualShape( vioBlock, -1, rgbaColor=[0.5, 0.0, 1.0, 1] )
 
         self.blocks = [redBlock, ylwBlock, bluBlock, grnBlock, ornBlock, vioBlock, None]
 
         for _ in range( 100 ):
-            p.stepSimulation()
+            pb.stepSimulation()
         print('\n')
 
     def reset_blocks( self ):
@@ -322,7 +322,7 @@ class PB_BlocksWorld:
         for blockHandl in self.blocks:
             if blockHandl is not None:
                 posn, ornt = row_vec_to_pb_posn_ornt( [ random()*3.0-1.5, random()*3.0-1.5, 0.150,1,0,0,0] )
-                p.resetBasePositionAndOrientation( blockHandl, posn, ornt )
+                pb.resetBasePositionAndOrientation( blockHandl, posn, ornt )
 
     def get_handle( self, name ):
         """ Get the ID of the requested object by `name` """
@@ -338,7 +338,7 @@ class PB_BlocksWorld:
         indxMin = -1
         for i, blk in enumerate( self.blocks ):
             if blk is not None:
-                blockPos, _ = p.getBasePositionAndOrientation( blk )
+                blockPos, _ = pb.getBasePositionAndOrientation( blk )
                 dist = np.linalg.norm( np.array( posnQ ) - np.array( blockPos ) )
                 if dist < distMin:
                     distMin = dist
@@ -349,7 +349,7 @@ class PB_BlocksWorld:
 
     def step( self ):
         """ Advance one step and sleep """
-        p.stepSimulation()
+        pb.stepSimulation()
         time.sleep( 1.0 / 240.0 )
 
     def spin_for( self, N = 1000 ):
@@ -359,13 +359,13 @@ class PB_BlocksWorld:
 
     def stop( self ):
         """ Disconnect from the simulation """
-        p.disconnect()
+        pb.disconnect()
 
     def get_block_true( self, blockName ):
         """ Find one of the ROYGBV blocks, Fully Observable, Return None if the name is not in the world """
         try:
             idx = _BLOCK_NAMES.index( blockName )
-            blockPos, blockOrn = p.getBasePositionAndOrientation( self.blocks[idx] )
+            blockPos, blockOrn = pb.getBasePositionAndOrientation( self.blocks[idx] )
             blockPos = np.array( blockPos )
             return ObjectSymbol( 
                 DummyBelief( blockName ), 
@@ -386,7 +386,7 @@ class PB_BlocksWorld:
         """ Find one of the ROYGBV blocks, Partially Observable, Return None if the name is not in the world """
         try:
             idx = _BLOCK_NAMES.index( blockName )
-            blockPos, blockOrn = p.getBasePositionAndOrientation( self.blocks[idx] )
+            blockPos, blockOrn = pb.getBasePositionAndOrientation( self.blocks[idx] )
             blockPos = np.array( blockPos ) + np.array( [np.random.normal( 0.0, poseStddev/3.0 ) for _ in range(3)] )
             rtnObj = ObjectBelief()
             rtnObj.pose = pb_posn_ornt_to_row_vec( blockPos, blockOrn )
@@ -515,7 +515,7 @@ class MockAction:
                 self.msg    = "Object miss"
             elif self.p_grounded():
                 posn, ornt = row_vec_to_pb_posn_ornt( self.waypnt[self.tDex] )
-                p.resetBasePositionAndOrientation( self.handle, posn, ornt )
+                pb.resetBasePositionAndOrientation( self.handle, posn, ornt )
                 self.tStep += 1
                 if (self.tStep % self.tDiv == 0):
                     self.tDex += 1
@@ -707,7 +707,7 @@ class MockPlanner:
             for action in plan:
                 print( f"Execute: {action}" )
                 posn, ornt = row_vec_to_pb_posn_ornt( action.dest )
-                p.resetBasePositionAndOrientation( self.world.get_handle( action.objName ), posn, ornt )
+                pb.resetBasePositionAndOrientation( self.world.get_handle( action.objName ), posn, ornt )
                 for _ in range(10):
                     self.world.step()
 
