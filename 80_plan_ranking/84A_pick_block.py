@@ -141,20 +141,24 @@ def multiclass_Bayesian_belief_update( cnfMtx, priorB, evidnc ):
 
 
 ########## UR5 ROBOT ###############################################################################
+_BLOCK_SCALE       = 0.038
+_GRASP_VERT_OFFSET = _BLOCK_SCALE * 2.0
+_GRASP_ORNT_XYZW   = np.array( [0, 0.7070727, 0, 0.7071408,] )
+_Q_HOME            = [0, -math.pi/2, math.pi/2, -math.pi/2, -math.pi/2, 0]
 
 class UR5Sim:
     """ Original Author: Josep Daniel, https://github.com/josepdaniel/ur5-bullet/tree/master/UR5 """
 
     def load_robot( self ):
         """ Load UR5 from description """
-        flags = pb.URDF_USE_SELF_COLLISION
+        flags = 0 #pb.URDF_USE_SELF_COLLISION
         robot = pb.loadURDF( ROBOT_URDF_PATH, [0, 0, 0], [0, 0, 0, 1], flags=flags )
         return robot
   
     def __init__( self, camera_attached=False ):
         """ Load robot and controller """
         
-        self.end_effector_index = 7
+        self.end_effector_index = 7 # 5 # 6 # 7
         self.ur5 = self.load_robot()
         self.num_joints = pb.getNumJoints( self.ur5 )
         
@@ -219,10 +223,10 @@ class UR5Sim:
     def calculate_ik_euler( self, position, orientation ):
         """ Get the target joint angles to achieve the desired `position` and `orientation` (Euler Angles) """
         quaternion   = pb.getQuaternionFromEuler(orientation)
-        lower_limits = [-math.pi]*6
-        upper_limits = [math.pi]*6
-        joint_ranges = [2*math.pi]*6
-        rest_poses   = [0, -math.pi/2, -math.pi/2, -math.pi/2, -math.pi/2, 0]
+        lower_limits = [-2*math.pi]*6
+        upper_limits = [2*math.pi]*6
+        joint_ranges = [4*math.pi]*6
+        rest_poses   = _Q_HOME
         joint_angles = pb.calculateInverseKinematics(
             self.ur5, self.end_effector_index, position, quaternion, 
             jointDamping=[0.01]*6, upperLimits=upper_limits, 
@@ -230,6 +234,31 @@ class UR5Sim:
             restPoses=rest_poses
         )
         return joint_angles
+    
+
+    def calculate_ik_quat( self, position, quaternion ):
+        """ Get the target joint angles to achieve the desired `position` and `orientation` (Quaternion) """
+        lower_limits = [-math.pi]*6
+        upper_limits = [math.pi]*6
+        joint_ranges = [2*math.pi]*6
+        rest_poses   = _Q_HOME
+        joint_angles = pb.calculateInverseKinematics(
+            self.ur5, self.end_effector_index, position, quaternion, 
+            jointDamping=[0.1]*6, upperLimits=upper_limits, 
+            lowerLimits=lower_limits, jointRanges=joint_ranges, 
+            restPoses=rest_poses,
+            maxNumIterations=1000,
+            residualThreshold=.01
+        )
+        return joint_angles
+    
+    def goto_home( self ):
+        self.set_joint_angles( _Q_HOME )
+
+    def goto_pb_posn_ornt( self, posn, ornt ):
+        """ Set the target joint angles to achieve the desired `position` and `orientation` (Quaternion) """
+        q = self.calculate_ik_quat( posn, ornt )
+        self.set_joint_angles( q )
        
 
     def add_gui_sliders( self ):
@@ -259,7 +288,7 @@ class UR5Sim:
         position, orientation = linkstate[0], linkstate[1]
         return position, orientation
     
-
+    
 
 ########## ENVIRONMENT #############################################################################
 _POSN_STDDEV = 0.008
@@ -267,7 +296,6 @@ _NULL_NAME   = "NOTHING"
 _NULL_THRESH = 0.75
 _N_POSE_UPDT = 25
 _BLOCK_NAMES = ['redBlock', 'ylwBlock', 'bluBlock', 'grnBlock', 'ornBlock', 'vioBlock', _NULL_NAME]
-_BLOCK_SCALE = 0.038
 
 class DummyBelief:
     """ Stand-in for an actual `ObjectBelief` """
@@ -295,13 +323,16 @@ class PB_BlocksWorld:
 
     def __init__( self ):
         """ Create objects """
+        ## Init Sim ##
         self.physicsClient = pb.connect( pb.GUI ) # or p.DIRECT for non-graphical version
         pb.setAdditionalSearchPath( pybullet_data.getDataPath() ) #optionally
         pb.setGravity( 0, 0, -10 )
 
+        ## Instantiate Robot and Table ##
         self.table = make_table()
         self.robot = UR5Sim()
 
+        ## Instantiate Blocks ##
         redBlock = make_block()
         pb.changeVisualShape( redBlock, -1, rgbaColor=[1.0, 0.0, 0.0, 1] )
 
@@ -321,6 +352,78 @@ class PB_BlocksWorld:
         pb.changeVisualShape( vioBlock, -1, rgbaColor=[0.5, 0.0, 1.0, 1] )
 
         self.blocks = [redBlock, ylwBlock, bluBlock, grnBlock, ornBlock, vioBlock, None]
+
+    def reset_blocks( self ):
+        """ Send blocks to random locations """
+        for blockHandl in self.blocks:
+            if blockHandl is not None:
+                posn, ornt = row_vec_to_pb_posn_ornt( 
+                    [ 0.070 + random()*10.0*_BLOCK_SCALE, 
+                      0.070 + random()*10.0*_BLOCK_SCALE, 
+                      _BLOCK_SCALE ,
+                      1,0,0,0] 
+                )
+                pb.resetBasePositionAndOrientation( blockHandl, posn, ornt )
+
+    def get_handle( self, name ):
+        """ Get the ID of the requested object by `name` """
+        if name in _BLOCK_NAMES:
+            return self.blocks[ _BLOCK_NAMES.index( name ) ]
+        else:
+            return None
+        
+    def get_handle_at_pose( self, rowVec, posnErr = _POSN_STDDEV*2.0 ):
+        """ Return the handle of the object nearest to the `rowVec` pose if it is within `posnErr`, Otherwise return `None` """
+        posnQ, _ = row_vec_to_pb_posn_ornt( rowVec )
+        distMin = 1e6
+        indxMin = -1
+        for i, blk in enumerate( self.blocks ):
+            if blk is not None:
+                blockPos, _ = pb.getBasePositionAndOrientation( blk )
+                dist = np.linalg.norm( np.array( posnQ ) - np.array( blockPos ) )
+                if dist < distMin:
+                    distMin = dist
+                    indxMin = i
+        if (indxMin > -1) and (distMin <= posnErr):
+            return self.blocks[ indxMin ]
+        return None
+
+    def step( self ):
+        """ Advance one step and sleep """
+        pb.stepSimulation()
+        time.sleep( 1.0 / 240.0 )
+
+    def spin_for( self, N = 1000 ):
+        """ Run for `N` steps """
+        for _ in range(N):
+            self.step()
+
+    def stop( self ):
+        """ Disconnect from the simulation """
+        pb.disconnect()
+
+    def get_block_true( self, blockName ):
+        """ Find one of the ROYGBV blocks, Fully Observable, Return None if the name is not in the world """
+        try:
+            idx = _BLOCK_NAMES.index( blockName )
+            blockPos, blockOrn = pb.getBasePositionAndOrientation( self.blocks[idx] )
+            blockPos = np.array( blockPos )
+            return ObjectSymbol( 
+                DummyBelief( blockName ), 
+                blockName, 
+                pb_posn_ornt_to_row_vec( blockPos, blockOrn ) 
+            )
+        except ValueError:
+            return None
+        
+    def get_block_grasp_true( self, blockName ):
+        """ Find a grasp for one of the ROYGBV blocks, Fully Observable, Return None if the name is not in the world """
+        symb = self.get_block_true( blockName )
+        pose = symb.pose
+        pose[2] += _GRASP_VERT_OFFSET
+        posn, _ = row_vec_to_pb_posn_ornt( pose )
+        ornt = _GRASP_ORNT_XYZW.copy()
+        return pb_posn_ornt_to_row_vec( posn, ornt )
 
 
 ########## UTILITY CLASSES & SYMBOLS ###############################################################
@@ -462,7 +565,13 @@ np.set_printoptions( precision = 3, linewidth = 145 )
 
 if __name__ == "__main__":
 
+    target = 'ylwBlock'
     world = PB_BlocksWorld()
-    for i in range( 4000 ):
-        pb.stepSimulation()
-        time.sleep( 1.0 / 240.0 )
+    print( world.get_block_true( target ) )
+    graspPose = world.get_block_grasp_true( target )
+    posn, ornt = row_vec_to_pb_posn_ornt( graspPose )
+    print( posn, ornt )
+    world.robot.goto_home()
+    world.spin_for( 500 )
+    world.robot.goto_pb_posn_ornt( posn, ornt )
+    world.spin_for( 4000 )
