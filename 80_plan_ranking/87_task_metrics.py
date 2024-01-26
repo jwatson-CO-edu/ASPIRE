@@ -5,7 +5,7 @@
 
 ########## INIT ####################################################################################
 
-import time, sys
+import time, sys, pickle
 now = time.time
 
 from random import random, choice
@@ -927,7 +927,7 @@ if __name__ == "__main__":
 
     world   = PB_BlocksWorld()
     planner = MockPlanner( world )
-    Nruns   = 100
+    Nruns   = 250
     
     ### Trials ###
     for i in range( Nruns ):
@@ -954,6 +954,15 @@ if __name__ == "__main__":
             msPass.append( trial['makespan'] )
         else:
             msFail.append( trial['makespan'] )
+
+    with open( 'fullDemo250_2024-01-26.pkl', 'wb' ) as handle:
+        pickle.dumps( metrics, handle )
+
+    with open( 'fullDemo250_2024-01-26_msPass.pkl', 'wb' ) as handle:
+        pickle.dumps( msPass, handle )       
+
+    with open( 'fullDemo250_2024-01-26_msFail.pkl', 'wb' ) as handle:
+        pickle.dumps( msFail, handle )    
 
     plt.hist( [msPass, msFail], Nbins, histtype='bar', label=["Success", "Failure"] )
 

@@ -2,22 +2,7 @@
 
 ##### Imports #####
 
-import os, math, time
-from datetime import datetime
-from collections import namedtuple
-from random import random
-
-import numpy as np
-
-import pybullet as pb
-import pybullet_data
-
-from attrdict import AttrDict
-
-from spatialmath.quaternion import UnitQuaternion
-from spatialmath.base import r2q
-
-from scipy.stats import chi2
+from utils import *
 
 
 ##### Paths #####
@@ -35,104 +20,7 @@ TABLE_URDF_PATH = os.path.join( pybullet_data.getDataPath(), "table/table.urdf" 
 
 
 
-########## HELPER FUNCTIONS ########################################################################
 
-
-def pb_posn_ornt_to_homog( posn, ornt ):
-    """ Express the PyBullet position and orientation as homogeneous coords """
-    H = np.eye(4)
-    Q = UnitQuaternion( ornt[-1], ornt[:3] )
-    H[0:3,0:3] = Q.SO3().R
-    H[0:3,3]   = np.array( posn )
-    return H
-
-
-def pb_posn_ornt_to_row_vec( posn, ornt ):
-    """ Express the PyBullet position and orientation as a Position and Orientation --> [Px,Py,Pz,Ow,Ox,Oy,Oz] """
-    V = list( posn[:] )
-    V.append( ornt[-1] )
-    V.extend( ornt[:3] )
-    return np.array(V)
-
-
-def row_vec_to_pb_posn_ornt( V ):
-    """ Express the PyBullet position and orientation as a Position and Orientation --> [Px,Py,Pz,Ow,Ox,Oy,Oz] """
-    posn = np.array( V[0:3] )
-    ornt = np.zeros( (4,) )
-    ornt[:3] = V[4:7]
-    ornt[-1] = V[3]
-    return posn, ornt
-
-
-def homog_to_row_vec( homog ):
-    """ Express a homogeneous coord as a Position and Orientation --> [Px,Py,Pz,Ow,Ox,Oy,Oz] """
-    P = homog[0:3,3]
-    Q = UnitQuaternion( r2q( homog[0:3,0:3] ) )
-    V = np.zeros( (7,) )
-    V[0:3] = P[:]
-    V[3]   = Q.s
-    V[4:7] = Q.v[:]
-    return np.array(V)
-
-
-def total_pop( odds ):
-    """ Sum over all categories in the prior odds """
-    total = 0
-    for k in odds:
-        total += odds[k]
-    return total
-
-
-def normalize_dist( odds_ ):
-    """ Normalize the distribution so that the sum equals 1.0 """
-    total  = total_pop( odds_ )
-    rtnDst = dict()
-    for k in odds_:
-        rtnDst[k] = odds_[k] / total
-    return rtnDst
-
-
-def roll_outcome( odds ):
-    """ Get a random outcome from the distribution """
-    oddsNorm = normalize_dist( odds )
-    distrib  = []
-    outcome  = []
-    total    = 0.0
-    for o, p in oddsNorm.items():
-        total += p
-        distrib.append( total )
-        outcome.append( o )
-    roll = random()
-    for i, p in enumerate( distrib ):
-        if roll <= p:
-            return outcome[i]
-    return None
-
-
-def get_confusion_matx( Nclass, confuseProb = 0.10 ):
-    """ Get the confusion matrix from the label list """
-    Pt = 1.0-confuseProb*(Nclass-1)
-    Pf = confuseProb
-    rtnMtx = np.eye( Nclass )
-    for i in range( Nclass ):
-        for j in range( Nclass ):
-            if i == j:
-                rtnMtx[i,j] = Pt
-            else:
-                rtnMtx[i,j] = Pf
-    return rtnMtx
-
-
-def multiclass_Bayesian_belief_update( cnfMtx, priorB, evidnc ):
-    """ Update the prior belief using probabilistic evidence given the weight of that evidence """
-    Nclass = cnfMtx.shape[0]
-    priorB = np.array( priorB ).reshape( (Nclass,1,) )
-    evidnc = np.array( evidnc ).reshape( (Nclass,1,) )
-    P_e    = cnfMtx.dot( priorB ).reshape( (Nclass,) )
-    P_hGe  = np.zeros( (Nclass,Nclass,) )
-    for i in range( Nclass ):
-        P_hGe[i,:] = (cnfMtx[i,:]*priorB[i,0]).reshape( (Nclass,) ) / P_e
-    return P_hGe.dot( evidnc ).reshape( (Nclass,) )
 
 
 
@@ -141,6 +29,7 @@ _BLOCK_SCALE       = 0.038
 _GRASP_VERT_OFFSET = _BLOCK_SCALE * 2.0
 _GRASP_ORNT_XYZW   = np.array( [0, 0.7070727, 0, 0.7071408,] )
 _Q_HOME            = [0, -math.pi/2, math.pi/2, -math.pi/2, -math.pi/2, 0]
+_ROT_VEL_SMALL     = 0.2
 
 class UR5Sim:
     """ Original Author: Josep Daniel, https://github.com/josepdaniel/ur5-bullet/tree/master/UR5 """
@@ -155,6 +44,7 @@ class UR5Sim:
         """ Load robot and controller """
         
         self.end_effector_index = 7 # 5 # 6 # 7
+        self.jntIndices = [1,2,3,4,5,6]
         self.ur5 = self.load_robot()
         self.num_joints = pb.getNumJoints( self.ur5 )
         
@@ -198,12 +88,23 @@ class UR5Sim:
             positionGains=[0.04]*len(poses), forces=forces
         )
 
+    def get_joint_vel( self ):
+        """ Return the current joint velocities """
+        j = pb.getJointStates( self.ur5, self.jntIndices )
+        return [i[1] for i in j]
+    
+    def p_moving( self ):
+        """ Return True if any of the joint velocities are above some small number """
+        vel = self.get_joint_vel()
+        for v in vel:
+            if v > _ROT_VEL_SMALL:
+                return True
+        return False
 
     def get_joint_angles( self ):
         """ Return the current joint configuration """
-        j = pb.getJointStates(self.ur5, [1,2,3,4,5,6])
-        joints = [i[0] for i in j]
-        return joints
+        j = pb.getJointStates( self.ur5, self.jntIndices )
+        return [i[0] for i in j]
     
 
     def check_collisions( self, verbose = False ):
@@ -256,33 +157,14 @@ class UR5Sim:
         q = self.calculate_ik_quat( posn, ornt )
         self.set_joint_angles( q )
        
-
-    def add_gui_sliders( self ):
-        """ Display GUI pose control """
-        self.sliders = []
-        self.sliders.append(pb.addUserDebugParameter("X", 0, 1, 0.4))
-        self.sliders.append(pb.addUserDebugParameter("Y", -1, 1, 0))
-        self.sliders.append(pb.addUserDebugParameter("Z", 0.3, 1, 0.4))
-        self.sliders.append(pb.addUserDebugParameter("Rx", -math.pi/2, math.pi/2, 0))
-        self.sliders.append(pb.addUserDebugParameter("Ry", -math.pi/2, math.pi/2, 0))
-        self.sliders.append(pb.addUserDebugParameter("Rz", -math.pi/2, math.pi/2, 0))
-
-
-    def read_gui_sliders( self ):
-        """ Get user pose input """
-        x = pb.readUserDebugParameter(self.sliders[0])
-        y = pb.readUserDebugParameter(self.sliders[1])
-        z = pb.readUserDebugParameter(self.sliders[2])
-        Rx = pb.readUserDebugParameter(self.sliders[3])
-        Ry = pb.readUserDebugParameter(self.sliders[4])
-        Rz = pb.readUserDebugParameter(self.sliders[5])
-        return [x, y, z, Rx, Ry, Rz]
         
     def get_current_pose( self ):
         """ Get the current pose in the lab frame """
         linkstate = pb.getLinkState(self.ur5, self.end_effector_index, computeForwardKinematics=True)
         position, orientation = list(linkstate[0]), list(linkstate[1])
         return position, orientation
+    
+    
     
     
 
@@ -433,6 +315,11 @@ class PB_BlocksWorld:
         ePsn, _    = self.robot.get_current_pose()
         pDif = np.subtract( bPsn, ePsn )
         self.grasp.append( (hndl,pDif,bOrn,) ) # Preserve the original orientation because I am lazy
+
+    def robot_release_all( self ):
+        """ Unlock all objects from end effector """
+        self.grasp = []
+
 
 ########## UTILITY CLASSES & SYMBOLS ###############################################################
 _POSN_STDDEV = 0.008

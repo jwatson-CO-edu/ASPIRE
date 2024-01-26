@@ -4,6 +4,7 @@
 import builtins, datetime, time
 from time import sleep
 
+### Special Imports ###
 import numpy as np
 
 import py_trees
@@ -11,7 +12,10 @@ from py_trees.behaviour import Behaviour
 from py_trees.common import Status
 from py_trees.composites import Sequence
 
+### Local Imports ###
 from magpie.poses import pose_error, rotate_pose
+
+from utils import *
 
 
 
@@ -21,16 +25,19 @@ class BasicBehavior( Behaviour ):
     """ Abstract class for repetitive housekeeping """
     
     
-    def __init__( self, name = None, ctrl = None ):
+    def __init__( self, name = None, ctrl = None, world = None ):
         """ Set name to the child class name unless otherwise specified """
         if name is None:
             super().__init__( name = str( self.__class__.__name__  ) )
         else:
             super().__init__( name = name )
-        self.ctrl = ctrl
+        self.ctrl  = ctrl
+        self.world = world
         self.logger.debug( f"[{self.name}::__init__()]" )
         if self.ctrl is None:
             self.logger.warning( f"{self.name} is NOT conntected to a robot controller!" )
+        if self.world is None:
+            self.logger.warning( f"{self.name} is NOT conntected to a world object!" )
 
         
     def setup(self):
@@ -82,7 +89,18 @@ def connect_BT_to_robot( bt, robot ):
         for child in bt.children:
             connect_BT_to_robot( child, robot )
 
+def connect_BT_to_world( bt, world ):
+    """ Assign `world` environment to `bt` and recursively to all nodes below """
+    if hasattr( bt, 'world' ):
+        bt.world = world
+    if len( bt.children ):
+        for child in bt.children:
+            connect_BT_to_robot( child, world )
 
+def connect_BT_to_robot_world( bt, robot, world ):
+    """ Set both controller and environment for this behavior and all children """
+    connect_BT_to_robot( bt, robot )
+    connect_BT_to_world( bt, world )
 
 ########## MOVEMENT BEHAVIORS ######################################################################
 
@@ -98,21 +116,21 @@ DEFAULT_ORNT_ERR = 3*np.pi/180.0
 class Move_Q( BasicBehavior ):
     """ Move the joint config `qPos` """
     
-    def __init__( self, qPos, name = None, ctrl = None, rotSpeed = 1.05, rotAccel = 1.4, asynch = True ):
+    def __init__( self, qPos, name = None, ctrl = None, world = None, rotSpeed = 1.05, rotAccel = 1.4, asynch = True ):
         """ Set the target """
         # NOTE: Asynchronous motion is closest to the Behavior Tree paradigm, Avoid blocking!
-        super().__init__( name, ctrl )
+        super().__init__( name, ctrl, world )
         self.qPos     = qPos
-        self.rotSpeed = rotSpeed
-        self.rotAccel = rotAccel
-        self.asynch   = asynch
+        self.rotSpeed = rotSpeed # NOT USED
+        self.rotAccel = rotAccel # NOT USED
+        self.asynch   = asynch # - NOT USED
     
     
     def initialise( self ):
         """ Actually Move """
         super().initialise()
         # self.ctrl.moveJ( self.qPos, self.rotSpeed, self.rotAccel, self.asynch )
-        # FIXME, START HERE: MOVE TO A CONFIG
+        self.ctrl.set_joint_angles( self.qPos )
     
     
     def update( self ):
@@ -128,27 +146,29 @@ class Move_Q( BasicBehavior ):
                 self.status = Status.SUCCESS 
         return self.status
     
+
 ##### Move_Arm ###################################
-    
     
 class Move_Arm( BasicBehavior ):
     """ Move linearly in task space to the designated pose """
     
-    def __init__( self, pose, name = None, ctrl = None, linSpeed = 0.25, linAccel = 0.5, asynch = True ):
+    def __init__( self, posn, ornt, name = None, ctrl = None, world = None, linSpeed = 0.25, linAccel = 0.5, asynch = True ):
         """ Set the target """
         # NOTE: Asynchronous motion is closest to the Behavior Tree paradigm, Avoid blocking!
-        super().__init__( name, ctrl )
-        self.pose     = pose
-        self.linSpeed = linSpeed
-        self.linAccel = linAccel
-        self.asynch   = asynch
+        super().__init__( name, ctrl, world )
+        self.posn     = posn
+        self.ornt     = ornt
+        self.linSpeed = linSpeed # NOT USED
+        self.linAccel = linAccel # NOT USED
+        self.asynch   = asynch # - NOT USED
         self.epsilon  = 1e-5
         
         
     def initialise( self ):
         """ Actually Move """
         super().initialise()
-        self.ctrl.moveL( self.pose, self.linSpeed, self.linAccel, self.asynch, self.epsilon )
+        # self.ctrl.moveL( self.pose, self.linSpeed, self.linAccel, self.asynch, self.epsilon )
+        self.ctrl.goto_pb_posn_ornt( self.posn, self.ornt )
         
         
     def update( self ):
@@ -156,8 +176,10 @@ class Move_Arm( BasicBehavior ):
         if self.ctrl.p_moving():
             self.status = Status.RUNNING
         else:
-            pM = self.ctrl.get_tcp_pose()
-            pD = self.pose
+            # pM = self.ctrl.get_tcp_pose()
+            posnM, orntM = self.ctrl.get_current_pose()
+            pM = pb_posn_ornt_to_homog( posnM, orntM )
+            pD = pb_posn_ornt_to_homog( self.posn, self.ornt )
             [errT, errO] = pose_error( pM, pD )
             if (errT <= DEFAULT_TRAN_ERR) and (errO <= DEFAULT_ORNT_ERR):
                 self.status = Status.SUCCESS
@@ -170,48 +192,22 @@ class Move_Arm( BasicBehavior ):
 ##### Open_Hand ##################################
     
     
-class Open_Gripper( BasicBehavior ):
+class Ungrasp( BasicBehavior ):
     """ Open fingers to max extent """
     
-    def __init__( self, name = None, ctrl = None  ):
+    def __init__( self, name = None, ctrl = None, world = None ):
         """ Set the target """
-        super().__init__( name, ctrl )
-        self.wait_s = 0.5
+        super().__init__( name, ctrl, world )
+        # self.wait_s = 0.5
         
         
     def initialise( self ):
         """ Actually Move """
         super().initialise()
-        self.ctrl.open_gripper()
-        sleep( self.wait_s )
+        self.world.robot_release_all()
+        # sleep( self.wait_s )
         
         
-    def update( self ):
-        """ Return true if the target reached """
-        self.status = Status.SUCCESS
-        return self.status
-        
-        
-##### Set_Fingers ##################################
-    
-    
-class Set_Gripper( BasicBehavior ):
-    """ Open fingers to max extent """
-    
-    def __init__( self, width_m, name = None, ctrl = None  ):
-        """ Set the target """
-        super().__init__( name, ctrl )
-        self.width_m = width_m
-        self.wait_s = 0.5
-        
-        
-    def initialise( self ):
-        """ Actually Move """
-        super().initialise()
-        self.ctrl.set_gripper( self.width_m )
-        sleep( self.wait_s )
-        
-    
     def update( self ):
         """ Return true if the target reached """
         self.status = Status.SUCCESS
@@ -221,21 +217,21 @@ class Set_Gripper( BasicBehavior ):
 ##### Close_Hand ##################################
     
     
-class Close_Gripper( BasicBehavior ):
+class Grasp( BasicBehavior ):
     """ Close fingers completely """
     
-    def __init__( self, name = None, ctrl = None  ):
+    def __init__( self, objName, name = None, ctrl = None, world = None ):
         """ Set the target """
-        super().__init__( name, ctrl )
-        self.wait_s = 0.5
-        
-        
+        super().__init__( name, ctrl, world )
+        self.target = objName
+        # self.wait_s = 0.5
+                
     def initialise( self ):
         """ Actually Move """
         super().initialise()
-        self.ctrl.close_gripper()
-        sleep( self.wait_s )
-        
+        # self.ctrl.close_gripper()
+        # sleep( self.wait_s )
+        self.world.robot_grasp_block( self.target )
         
     def update( self ):
         """ Return true if the target reached """
@@ -249,12 +245,15 @@ class Jog_Safe( Sequence ):
     """ Move to a target by traversing at a safe altitude """
     # NOTE: This behavior should not, on its own, assume any gripper state
     
-    def __init__( self, endPose, zSAFE=0.150, name="Jog_Safe", 
-                  ctrl  = None ):
+    def __init__( self, posn, ornt, zSAFE=0.150, name="Jog_Safe", 
+                  ctrl  = None, world = None ):
         """Construct the subtree"""
         super().__init__( name = name, memory = True )
         
         # Init #
+        self.posn  = posn
+        self.ornt  = ornt
+        endPose    = pb_posn_ornt_to_homog( self.posn, self.ornt )
         self.zSAFE = max( zSAFE, endPose[2,3] ) # Eliminate (some) silly vertical movements
         self.ctrl  = ctrl
         
@@ -264,9 +263,10 @@ class Jog_Safe( Sequence ):
         self.pose2up = _DUMMYPOSE.copy()
         
         # Behaviors whose poses will be modified #
-        self.moveUp = Move_Arm( self.pose1up, ctrl=ctrl )
-        self.moveJg = Move_Arm( self.pose2up, ctrl=ctrl )
-        self.mvTrgt = Move_Arm( self.targetP, ctrl=ctrl )
+        posn, ornt = homog_to_pb_posn_ornt( self.pose1up )
+        self.moveUp = Move_Arm( posn, ornt, ctrl=ctrl, world=world )
+        self.moveJg = Move_Arm( posn, ornt, ctrl=ctrl, world=world )
+        self.mvTrgt = Move_Arm( self.targetP, ctrl=ctrl, world=world )
         
         
         # 1. Move direcly up from the starting pose
@@ -290,9 +290,20 @@ class Jog_Safe( Sequence ):
         self.pose2up = self.targetP.copy()
         self.pose2up[2, 3] = self.zSAFE
 
-        self.moveUp.pose = self.pose1up.copy()
-        self.moveJg.pose = self.pose2up.copy()
-        self.mvTrgt.pose = self.targetP.copy()
+        posn, ornt = homog_to_pb_posn_ornt( self.pose1up )
+        # self.moveUp.pose = self.pose1up.copy()
+        self.moveUp.posn = posn[:]
+        self.moveUp.ornt = ornt[:]
+
+        posn, ornt = homog_to_pb_posn_ornt( self.pose2up )
+        # self.moveJg.pose = self.pose2up.copy()
+        self.moveJg.posn = posn[:]
+        self.moveJg.ornt = ornt[:]
+
+        posn, ornt = homog_to_pb_posn_ornt( self.targetP )
+        # self.mvTrgt.pose = self.targetP.copy()
+        self.mvTrgt.posn = posn[:]
+        self.mvTrgt.ornt = ornt[:]
         
         
 ########## MANIPULATION BEHAVIORS ##################################################################
@@ -302,41 +313,43 @@ class Pick_at_Pose( Sequence ):
     """ Grasp at a target pose (Robot Frame) while traversing at a safe altitude """
     # NOTE: This behavior should not, on its own, assume any gripper state
 
-    def __init__( self, target, zSAFE = 0.150, preGraspW_m = None, graspWdth_m = None, name = "Pick_at_Pose", ctrl = None ):
+    def __init__( self, posn, ornt, objName, zSAFE = 0.150, name = "Pick_at_Pose", ctrl = None, world = None ):
         """Construct the subtree"""
         super().__init__( name = name, memory = 1 )
-        self.ctrl = ctrl
-        
+        self.ctrl  = ctrl
+        self.world = world
         # 1. Open the gripper
-        if preGraspW_m is None:
-            self.add_child(  Open_Gripper( name = "Open", ctrl = ctrl )  )
-        else:
-            self.add_child(  Set_Gripper( preGraspW_m, name = "Open", ctrl = ctrl )  )
+        # if preGraspW_m is None:
+        #     self.add_child(  Open_Gripper( name = "Open", ctrl = ctrl )  )
+        # else:
+        #     self.add_child(  Set_Gripper( preGraspW_m, name = "Open", ctrl = ctrl )  )
+        self.add_child(  Ungrasp( name = "Open", ctrl = ctrl, world = world )  )
         # 2. Jog to the target
-        self.add_child(  Jog_Safe( target, zSAFE = zSAFE, name = "Jog to Grasp Pose", ctrl = ctrl )  )
+        self.add_child(  Jog_Safe( posn, ornt, zSAFE = zSAFE, name = "Jog to Grasp Pose", ctrl = ctrl, world = world )  )
         # 1. Close the gripper
-        if graspWdth_m is None:
-            self.add_child(  Close_Hand( name = "Close", ctrl = ctrl )  )
-        else:
-            self.add_child(  Set_Gripper( graspWdth_m, name = "Close", ctrl = ctrl )  )
-            
+        # if graspWdth_m is None:
+        #     self.add_child(  Close_Hand( name = "Close", ctrl = ctrl )  )
+        # else:
+        #     self.add_child(  Set_Gripper( graspWdth_m, name = "Close", ctrl = ctrl )  )
+        self.add_child(  Grasp( objName, name = "Close", ctrl = ctrl, world = world )  )
             
 class Place_at_Pose( Sequence ):
     """ Grasp at a target pose (Robot Frame) while traversing at a safe altitude """
     # NOTE: This behavior should not, on its own, assume any gripper state
 
-    def __init__( self, target, zSAFE = 0.150, postGraspW_m = None, name = "Place_at_Pose", ctrl = None ):
+    def __init__( self, posn, ornt, zSAFE = 0.150, name = "Place_at_Pose", ctrl = None, world = None ):
         """Construct the subtree"""
         super().__init__( name = name, memory = 1 )
-        self.ctrl = ctrl
+        self.ctrl  = ctrl
+        self.world = world
         # 2. Jog to the target
-        self.add_child(  Jog_Safe( target, zSAFE = zSAFE, name = "Jog to Grasp Pose", ctrl = ctrl )  )
+        self.add_child(  Jog_Safe( posn, ornt, zSAFE = zSAFE, name = "Jog to Grasp Pose", ctrl = ctrl, world = world )  )
         # 1. Open the gripper
-        if postGraspW_m is None:
-            self.add_child(  Open_Gripper( name = "Open", ctrl = ctrl )  )
-        else:
-            self.add_child(  Set_Gripper( postGraspW_m, name = "Open", ctrl = ctrl )  )
-            
+        # if postGraspW_m is None:
+        #     self.add_child(  Open_Gripper( name = "Open", ctrl = ctrl )  )
+        # else:
+        #     self.add_child(  Set_Gripper( postGraspW_m, name = "Open", ctrl = ctrl )  )
+        self.add_child(  Ungrasp( name = "Open", ctrl = ctrl, world = world )  )
             
 ########## EXECUTION ###############################################################################
 
