@@ -33,8 +33,8 @@ TABLE_URDF_PATH = os.path.join( pybullet_data.getDataPath(), "table/table.urdf" 
 [Y] Load robot, 2024-01-25: Compied from example, No GUI
 [Y] World class, 2024-01-25: Compied from 87
 [Y] Load blocks, 2024-01-25: Compied from 87
-[ ] Move to block
-[ ] Pick block
+[Y] Move to block, 2024-01-25: Beginning config was very important, as always
+[Y] Pick block, 2024-01-25: Block is locked to effector!
 """
 
 
@@ -248,7 +248,7 @@ class UR5Sim:
             lowerLimits=lower_limits, jointRanges=joint_ranges, 
             restPoses=rest_poses,
             maxNumIterations=1000,
-            residualThreshold=.01
+            residualThreshold=0.005
         )
         return joint_angles
     
@@ -285,7 +285,7 @@ class UR5Sim:
     def get_current_pose( self ):
         """ Get the current pose in the lab frame """
         linkstate = pb.getLinkState(self.ur5, self.end_effector_index, computeForwardKinematics=True)
-        position, orientation = linkstate[0], linkstate[1]
+        position, orientation = list(linkstate[0]), list(linkstate[1])
         return position, orientation
     
     
@@ -331,6 +331,7 @@ class PB_BlocksWorld:
         ## Instantiate Robot and Table ##
         self.table = make_table()
         self.robot = UR5Sim()
+        self.grasp = []
 
         ## Instantiate Blocks ##
         redBlock = make_block()
@@ -392,6 +393,9 @@ class PB_BlocksWorld:
         """ Advance one step and sleep """
         pb.stepSimulation()
         time.sleep( 1.0 / 240.0 )
+        ePsn, _    = self.robot.get_current_pose()
+        for obj in self.grasp:
+            pb.resetBasePositionAndOrientation( obj[0], np.add( obj[1], ePsn ), obj[2] )
 
     def spin_for( self, N = 1000 ):
         """ Run for `N` steps """
@@ -424,7 +428,15 @@ class PB_BlocksWorld:
         posn, _ = row_vec_to_pb_posn_ornt( pose )
         ornt = _GRASP_ORNT_XYZW.copy()
         return pb_posn_ornt_to_row_vec( posn, ornt )
-
+    
+    def robot_grasp_block( self, blockName ):
+        """ Lock the block to the end effector """
+        hndl = self.get_handle( blockName )
+        symb = self.get_block_true( blockName )
+        bPsn, bOrn = row_vec_to_pb_posn_ornt( symb.pose )
+        ePsn, _    = self.robot.get_current_pose()
+        pDif = np.subtract( bPsn, ePsn )
+        self.grasp.append( (hndl,pDif,bOrn,) ) # Preserve the original orientation because I am lazy
 
 ########## UTILITY CLASSES & SYMBOLS ###############################################################
 _POSN_STDDEV = 0.008
@@ -573,5 +585,10 @@ if __name__ == "__main__":
     print( posn, ornt )
     world.robot.goto_home()
     world.spin_for( 500 )
+    world.robot.goto_pb_posn_ornt( posn, ornt )
+    world.spin_for( 500 )
+    world.robot_grasp_block( target )
+    posn, ornt = world.robot.get_current_pose()
+    posn[2] += 0.200
     world.robot.goto_pb_posn_ornt( posn, ornt )
     world.spin_for( 4000 )

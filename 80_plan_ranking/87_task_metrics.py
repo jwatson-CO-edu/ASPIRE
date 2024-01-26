@@ -937,73 +937,91 @@ if __name__ == "__main__":
         print('\n')
 
     ### Analyze ###
+    import matplotlib.pyplot as plt
+
     print( f"Success Rate __ : {metrics['pass']/metrics['N']}" )
     spans = [ dct['makespan'] for dct in metrics["trials"] ]
     avgMs = sum( spans ) / metrics['N']
     print( f"Average Makespan: {avgMs}" )
 
     Nbins = 10
-    
-    histData = {}
-    failSet  = set([])
-    for trial in metrics["trials"]:
-        for k, v in trial.items():
-            failSet.add(k)
 
-    for k in failSet:
-        histData[k] = []
+    msPass = []
+    msFail = []
 
     for trial in metrics["trials"]:
-        for k in failSet:
-            if k in trial:
-                histData[k].append( trial[k] )
-            else:
-                histData[k].append(0)
+        if trial['result']:
+            msPass.append( trial['makespan'] )
+        else:
+            msFail.append( trial['makespan'] )
 
-    import matplotlib.pyplot as plt
+    plt.hist( [msPass, msFail], Nbins, histtype='bar', label=["Success", "Failure"] )
 
-    ocrMin = 10000
-    ocrMax = 0
-    for nam, lst in histData.items():
-        if nam not in ['result', 'makespan']:
-            ocrMin = min( ocrMin, min( lst ) )
-            ocrMax = max( ocrMax, max( lst ) )
-    
-    Lbins = np.linspace( ocrMin, ocrMax, Nbins, True )
-    
-    test_data = []
-    labels    = []
-    for nam, lst in histData.items():
-        if nam not in ['result', 'makespan']:
-            labels.append( nam )
-            test_data.append( lst )
+    plt.legend(); plt.xlabel('Episode Makespan'); plt.ylabel('Count')
+    plt.savefig( 'fullDemo_Makespan.pdf' )
 
-    x_positions = np.array( Lbins )
-
-    number_of_groups = len( test_data )
-    fill_factor =  .8  # ratio of the groups width
-                    # relatively to the available space between ticks
-    bar_width = np.diff(x_positions).min()/number_of_groups * fill_factor
-
-
-    # labels = ['red flowers', 'yellow flowers', 'blue flowers']
-
-    plt.hist( test_data, Nbins, histtype='bar', label=labels )
-
-    # for i, groupdata in enumerate(test_data): 
-    #     bar_positions = [x_pos - number_of_groups*bar_width/2 + (i + 0.5)*bar_width for x_pos in x_positions]
-    #     plt.bar(bar_positions, groupdata, bar_width,
-    #             align='center',
-    #             linewidth=1, edgecolor='k',
-    #             alpha=0.7,
-    #             label=labels[i])
-
-    plt.xticks(x_positions)
-    plt.legend(); plt.xlabel('Occurrences During Episode'); plt.ylabel('Count')
-    plt.savefig( 'fullDemo.pdf' )
     plt.show()
+
+    
+    # histData = {}
+    # failSet  = set([])
+    # for trial in metrics["trials"]:
+    #     for k, v in trial.items():
+    #         failSet.add(k)
+
+    # for k in failSet:
+    #     histData[k] = []
+
+    # for trial in metrics["trials"]:
+    #     for k in failSet:
+    #         if k in trial:
+    #             histData[k].append( trial[k] )
+    #         else:
+    #             histData[k].append(0)
+
     
 
-    pprint( histData )
+    # ocrMin = 10000
+    # ocrMax = 0
+    # for nam, lst in histData.items():
+    #     if nam not in ['result', 'makespan']:
+    #         ocrMin = min( ocrMin, min( lst ) )
+    #         ocrMax = max( ocrMax, max( lst ) )
+    
+    # Lbins = np.linspace( ocrMin, ocrMax, Nbins, True )
+    
+    # test_data = []
+    # labels    = []
+    # for nam, lst in histData.items():
+    #     if nam not in ['result', 'makespan']:
+    #         labels.append( nam )
+    #         test_data.append( lst )
+
+    # x_positions = np.array( Lbins )
+
+    # number_of_groups = len( test_data )
+    # fill_factor =  .8  # ratio of the groups width
+    #                 # relatively to the available space between ticks
+    # bar_width = np.diff(x_positions).min()/number_of_groups * fill_factor
+
+
+    # # labels = ['red flowers', 'yellow flowers', 'blue flowers']
+
+    # plt.hist( test_data, Nbins, histtype='bar', label=labels )
+
+    # # for i, groupdata in enumerate(test_data): 
+    # #     bar_positions = [x_pos - number_of_groups*bar_width/2 + (i + 0.5)*bar_width for x_pos in x_positions]
+    # #     plt.bar(bar_positions, groupdata, bar_width,
+    # #             align='center',
+    # #             linewidth=1, edgecolor='k',
+    # #             alpha=0.7,
+    # #             label=labels[i])
+
+    # plt.xticks(x_positions)
+    # plt.legend(); plt.xlabel('Occurrences During Episode'); plt.ylabel('Count')
+    # plt.savefig( 'fullDemo.pdf' )
+    
+
+    # pprint( histData )
 
     
