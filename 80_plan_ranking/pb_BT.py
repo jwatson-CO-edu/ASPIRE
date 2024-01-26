@@ -183,7 +183,7 @@ class Move_Arm( BasicBehavior ):
             pM = pb_posn_ornt_to_homog( posnM, orntM )
             pD = pb_posn_ornt_to_homog( self.posn, self.ornt )
 
-            if 1:
+            if 0:
                 print( "src --> dst" )
                 print( posnM, orntM )
                 print( self.posn, self.ornt )

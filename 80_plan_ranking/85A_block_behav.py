@@ -98,7 +98,7 @@ class UR5Sim:
     def p_moving( self ):
         """ Return True if any of the joint velocities are above some small number """
         vel = self.get_joint_vel()
-        print( vel )
+        # print( vel )
         for v in vel:
             if v > _ROT_VEL_SMALL:
                 return True
@@ -437,7 +437,7 @@ class ObjectBelief:
             ),
             np.subtract( nuPose, self.pose )
         )
-        print( self.covar )
+        # print( self.covar )
         nuSum = np.add( 
             np.reciprocal( self.covar, where = self.covar != 0.0 ), 
             np.reciprocal( nuvar, where = nuvar != 0.0 ) 
@@ -487,9 +487,9 @@ if __name__ == "__main__":
     posnEnd[2] += _GRASP_VERT_OFFSET
     orntEnd = orntTgt[:]
 
-    print( "Waypoints" )
-    print( posnTgt, orntTgt )
-    print( posnEnd, orntEnd )
+    # print( "Waypoints" )
+    # print( posnTgt, orntTgt )
+    # print( posnEnd, orntEnd )
 
     bt = Sequence()
     bt.add_child( Pick_at_Pose( posnTgt, orntTgt, target, zSAFE = _Z_SAFE, name = "Pick_at_Pose", 
