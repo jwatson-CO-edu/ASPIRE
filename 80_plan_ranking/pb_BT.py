@@ -1,7 +1,7 @@
 ########## INIT ####################################################################################
 
 ### Basic Imports ###
-import builtins, datetime, time
+import builtins, datetime, time, math, sys
 from time import sleep
 
 ### Special Imports ###
@@ -13,6 +13,7 @@ from py_trees.common import Status
 from py_trees.composites import Sequence
 
 ### Local Imports ###
+sys.path.append( "../" )
 from magpie.poses import pose_error, rotate_pose
 
 from utils import *
@@ -106,7 +107,7 @@ def connect_BT_to_robot_world( bt, robot, world ):
 
 ### Constants ###
 LIBBT_TS_S       = 0.25
-DEFAULT_TRAN_ERR = 0.002
+DEFAULT_TRAN_ERR = 0.010 # 0.002
 DEFAULT_ORNT_ERR = 3*np.pi/180.0
 
 
@@ -169,6 +170,7 @@ class Move_Arm( BasicBehavior ):
         super().initialise()
         # self.ctrl.moveL( self.pose, self.linSpeed, self.linAccel, self.asynch, self.epsilon )
         self.ctrl.goto_pb_posn_ornt( self.posn, self.ornt )
+        self.world.spin_for( 20 )
         
         
     def update( self ):
@@ -180,6 +182,12 @@ class Move_Arm( BasicBehavior ):
             posnM, orntM = self.ctrl.get_current_pose()
             pM = pb_posn_ornt_to_homog( posnM, orntM )
             pD = pb_posn_ornt_to_homog( self.posn, self.ornt )
+
+            if 1:
+                print( "src --> dst" )
+                print( posnM, orntM )
+                print( self.posn, self.ornt )
+
             [errT, errO] = pose_error( pM, pD )
             if (errT <= DEFAULT_TRAN_ERR) and (errO <= DEFAULT_ORNT_ERR):
                 self.status = Status.SUCCESS
@@ -266,7 +274,7 @@ class Jog_Safe( Sequence ):
         posn, ornt = homog_to_pb_posn_ornt( self.pose1up )
         self.moveUp = Move_Arm( posn, ornt, ctrl=ctrl, world=world )
         self.moveJg = Move_Arm( posn, ornt, ctrl=ctrl, world=world )
-        self.mvTrgt = Move_Arm( self.targetP, ctrl=ctrl, world=world )
+        self.mvTrgt = Move_Arm( posn, ornt, ctrl=ctrl, world=world )
         
         
         # 1. Move direcly up from the starting pose
@@ -282,7 +290,8 @@ class Jog_Safe( Sequence ):
         ( Ticked first time ) or ( ticked not RUNNING ):
         Generate move waypoint, then move with condition
         """
-        nowPose = self.ctrl.get_tcp_pose()
+        posn, ornt = self.ctrl.get_current_pose()
+        nowPose    = pb_posn_ornt_to_homog( posn, ornt )
         
         self.pose1up = nowPose.copy()
         self.pose1up[2, 3] = self.zSAFE
@@ -380,7 +389,8 @@ class HeartRate:
 
 
 """ Return a formatted timestamp string, useful for logging and debugging """
-def nowTimeStamp(): return datetime.datetime.now().strftime(
+# def nowTimeStamp(): return datetime.datetime.now().strftime(
+def nowTimeStamp(): return datetime.now().strftime(
     '%Y-%m-%d_%H-%M-%S')  # http://stackoverflow.com/a/5215012/893511
 
 
@@ -410,8 +420,12 @@ def run_BT_until_done(
     treeUpdate     = 0,
     failureTree    = 1,
     successTree    = 0,
+    world          = None
 ):
     """Tick root until `maxIter` is reached while printing to terminal"""
+
+    if world is None:
+        raise ValueError( "MUST provide world ref in order to run the simulation within a BT!" )
 
     if Nverb:
         print(
@@ -427,9 +441,9 @@ def run_BT_until_done(
         )
 
     # 0. Setup
-    # rootNode.setup_subtree( childrenFirst = 0 )
+    NstepPer = int( math.ceil( tickPause / world.tIncr ) )
+    pacer    = HeartRate(Hz=1 / tickPause)  # metronome
     rootNode.setup_with_descendants()
-    pacer = HeartRate(Hz=1 / tickPause)  # metronome
 
     if Nverb:
         print("Running ...\n")
@@ -437,7 +451,9 @@ def run_BT_until_done(
     # 1. Run
     for i in range(1, N + 1):
         try:
+            world.spin_for( NstepPer )
             rootNode.tick_once()
+            
 
             if Nverb > 0 and i % Nverb == 0:
                 print("\n--------- Tick {0} ---------\n".format(i))

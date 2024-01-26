@@ -3,6 +3,7 @@
 ##### Imports #####
 
 from utils import *
+from pb_BT import *
 
 
 ##### Paths #####
@@ -14,13 +15,8 @@ TABLE_URDF_PATH = os.path.join( pybullet_data.getDataPath(), "table/table.urdf" 
 
 ########## DEV PLAN ################################################################################
 """
-[ ] Pick and Place behavior
-[ ] Completed Arches
+[>] Pick and Place behavior
 """
-
-
-
-
 
 
 
@@ -85,7 +81,8 @@ class UR5Sim:
             pb.POSITION_CONTROL,
             targetPositions=joint_angles,
             targetVelocities=[0]*len(poses),
-            positionGains=[0.04]*len(poses), forces=forces
+            # positionGains=[0.04]*len(poses), forces=forces
+            positionGains=[0.06]*len(poses), forces=forces
         )
 
     def get_joint_vel( self ):
@@ -93,9 +90,15 @@ class UR5Sim:
         j = pb.getJointStates( self.ur5, self.jntIndices )
         return [i[1] for i in j]
     
+    # def get_joint_acc( self ):
+    #     """ Return the current joint velocities """
+    #     j = pb.getJointStates( self.ur5, self.jntIndices )
+    #     return [i[2] for i in j]
+    
     def p_moving( self ):
         """ Return True if any of the joint velocities are above some small number """
         vel = self.get_joint_vel()
+        print( vel )
         for v in vel:
             if v > _ROT_VEL_SMALL:
                 return True
@@ -138,7 +141,8 @@ class UR5Sim:
         lower_limits = [-math.pi]*6
         upper_limits = [math.pi]*6
         joint_ranges = [2*math.pi]*6
-        rest_poses   = _Q_HOME
+        # rest_poses   = _Q_HOME
+        rest_poses   = self.get_joint_angles()
         joint_angles = pb.calculateInverseKinematics(
             self.ur5, self.end_effector_index, position, quaternion, 
             jointDamping=[0.1]*6, upperLimits=upper_limits, 
@@ -150,6 +154,7 @@ class UR5Sim:
         return joint_angles
     
     def goto_home( self ):
+        """ Go to the home config """
         self.set_joint_angles( _Q_HOME )
 
     def goto_pb_posn_ornt( self, posn, ornt ):
@@ -185,14 +190,20 @@ def make_table():
     # table = pb.loadURDF(TABLE_URDF_PATH, [0.5, 0, -0.6300], [0, 0, 0, 1])
     return pb.loadURDF(TABLE_URDF_PATH, [0.5, 0, -0.6300], [0, 0, 0, 1])
 
+def rand_table_pose():
+    """ Return a random pose in the direct viscinity if the robot """
+    return [ 
+        0.280 + random()*8.0*_BLOCK_SCALE, 
+        random()*16.0*_BLOCK_SCALE-8.0*_BLOCK_SCALE, 
+        _BLOCK_SCALE 
+    ], [0, 0, 0, 1]
+
 def make_block():
     """ Load a block at the correct scale, place it random, and return the int handle """
+    posn, _ = rand_table_pose()
     return pb.loadURDF( 
-        "cube.urdf", [ 
-            0.070 + random()*10.0*_BLOCK_SCALE, 
-            0.070 + random()*10.0*_BLOCK_SCALE, 
-            _BLOCK_SCALE 
-        ], 
+        "cube.urdf", 
+        posn,
         globalScaling = 0.25/4.0
     )
 
@@ -202,6 +213,7 @@ class PB_BlocksWorld:
     def __init__( self ):
         """ Create objects """
         ## Init Sim ##
+        self.tIncr         = 1.0 / 240.0
         self.physicsClient = pb.connect( pb.GUI ) # or p.DIRECT for non-graphical version
         pb.setAdditionalSearchPath( pybullet_data.getDataPath() ) #optionally
         pb.setGravity( 0, 0, -10 )
@@ -270,7 +282,7 @@ class PB_BlocksWorld:
     def step( self ):
         """ Advance one step and sleep """
         pb.stepSimulation()
-        time.sleep( 1.0 / 240.0 )
+        time.sleep( self.tIncr )
         ePsn, _    = self.robot.get_current_pose()
         for obj in self.grasp:
             pb.resetBasePositionAndOrientation( obj[0], np.add( obj[1], ePsn ), obj[2] )
@@ -457,21 +469,35 @@ class ObjectBelief:
 ########## MAIN ####################################################################################
 ##### Env. Settings #####
 np.set_printoptions( precision = 3, linewidth = 145 )
+_Z_SAFE = 10.0*_BLOCK_SCALE
+
 
 if __name__ == "__main__":
 
+    ## Init ##
     target = 'ylwBlock'
     world = PB_BlocksWorld()
-    print( world.get_block_true( target ) )
+    robot = world.robot
+    robot.goto_home()
+    world.spin_for( 500 )
+    
     graspPose = world.get_block_grasp_true( target )
-    posn, ornt = row_vec_to_pb_posn_ornt( graspPose )
-    print( posn, ornt )
-    world.robot.goto_home()
-    world.spin_for( 500 )
-    world.robot.goto_pb_posn_ornt( posn, ornt )
-    world.spin_for( 500 )
-    world.robot_grasp_block( target )
-    posn, ornt = world.robot.get_current_pose()
-    posn[2] += 0.200
-    world.robot.goto_pb_posn_ornt( posn, ornt )
+    posnTgt, orntTgt = row_vec_to_pb_posn_ornt( graspPose )
+    posnEnd, _       = rand_table_pose()
+    posnEnd[2] += _GRASP_VERT_OFFSET
+    orntEnd = orntTgt[:]
+
+    print( "Waypoints" )
+    print( posnTgt, orntTgt )
+    print( posnEnd, orntEnd )
+
+    bt = Sequence()
+    bt.add_child( Pick_at_Pose( posnTgt, orntTgt, target, zSAFE = _Z_SAFE, name = "Pick_at_Pose", 
+                                ctrl = robot, world = world ) )
+    bt.add_child( Place_at_Pose( posnEnd, orntEnd, zSAFE = _Z_SAFE, name = "Place_at_Pose", 
+                                ctrl = robot, world = world ) )
+    run_BT_until_done( bt, world = world )
+
+    robot.goto_home()
+
     world.spin_for( 4000 )
