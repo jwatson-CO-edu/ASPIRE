@@ -956,13 +956,13 @@ if __name__ == "__main__":
             msFail.append( trial['makespan'] )
 
     with open( 'fullDemo250_2024-01-26.pkl', 'wb' ) as handle:
-        pickle.dumps( metrics, handle )
+        pickle.dump( metrics, handle )
 
     with open( 'fullDemo250_2024-01-26_msPass.pkl', 'wb' ) as handle:
-        pickle.dumps( msPass, handle )       
+        pickle.dump( msPass, handle )       
 
     with open( 'fullDemo250_2024-01-26_msFail.pkl', 'wb' ) as handle:
-        pickle.dumps( msFail, handle )    
+        pickle.dump( msFail, handle )    
 
     plt.hist( [msPass, msFail], Nbins, histtype='bar', label=["Success", "Failure"] )
 

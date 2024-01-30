@@ -170,7 +170,7 @@ class Move_Arm( BasicBehavior ):
         super().initialise()
         # self.ctrl.moveL( self.pose, self.linSpeed, self.linAccel, self.asynch, self.epsilon )
         self.ctrl.goto_pb_posn_ornt( self.posn, self.ornt )
-        self.world.spin_for( 20 )
+        self.world.spin_for( 80 ) # 20
         
         
     def update( self ):
