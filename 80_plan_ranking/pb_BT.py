@@ -22,6 +22,14 @@ from utils import *
 
 ########## BASE CLASS ##############################################################################
 
+
+def pass_msg_up( bt ):
+    if bt.parent is not None:
+        setattr( bt.parent, "msg", bt.msg )
+        pass_msg_up( bt.parent )
+
+
+
 class BasicBehavior( Behaviour ):
     """ Abstract class for repetitive housekeeping """
     
@@ -34,12 +42,12 @@ class BasicBehavior( Behaviour ):
             super().__init__( name = name )
         self.ctrl  = ctrl
         self.world = world
+        self.msg   = ""
         self.logger.debug( f"[{self.name}::__init__()]" )
         if self.ctrl is None:
             self.logger.warning( f"{self.name} is NOT conntected to a robot controller!" )
         if self.world is None:
             self.logger.warning( f"{self.name} is NOT conntected to a world object!" )
-
         
     def setup(self):
         self.logger.debug( f"[{self.name}::setup()]" )          
@@ -96,7 +104,7 @@ def connect_BT_to_world( bt, world ):
         bt.world = world
     if len( bt.children ):
         for child in bt.children:
-            connect_BT_to_robot( child, world )
+            connect_BT_to_world( child, world )
 
 def connect_BT_to_robot_world( bt, robot, world ):
     """ Set both controller and environment for this behavior and all children """
@@ -163,6 +171,7 @@ class Move_Arm( BasicBehavior ):
         self.linAccel = linAccel # NOT USED
         self.asynch   = asynch # - NOT USED
         self.epsilon  = 1e-5
+        self.angry    = True
         
         
     def initialise( self ):
@@ -170,11 +179,14 @@ class Move_Arm( BasicBehavior ):
         super().initialise()
         # self.ctrl.moveL( self.pose, self.linSpeed, self.linAccel, self.asynch, self.epsilon )
         self.ctrl.goto_pb_posn_ornt( self.posn, self.ornt )
-        self.world.spin_for( 80 ) # 20
+        # self.world.spin_for( 100 ) # 80 # 20
         
         
     def update( self ):
         """ Return true if the target reached """
+
+        self.world.spin_for( 10 )
+
         if self.ctrl.p_moving():
             self.status = Status.RUNNING
         else:
@@ -193,12 +205,21 @@ class Move_Arm( BasicBehavior ):
                 self.status = Status.SUCCESS
             else:
                 print( self.name, ", POSE ERROR:", [errT, errO] )
+                self.msg = "(Action) POSE ERROR"
+                pass_msg_up( self )
                 self.status = Status.FAILURE
+
+                if self.angry:
+                    self.ctrl.log_fail( self.posn, self.ornt )
+                    self.world.spin_for( 50 )
+                    self.ctrl.goto_pb_posn_ornt( self.posn, self.ornt )
+                    self.world.spin_for( 50 )
+
         return self.status
     
     
 ##### Open_Hand ##################################
-    
+_HAND_WAIT = 60
     
 class Ungrasp( BasicBehavior ):
     """ Open fingers to max extent """
@@ -212,8 +233,9 @@ class Ungrasp( BasicBehavior ):
     def initialise( self ):
         """ Actually Move """
         super().initialise()
+        self.world.spin_for( _HAND_WAIT )
         self.world.robot_release_all()
-        # sleep( self.wait_s )
+        self.world.spin_for( _HAND_WAIT )
         
         
     def update( self ):
@@ -239,7 +261,9 @@ class Grasp( BasicBehavior ):
         super().initialise()
         # self.ctrl.close_gripper()
         # sleep( self.wait_s )
+        self.world.spin_for( _HAND_WAIT )
         self.world.robot_grasp_block( self.target )
+        self.world.spin_for( _HAND_WAIT )
         
     def update( self ):
         """ Return true if the target reached """

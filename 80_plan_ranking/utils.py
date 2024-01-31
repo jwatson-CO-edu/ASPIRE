@@ -3,6 +3,7 @@
 ##### Imports #####
 
 import os, math, time
+now = time.time
 from datetime import datetime
 from collections import namedtuple
 from random import random
@@ -23,6 +24,9 @@ from scipy.stats import chi2
 
 ########## HELPER FUNCTIONS ########################################################################
 
+def origin_row_vec():
+    """ Return a row vector representing the origin pose as a Position and Orientation --> [Px,Py,Pz,Ow,Ox,Oy,Oz] """
+    return [0,0,0,1,0,0,0]
 
 def pb_posn_ornt_to_homog( posn, ornt ):
     """ Express the PyBullet position and orientation as homogeneous coords """
@@ -60,10 +64,16 @@ def homog_to_row_vec( homog ):
     V[4:7] = Q.v[:]
     return np.array(V)
 
+def row_vec_to_homog( V ):
+    """ Express [Px,Py,Pz,Ow,Ox,Oy,Oz] as homogeneous coordinates """
+    posn, ornt = row_vec_to_pb_posn_ornt( V )
+    return pb_posn_ornt_to_homog( posn, ornt )
+
 
 def homog_to_pb_posn_ornt( homog ):
     """ Express a homogeneous coord as a Position and Orientation --> [Px,Py,Pz],[Ox,Oy,Oz,Ow] """
     return row_vec_to_pb_posn_ornt( homog_to_row_vec( homog ) )
+
 
 def total_pop( odds ):
     """ Sum over all categories in the prior odds """
