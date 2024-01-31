@@ -432,6 +432,11 @@ class ObjectSymbol:
 class ObjectBelief:
     """ Hybrid belief: A discrete distribution of classes that may exist at a continuous distribution of poses """
 
+    def reset_covar( self ):
+        self.covar   = np.zeros( (7,7,) ) # ------ Pose covariance matrix
+        for i, stdDev in enumerate( self.pStdDev ):
+            self.covar[i,i] = stdDev * stdDev
+
     def __init__( self, initStddev = _POSN_STDDEV ):
         """ Initialize with origin poses and uniform, independent variance """
         # stdDev = [initStddev if (i<3) else 0.0 for i in range(7)]
@@ -441,9 +446,7 @@ class ObjectBelief:
         self.pStdDev = np.array(stdDev) # -------- Pose variance
         self.pHist   = [] # ---------------------- Recent history of poses
         self.pThresh = 0.5 # --------------------- Minimum prob density at which a nearby pose is relevant
-        self.covar   = np.zeros( (7,7,) ) # ------ Pose covariance matrix
-        for i, stdDev in enumerate( self.pStdDev ):
-            self.covar[i,i] = stdDev * stdDev
+        self.reset_covar()
         self.visited = False
 
     def get_posn( self, poseOrBelief ):
@@ -468,10 +471,15 @@ class ObjectBelief:
     def sample_symbol( self ):
         """ Sample a determinized symbol from the hybrid distribution """
         label = roll_outcome( self.labels )
+        try:
+            poseSample = np.random.multivariate_normal( self.pose, self.covar ) 
+        except np.linalg.LinAlgError:
+            self.reset_covar()
+            poseSample = np.random.multivariate_normal( self.pose, self.covar ) 
         return ObjectSymbol( 
             self,
             label, 
-            np.random.multivariate_normal( self.pose, self.covar ) 
+            poseSample
         )
     
     def sample_nothing( self, confuseProb = 0.1 ):
@@ -555,17 +563,35 @@ def MockAction( objName, dest, world = None, robot = None ):
 def prep_action( action, world, robot ):
     """ Set appropriate target """
     posnEnd, orntEnd = row_vec_to_pb_posn_ornt( action.dest )
+    graspPose = action.symbol.pose
+    handle = world.get_handle_at_pose( graspPose )
 
-    graspPose = world.get_block_grasp_true( action.objName )
-    posnTgt, orntTgt = row_vec_to_pb_posn_ornt( graspPose )
-    # posnEnd, _       = rand_table_pose()
-    posnEnd[2] += _GRASP_VERT_OFFSET
-    orntEnd = orntTgt[:]
+    miniGoal = ObjectSymbol( None, action.objName, action.dest )
 
-    action.add_child( Pick_at_Pose( posnTgt, orntTgt, action.objName, zSAFE = _Z_SAFE, name = "Pick_at_Pose", 
-                                ctrl = robot, world = world ) )
-    action.add_child( Place_at_Pose( posnEnd, orntEnd, zSAFE = _Z_SAFE, name = "Place_at_Pose", 
-                                ctrl = robot, world = world ) )
+    if world.check_predicate( miniGoal, _ACCEPT_POSN_ERR ):
+        print( f"{action.name} ALREADY DONE" )
+        action.status = Status.SUCCESS
+        return
+
+    if handle is not None:
+        targetNam = world.get_handle_name( handle )
+
+        posnTgt, orntTgt = row_vec_to_pb_posn_ornt( graspPose )
+        
+        posnTgt[2] += _GRASP_VERT_OFFSET
+        orntTgt = _GRASP_ORNT_XYZW.copy()
+        
+        posnEnd[2] += _GRASP_VERT_OFFSET
+        orntEnd = orntTgt[:]
+
+        # action.add_child( Pick_at_Pose( posnTgt, orntTgt, action.objName, zSAFE = _Z_SAFE, name = "Pick_at_Pose", 
+        action.add_child( Pick_at_Pose( posnTgt, orntTgt, targetNam, zSAFE = _Z_SAFE, name = "Pick_at_Pose", 
+                                    ctrl = robot, world = world ) )
+        action.add_child( Place_at_Pose( posnEnd, orntEnd, zSAFE = _Z_SAFE, name = "Place_at_Pose", 
+                                    ctrl = robot, world = world ) )
+    else:
+        action.status = Status.FAILURE
+        action.msg    = "Object miss"
     
 def prep_plan( plan, world, robot ):
     """ Set appropriate targets """
@@ -656,7 +682,7 @@ def setup_plan_for_running( plan, world, robot ):
 _LOG_PROB_FACTOR = 10.0
 _LOG_BASE        =  2.0
 _PLAN_THRESH     =  0.02
-_ACCEPT_POSN_ERR =  _BLOCK_SCALE 
+_ACCEPT_POSN_ERR =  0.5*_BLOCK_SCALE 
 
 class MockPlan( Sequence ):
     """ Special list with priority """
@@ -701,6 +727,19 @@ class MockPlan( Sequence ):
         for action in self:
             rtnGoal.append( ObjectSymbol( None, action.objName, action.dest ) )
         return rtnGoal
+    
+    # # def tick( self, *args, **kwargs ):
+    # def tick_once( self, *args, **kwargs ):
+    #     for action in self.children:
+    #         if action.status in (Status.INVALID, Status.RUNNING):
+    #             miniGoal = ObjectSymbol( None, action.objName, action.dest )
+    #             if self.world.check_predicate( miniGoal, _ACCEPT_POSN_ERR ):
+    #                 print( f"{action.name} ALREADY DONE" )
+    #                 action.status = Status.SUCCESS
+    #     # super().tick_once( *args, **kwargs )
+    #     # self.world.spin_for( 10 )
+    #     # super().tick( )
+    #     super().tick_once( *args, **kwargs )
 
 ##### METRICS #############################################################
 
@@ -824,13 +863,13 @@ class MockPlanner:
                 return True
         return False
 
-    def exec_plans_noisy( self, Npause = 200 ):
+    def exec_plans_noisy( self, N = 1200,  Npause = 200 ):
         """ Execute partially observable plans """
 
         self.world.reset_blocks()
         self.world.spin_for( Npause )
 
-        N =  800 # Number of iterations for this test
+         # Number of iterations for this test
         K =    5 # Number of top plans to maintain
         ### Main Planner Loop ###  
         currPlan     = None
@@ -978,6 +1017,7 @@ class MockPlanner:
                     ## Step ##
                     self.world.spin_for( 10 )
                     currPlan.tick_once()
+                    # currPlan.tick()
 
                     if random() < _PROB_TICK_FAIL:
                         currPlan.status = Status.FAILURE
@@ -1043,7 +1083,7 @@ if __name__ == "__main__":
     ### Trials ###
     for i in range( Nruns ):
         print(f'\n##### Trial {i+1} of {Nruns} #####')
-        planner.exec_plans_noisy()
+        planner.exec_plans_noisy( 1200 )
         world.spin_for( 200 )
         print('\n')
 
