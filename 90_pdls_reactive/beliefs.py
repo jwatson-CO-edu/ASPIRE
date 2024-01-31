@@ -1,0 +1,142 @@
+########## INIT ####################################################################################
+
+import numpy as np
+from scipy.stats import chi2
+
+from utils import roll_outcome, get_confusion_matx, multiclass_Bayesian_belief_update
+from env_config import _POSN_STDDEV, _BLOCK_NAMES, _NULL_NAME, _N_POSE_UPDT
+
+
+########## SYMBOLS & BELIEFS #######################################################################
+
+
+class ObjectSymbol:
+    """ Determinized object """
+
+    def __init__( self, ref, label, pose ):
+        """ Assign members """
+        self.ref    = ref # - Belief from which this symbols was sampled
+        self.label  = label # Sampled object label
+        self.pose   = pose #- Sampled object pose
+        self.action = None #- Action to which this symbol was assigned
+
+    def prob( self ):
+        """ Get the current belief this symbol is true based on the belief this symbol was drawn from """
+        return self.ref.labels[self.label]
+    
+    def __repr__( self ):
+        """ String representation, Including current symbol belief """
+        return f"<{self.label} @ {self.pose}, P={self.prob() if (self.ref is not None) else None}>"
+    
+    def p_attached( self ):
+        """ Return true if this symbol has been assigned to an action """
+        return (self.action is not None)
+    
+
+class ObjectBelief:
+    """ Hybrid belief: A discrete distribution of classes that may exist at a continuous distribution of poses """
+
+    def reset_covar( self ):
+        self.covar   = np.zeros( (7,7,) ) # ------ Pose covariance matrix
+        for i, stdDev in enumerate( self.pStdDev ):
+            self.covar[i,i] = stdDev * stdDev
+
+    def __init__( self, initStddev = _POSN_STDDEV ):
+        """ Initialize with origin poses and uniform, independent variance """
+        # stdDev = [initStddev if (i<3) else 0.0 for i in range(7)]
+        stdDev = [initStddev for i in range(7)]
+        self.labels  = {} # ---------------------- Current belief in each class
+        self.pose    = np.array([0,0,0,1,0,0,0]) # Mean pose
+        self.pStdDev = np.array(stdDev) # -------- Pose variance
+        self.pHist   = [] # ---------------------- Recent history of poses
+        self.pThresh = 0.5 # --------------------- Minimum prob density at which a nearby pose is relevant
+        self.reset_covar()
+        self.visited = False
+
+    def get_posn( self, poseOrBelief ):
+        """ Get the position from the object """
+        if isinstance( poseOrBelief, (ObjectBelief, ObjectSymbol) ):
+            return poseOrBelief.pose[0:3]
+        elif isinstance( poseOrBelief, np.ndarray ):
+            if poseOrBelief.size == (4,4,):
+                return poseOrBelief[0:3,3]
+            else:
+                return poseOrBelief[0:3]
+
+    def p_pose_relevant( self, poseOrBelief ):
+        """ Determine if a nearby pose is relevant """
+        x        = self.get_posn( poseOrBelief )
+        mu       = self.get_posn( self.pose )
+        sigma    = self.covar[0:3,0:3]
+        m_dist_x = np.dot((x-mu).transpose(),np.linalg.inv(sigma))
+        m_dist_x = np.dot(m_dist_x, (x-mu))
+        return (1-chi2.cdf( m_dist_x, 3 ) >= self.pThresh)
+    
+    def sample_symbol( self ):
+        """ Sample a determinized symbol from the hybrid distribution """
+        label = roll_outcome( self.labels )
+        try:
+            poseSample = np.random.multivariate_normal( self.pose, self.covar ) 
+        except np.linalg.LinAlgError:
+            self.reset_covar()
+            poseSample = np.random.multivariate_normal( self.pose, self.covar ) 
+        return ObjectSymbol( 
+            self,
+            label, 
+            poseSample
+        )
+    
+    def sample_nothing( self, confuseProb = 0.1 ):
+        """ Sample a negative indication for this pose """
+        rtnObj = ObjectBelief()
+        for i in range( len( _BLOCK_NAMES ) ):
+            blkName_i = _BLOCK_NAMES[i]
+            if blkName_i == _NULL_NAME:
+                rtnObj.labels[ blkName_i ] = 1.0-confuseProb*(len( _BLOCK_NAMES )-1)
+            else:
+                rtnObj.labels[ blkName_i ] = confuseProb
+        rtnObj.pose = np.array( self.pose )
+        return rtnObj
+
+    def update_pose_dist( self ):
+        """ Update the pose distribution from the history of observations """
+        poseHist   = np.array( self.pHist )
+        self.pHist = []
+        nuPose     = np.mean( poseHist, axis = 0 )
+        nuStdDev   = np.std( poseHist, axis = 0 )
+        nuvar      = np.zeros( (7,7,) ) # ------ Pose covariance matrix
+        for i, stdDev in enumerate( nuStdDev ):
+            nuvar[i,i] = stdDev * stdDev
+        self.pose = self.pose + np.dot(
+            np.divide( 
+                self.covar,
+                np.add( self.covar, nuvar ), 
+                where = self.covar != 0.0 
+            ),
+            np.subtract( nuPose, self.pose )
+        )
+        # print( self.covar )
+        nuSum = np.add( 
+            np.reciprocal( self.covar, where = self.covar != 0.0 ), 
+            np.reciprocal( nuvar, where = nuvar != 0.0 ) 
+        )
+        self.covar = np.reciprocal( nuSum, where = nuSum != 0.0 )
+    
+    def integrate_belief( self, objBelief ):
+        """ if `objBelief` is relevant, then Update this belief with evidence and return True, Otherwise return False """
+        # NOTE: THIS WILL NOT BE AS CLEAN IF THE CLASSIFIER DOES NO PROVIDE A DIST ACROSS ALL CLASSES
+        if self.p_pose_relevant( objBelief ):
+            Nclass = len( _BLOCK_NAMES )
+            cnfMtx = get_confusion_matx( Nclass )
+            priorB = [ self.labels[ label ] for label in _BLOCK_NAMES ] 
+            evidnc = [ objBelief.labels[ label ] for label in _BLOCK_NAMES ]
+            updatB = multiclass_Bayesian_belief_update( cnfMtx, priorB, evidnc )
+            self.labels = {}
+            for i, name in enumerate( _BLOCK_NAMES ):
+                self.labels[ name ] = updatB[i]
+            self.pHist.append( objBelief.pose )
+            if len( self.pHist ) >= _N_POSE_UPDT:
+                self.update_pose_dist()
+            return True
+        else:
+            return False
