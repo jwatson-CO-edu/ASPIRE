@@ -1,9 +1,9 @@
 ########## INIT ####################################################################################
 
 ##### Imports #####
-import sys
+import sys, pickle
 from collections import Counter
-from math import log
+from math import log, isnan
 
 sys.path.append( "../" )
 from magpie.poses import translation_diff
@@ -56,7 +56,7 @@ def make_block():
 _GRASP_VERT_OFFSET = _BLOCK_SCALE * 2.0
 _GRASP_ORNT_XYZW   = np.array( [0, 0.7070727, 0, 0.7071408,] )
 _Q_HOME            = [0, -math.pi/2, math.pi/2, -math.pi/2, -math.pi/2, 0]
-_ROT_VEL_SMALL     = 0.001
+_ROT_VEL_SMALL     = 0.005
 
 class UR5Sim:
     """ Original Author: Josep Daniel, https://github.com/josepdaniel/ur5-bullet/tree/master/UR5 """
@@ -331,6 +331,13 @@ class PB_BlocksWorld:
         except ValueError:
             return None
         
+    def full_scan_true( self ):
+        """ Find all of the ROYGBV blocks, Fully Observable """
+        rtnSym = []
+        for name in _BLOCK_NAMES[:-1]:
+            rtnSym.append( self.get_block_true( name ) )
+        return rtnSym
+        
     def get_block_grasp_true( self, blockName ):
         """ Find a grasp for one of the ROYGBV blocks, Fully Observable, Return None if the name is not in the world """
         symb = self.get_block_true( blockName )
@@ -584,7 +591,6 @@ def prep_action( action, world, robot ):
         posnEnd[2] += _GRASP_VERT_OFFSET
         orntEnd = orntTgt[:]
 
-        # action.add_child( Pick_at_Pose( posnTgt, orntTgt, action.objName, zSAFE = _Z_SAFE, name = "Pick_at_Pose", 
         action.add_child( Pick_at_Pose( posnTgt, orntTgt, targetNam, zSAFE = _Z_SAFE, name = "Pick_at_Pose", 
                                     ctrl = robot, world = world ) )
         action.add_child( Place_at_Pose( posnEnd, orntEnd, zSAFE = _Z_SAFE, name = "Place_at_Pose", 
@@ -597,12 +603,6 @@ def prep_plan( plan, world, robot ):
     """ Set appropriate targets """
     for action in plan:
         prep_action( action, world, robot )
-
-
-# def get_action_dest( action ):
-#     """ Get the final destination of the `Pick_and_Place` action """
-#     behav = action.children[1].children[0]
-#     return pb_posn_ornt_to_row_vec( behav.posn, behav.ornt )
 
 
 def copy_action( action ):
@@ -876,12 +876,26 @@ class MockPlanner:
         achieved     = []
         trialMetrics = Counter()
         pPass        = False
+        pBork        = False
         begin_trial()
         # 2023-12-11: For now, loop a limited number of times
         for i in range(N):
 
             ## Gather Evidence ##
             # 2023-12-11: For now, imagine a camera that always sees all the blocks
+
+
+            truSym = self.world.full_scan_true()
+            for truth in truSym:
+                posn, _ = row_vec_to_pb_posn_ornt( truth.pose )
+                for coord in posn:
+                    if abs( coord ) >= 10.0:
+                        trialMetrics[ "Simulation Fault" ] += 1
+                        pBork = True
+
+            if pBork:
+                break
+
             objEvidence = self.world.full_scan_noisy()
             print( f"{i+1}: Got {len(objEvidence)} beliefs!" )
 
@@ -948,8 +962,8 @@ class MockPlanner:
                 prob  = plan_confidence( plan )
                 score = cost - _LOG_PROB_FACTOR * log( prob, _LOG_BASE )
                 plan.rank = score
-                # Destroy Degraded Plans #
-                if prob > _PLAN_THRESH:
+                # Destroy (Degraded Plans || Plans with NaN Priority) #
+                if (prob > _PLAN_THRESH) and (not isnan( score )):
                     savPln.append( plan )
                 else:
                     release_plan_symbols( plan )
@@ -1052,6 +1066,8 @@ class MockPlanner:
 
         if pPass:
             print( "\n### GOALS MET ###\n" )
+        elif pBork:
+            print( "\n!!! SIM BORKED !!!\n" )
         else:
             print( "\n### TIMEOUT ###\n" )
 
@@ -1078,7 +1094,7 @@ if __name__ == "__main__":
     world.spin_for( 500 )
 
     planner = MockPlanner( world )
-    Nruns   = 2
+    Nruns   = 250
     
     ### Trials ###
     for i in range( Nruns ):
@@ -1087,38 +1103,37 @@ if __name__ == "__main__":
         world.spin_for( 200 )
         print('\n')
 
-# ########## MAIN ####################################################################################
-# ##### Env. Settings #####
-# np.set_printoptions( precision = 3, linewidth = 145 )
-# _Z_SAFE = 8.0*_BLOCK_SCALE
+    ### Analyze ###
+    import matplotlib.pyplot as plt
 
+    print( f"Success Rate __ : {metrics['pass']/metrics['N']}" )
+    spans = [ dct['makespan'] for dct in metrics["trials"] ]
+    avgMs = sum( spans ) / metrics['N']
+    print( f"Average Makespan: {avgMs}" )
 
-# if __name__ == "__main__":
+    Nbins = 10
 
-#     ## Init ##
-#     target = 'ylwBlock'
-#     world = PB_BlocksWorld()
-#     robot = world.robot
-#     robot.goto_home()
-#     world.spin_for( 500 )
-    
-#     graspPose = world.get_block_grasp_true( target )
-#     posnTgt, orntTgt = row_vec_to_pb_posn_ornt( graspPose )
-#     posnEnd, _       = rand_table_pose()
-#     posnEnd[2] += _GRASP_VERT_OFFSET
-#     orntEnd = orntTgt[:]
+    msPass = []
+    msFail = []
 
-#     # print( "Waypoints" )
-#     # print( posnTgt, orntTgt )
-#     # print( posnEnd, orntEnd )
+    for trial in metrics["trials"]:
+        if trial['result']:
+            msPass.append( trial['makespan'] )
+        else:
+            msFail.append( trial['makespan'] )
 
-#     bt = Sequence()
-#     bt.add_child( Pick_at_Pose( posnTgt, orntTgt, target, zSAFE = _Z_SAFE, name = "Pick_at_Pose", 
-#                                 ctrl = robot, world = world ) )
-#     bt.add_child( Place_at_Pose( posnEnd, orntEnd, zSAFE = _Z_SAFE, name = "Place_at_Pose", 
-#                                 ctrl = robot, world = world ) )
-#     run_BT_until_done( bt, world = world )
+    with open( 'robotDemo250_2024-01-31.pkl', 'wb' ) as handle:
+        pickle.dump( metrics, handle )
 
-#     robot.goto_home()
+    with open( 'robotDemo250_2024-01-31_msPass.pkl', 'wb' ) as handle:
+        pickle.dump( msPass, handle )       
 
-#     world.spin_for( 4000 )
+    with open( 'robotDemo250_2024-01-31_msFail.pkl', 'wb' ) as handle:
+        pickle.dump( msFail, handle )    
+
+    plt.hist( [msPass, msFail], Nbins, histtype='bar', label=["Success", "Failure"] )
+
+    plt.legend(); plt.xlabel('Episode Makespan'); plt.ylabel('Count')
+    plt.savefig( 'robotDemo_Makespan.pdf' )
+
+    plt.show()

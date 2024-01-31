@@ -219,7 +219,7 @@ class Move_Arm( BasicBehavior ):
     
     
 ##### Open_Hand ##################################
-_HAND_WAIT = 60
+_HAND_WAIT = 70
     
 class Ungrasp( BasicBehavior ):
     """ Open fingers to max extent """
