@@ -780,12 +780,16 @@ def end_trial( p_pass, infoDict = None ):
 class MockPlanner:
     """ Least structure needed to compare plans """
 
-    def __init__( self, world ):
-        """ Create a pre-determined collection of poses and plan skeletons """
-        self.world   = world
+    def reset_beliefs( self ):
+        """ Erase belief memory """
         self.beliefs = [] # Distributions over objects
         self.symbols = []
         self.plans   = [] # PriorityQueue()
+
+    def __init__( self, world ):
+        """ Create a pre-determined collection of poses and plan skeletons """
+        self.world   = world
+        self.reset_beliefs()
         self.poses   = { # -- Intended destinations
             "P1" : [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ],
             "P2" : [ _MIN_X_OFFSET+4.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ],
@@ -870,9 +874,7 @@ class MockPlanner:
         self.world.robot.goto_home()
         self.world.spin_for( Npause )
 
-        self.beliefs = [] # Distributions over objects
-        self.symbols = []
-        self.plans   = [] # PriorityQueue()
+        self.reset_beliefs()
 
          # Number of iterations for this test
         K =    5 # Number of top plans to maintain
