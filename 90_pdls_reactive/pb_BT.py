@@ -75,10 +75,10 @@ class BasicBehavior( Behaviour ):
 ########## CONSTANTS & COMPONENTS ##################################################################
 
 ### Init data structs & Keys ###
-builtins._DUMMYPOSE     = np.eye(4)
-builtins.MP2BB = dict()  # Hack the BB object into the built-in namespace
-builtins.SCAN_POSE_KEY  = "scanPoses"
-builtins.HAND_OBJ_KEY   = "handHas"
+_DUMMYPOSE     = np.eye(4)
+MP2BB          = dict()  # Hack the BB object into the built-in namespace
+SCAN_POSE_KEY  = "scanPoses"
+HAND_OBJ_KEY   = "handHas"
 PROTO_PICK_ROT = np.array( [[ 0.0,  1.0,  0.0, ],
                             [ 1.0,  0.0,  0.0, ],
                             [ 0.0,  0.0, -1.0, ]] )

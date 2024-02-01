@@ -863,11 +863,16 @@ class MockPlanner:
                 return True
         return False
 
-    def exec_plans_noisy( self, N = 1200,  Npause = 200 ):
+    def exec_plans_noisy( self, N = 1200,  Npause = 500 ):
         """ Execute partially observable plans """
 
         self.world.reset_blocks()
+        self.world.robot.goto_home()
         self.world.spin_for( Npause )
+
+        self.beliefs = [] # Distributions over objects
+        self.symbols = []
+        self.plans   = [] # PriorityQueue()
 
          # Number of iterations for this test
         K =    5 # Number of top plans to maintain
@@ -1090,8 +1095,6 @@ if __name__ == "__main__":
 
     world   = PB_BlocksWorld()
     robot = world.robot
-    robot.goto_home()
-    world.spin_for( 500 )
 
     planner = MockPlanner( world )
     Nruns   = 250
