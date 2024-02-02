@@ -35,3 +35,14 @@ _ROT_VEL_SMALL     = 0.005
 _N_POSE_UPDT = 25
 _POSN_STDDEV =  0.008
 _NULL_THRESH =  0.75
+
+
+
+########## PLANNER #################################################################################
+
+_LOG_PROB_FACTOR = 10.0
+_LOG_BASE        =  2.0
+_PLAN_THRESH     =  0.02
+_ACCEPT_POSN_ERR =  0.5*_BLOCK_SCALE 
+_PROB_TICK_FAIL = 0.01 # 0.20
+_Z_SAFE         = 8.0*_BLOCK_SCALE

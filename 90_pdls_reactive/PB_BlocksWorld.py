@@ -50,7 +50,7 @@ class PB_BlocksWorld:
     def __init__( self ):
         """ Create objects """
         ## Init Sim ##
-        self.tIncr         = 1.0 / 240.0
+        self.period        = 1.0 / 240.0
         self.physicsClient = pb.connect( pb.GUI ) # or p.DIRECT for non-graphical version
         pb.setAdditionalSearchPath( pybullet_data.getDataPath() ) #optionally
         pb.setGravity( 0, 0, -10 )
@@ -114,7 +114,7 @@ class PB_BlocksWorld:
     def step( self ):
         """ Advance one step and sleep """
         pb.stepSimulation()
-        time.sleep( self.tIncr )
+        time.sleep( self.period )
         ePsn, _    = self.robot.get_current_pose()
         for obj in self.grasp:
             pb.resetBasePositionAndOrientation( obj[0], np.add( obj[1], ePsn ), obj[2] )
