@@ -56,9 +56,10 @@ class PB_BlocksWorld:
         pb.setGravity( 0, 0, -10 )
 
         ## Instantiate Robot and Table ##
-        self.table = make_table()
-        self.robot = UR5Sim()
-        self.grasp = []
+        self.table     = make_table()
+        self.robot     = UR5Sim()
+        self.robotName = "UR5e"
+        self.grasp     = []
 
         ## Instantiate Blocks ##
         redBlock = make_block()

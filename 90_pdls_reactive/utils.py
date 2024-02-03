@@ -127,3 +127,18 @@ def multiclass_Bayesian_belief_update( cnfMtx, priorB, evidnc ):
     for i in range( Nclass ):
         P_hGe[i,:] = (cnfMtx[i,:]*priorB[i,0]).reshape( (Nclass,) ) / P_e
     return P_hGe.dot( evidnc ).reshape( (Nclass,) )
+
+def diff_norm( v1, v2 ):
+    """ Return the norm of the difference between the two vectors """
+    return np.linalg.norm( np.subtract( v1, v2 ) )
+
+def closest_dist_Q_to_segment_AB( Q, A, B ):
+    """ Return the closest distance of point Q to line segment AB """
+    l = diff_norm( B, A )
+    D = np.subtract( B, A ) / l
+    V = np.subtract( Q, A )
+    t = V.dot( D )
+    if (t > l) or (t < 0.0):
+        return min( diff_norm( Q, A ), diff_norm( Q, B ) )
+    P = np.add( A, D*t )
+    return diff_norm( P, Q ) 

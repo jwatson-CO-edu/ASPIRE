@@ -16,6 +16,7 @@ TABLE_URDF_PATH = os.path.join( pybullet_data.getDataPath(), "table/table.urdf" 
 
 _NULL_NAME    = "NOTHING"
 _BLOCK_NAMES  = ['redBlock', 'ylwBlock', 'bluBlock', 'grnBlock', 'ornBlock', 'vioBlock', _NULL_NAME]
+_SUPPORT_NAME = 'table'
 _BLOCK_SCALE  = 0.038
 _MIN_X_OFFSET = 0.400
 
