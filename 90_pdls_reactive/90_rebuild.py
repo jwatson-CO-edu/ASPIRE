@@ -1,3 +1,15 @@
+########## DEV PLAN ################################################################################
+"""
+[Y] Finish Action drafts, 2024-02-05: Seems correct!
+[ ] Instantiate a PDLS world
+[ ] Successful Planning
+[ ] Successful Plan Execution
+    [ ] Test reactivity
+[ ] Non-Reactive Version
+"""
+
+
+
 ########## INIT ####################################################################################
 
 ##### Imports #####
@@ -32,7 +44,7 @@ from magpie.poses import translation_diff
 
 from utils import ( row_vec_to_homog, row_vec_to_pb_posn_ornt, roll_outcome, get_confusion_matx, 
                     multiclass_Bayesian_belief_update, pb_posn_ornt_to_row_vec, closest_dist_Q_to_segment_AB,
-                    diff_norm, )
+                    diff_norm, pb_posn_ornt_to_homog, )
 # from beliefs import ObjectSymbol
 from env_config import ( _ACCEPT_POSN_ERR, _GRASP_VERT_OFFSET, _Z_SAFE, _GRASP_ORNT_XYZW, _NULL_NAME, 
                          _NULL_THRESH, _POSN_STDDEV, _BLOCK_NAMES, _N_POSE_UPDT, _SUPPORT_NAME, _BLOCK_SCALE, )
@@ -327,34 +339,29 @@ class DataLogger:
 
 ########## ACTIONS #################################################################################
 
-# FIXME: NEED TO SEPARATE PICK AND PLACE
+    
+class GroundedAction( Sequence ):
+    """ This is the parent class for all actions available to the planner """
 
-class Pick_and_Place( Sequence ):
-    """ BT that produces <OBJ@LOC> """
-
-    def __init__( self, objName, dest, world = None, robot = None ):
-        super().__init__( name = f"Pick_and_Place: {objName} --> {dest}" )
+    def __init__( self, objName, goal, world = None, robot = None, name = "Grounded Sequence" ):
+        super().__init__( name = name )
         self.objName = objName # Type of object required
-        self.dest    = dest # -- Destination pose
+        self.goal    = goal # -- Destination pose
         self.symbol  = None # -- Symbol on which this behavior relies
         self.msg     = "" # ---- Message: Reason this action failed -or- OTHER
         self.ctrl    = robot # - Agent that executes
         self.world   = world  #- Simulation ref
 
-    def __repr__( self ):
-        """ String representation of the action """
-        return f"Pick_and_Place: {self.objName} --> {self.dest}"
-    
     def get_grounded( self, symbol ):
         """ Copy action with a symbol attached """
-        rtnAct = Pick_and_Place( self.objName, self.dest, self.world, self.ctrl )
+        rtnAct = self.__class__( self.objName, self.goal, self.world, self.ctrl, self.name )
         rtnAct.symbol = symbol
         symbol.action = rtnAct
         return rtnAct
-
+    
     def copy( self ):
         """ Deep copy """
-        rtnObj = Pick_and_Place( self.objName, self.dest, self.world, self.ctrl )
+        rtnObj = self.__class__( self.objName, self.goal, self.world, self.ctrl, self.name )
         rtnObj.status = self.status
         rtnObj.symbol = self.symbol
         return rtnObj
@@ -369,51 +376,106 @@ class Pick_and_Place( Sequence ):
         symbol.action = self
 
     def cost( self ):
+        raise NotImplementedError( f"{self.name} REQUIRES a `cost` implementation!" )
+
+    def prep( self ):
+        raise NotImplementedError( f"{self.name} REQUIRES a `prep` implementation!" )
+    
+    def validate_in_world( self ):
+        """ Check if the goal is already met """
+        return self.world.check_predicate( self.goal, _ACCEPT_POSN_ERR )
+
+
+class Pick( GroundedAction ):
+    """ BT that produces <OBJ@HAND> """
+
+    def __init__( self, objName, goal = None, world = None, robot = None, name = None ):
+        if name is None:
+            name = f"Pick: {objName} --> HAND"
+        super().__init__( objName, "HAND", world, robot, name )
+    
+    def __repr__( self ):
+        """ String representation of the action """
+        return f"Pick: {self.objName} --> HAND"
+
+    def cost( self ):
         """ Get the linear distance between the symbol pose and the destination """
-        return translation_diff( row_vec_to_homog( self.dest ), row_vec_to_homog( self.symbol.pose ) )
+        robtPosn, robtOrnt = self.ctrl.get_current_pose()
+        return translation_diff( pb_posn_ornt_to_homog( robtPosn, robtOrnt ), row_vec_to_homog( self.symbol.pose ) )
 
     def prep( self ):
         """ Use the symbol grounding to parameterize the BT """
 
         # 0. Check if the goal has already been met, PDLS FIXME
-        miniGoal = Pose( None, self.objName, self.dest, _SUPPORT_NAME )
-        if self.world.check_predicate( miniGoal, _ACCEPT_POSN_ERR ):
+        if self.validate_in_world():
             print( f"{self.name} ALREADY DONE" )
             self.status = Status.SUCCESS
             return
 
         # 1. Fetch ref to the object nearest the pose, if any
-        posnEnd, orntEnd = row_vec_to_pb_posn_ornt( self.dest )
         graspPose = self.symbol.pose
         handle    = self.world.get_handle_at_pose( graspPose )
 
         if handle is not None:
-            targetNam = self.world.get_handle_name( handle )
+            goalNam = self.world.get_handle_name( handle )
 
             posnTgt, orntTgt = row_vec_to_pb_posn_ornt( graspPose )
             
             posnTgt[2] += _GRASP_VERT_OFFSET
             orntTgt = _GRASP_ORNT_XYZW.copy()
+
+            self.add_child( Pick_at_Pose( posnTgt, orntTgt, goalNam, zSAFE = _Z_SAFE, name = f"Pick_at_Pose: {graspPose}", 
+                                          ctrl = self.ctrl, world = self.world ) )
+        else:
+            self.status = Status.FAILURE
+            self.msg    = "Object miss"
+
+        
+class Place( GroundedAction ):
+    """ BT that produces <OBJ@HAND> """
+
+    def __init__( self, objName, goal, world = None, robot = None, name = None ):
+        if name is None:
+            name = f"Place: {objName} --> {goal}"
+        super().__init__( objName, goal, world, robot, name )
+    
+    def __repr__( self ):
+        """ String representation of the action """
+        return f"Place: {self.objName} --> {self.goal}"
+
+    def cost( self ):
+        """ Get the linear distance between the symbol pose and the destination """
+        robtPosn, robtOrnt = self.ctrl.get_current_pose()
+        return translation_diff( pb_posn_ornt_to_homog( robtPosn, robtOrnt ), row_vec_to_homog( self.goal ) )
+    
+    def prep( self ):
+        """ Use the symbol grounding to parameterize the BT """
+
+        # 0. Check if the goal has already been met, PDLS FIXME
+        if self.validate_in_world():
+            print( f"{self.name} ALREADY DONE" )
+            self.status = Status.SUCCESS
+            return
+
+        # 1. Fetch ref to the object nearest the pose, if any
+        posnEnd, orntEnd = row_vec_to_pb_posn_ornt( self.goal )
+
+        if self.symbol is not None:
             
             posnEnd[2] += _GRASP_VERT_OFFSET
-            orntEnd = orntTgt[:]
-
-            self.add_child( Pick_at_Pose( posnTgt, orntTgt, targetNam, zSAFE = _Z_SAFE, name = "Pick_at_Pose", 
-                                          ctrl = self.ctrl, world = self.world ) )
+            orntEnd = _GRASP_ORNT_XYZW.copy()
             self.add_child( Place_at_Pose( posnEnd, orntEnd, zSAFE = _Z_SAFE, name = "Place_at_Pose", 
                                            ctrl = self.ctrl, world = self.world ) )
         else:
             self.status = Status.FAILURE
             self.msg    = "Object miss"
-        
-
 
 ########## PLANNER HELPERS #########################################################################
 
 def prep_plan( plan ):
     """ Set appropriate targets """
     for action in plan:
-        action.prep_action()
+        action.prep()
 
 def p_plan_grounded( plan ):
     """ Return true if every action in the plan is grounded, Otherwise return False """
@@ -443,8 +505,6 @@ def release_plan_symbols( plan ):
         if action.symbol is not None:
             action.symbol.action = None
             action.symbol = None
-
-
 
 
 
@@ -492,7 +552,7 @@ class Plan( Sequence ):
         """ Get a fully specified goal for this plan """
         rtnGoal = []
         for action in self:
-            rtnGoal.append( Pose( None, action.objName, action.dest, _SUPPORT_NAME ) )
+            rtnGoal.append( Pose( None, action.objName, action.goal, _SUPPORT_NAME ) )
         return rtnGoal
     
 
