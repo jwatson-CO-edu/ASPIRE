@@ -2,123 +2,74 @@
   (:requirements :strips :equality 
                  :negative-preconditions :derived-predicates )
   (:predicates
-    (Stackable ?objUp ?objDn)
-    ; (Stackable ?objup ?objdn)
-    (Sink ?r)
-    (Stove ?r)
 
-    (Pose ?o ?p)
-    (Grasp ?o ?g)
-    (Conf ?q)
-    (Graspable ?o)
-    (Kin ?o ?p ?g ?q ?t)
-    (FreeMotion ?q1 ?t ?q2)
-    (HoldingMotion ?q1 ?t ?q2 ?o ?g)
-    (Supported ?o ?p ?r)
-    ; (Arched ?o ?p ?so1 ?so2)
-    (Traj ?t)
+    ;;; Symbols ;;;
+    (Object ?label ?pose); Sample from world -or- Produced by actions
+    (IKSoln ?pose ?config) ; Sample from pose
+    (Grasp ?pose ?effPose) ; Sample from pose
+  
+    ;;; States ;;;
+    (Holding ?label) ; From Pick
+    (HandEmpty) ; From Place
+    (AtConf ?config) ; From moves
+    (AtPose ?effPose) ; From Move Holding
 
-    (TrajCollision ?t ?o2 ?p2)
-    (CFreePosePose ?o ?p ?o2 ?p2)
-    (CFreeApproachPose ?o ?p ?g ?o2 ?p2)
-    (CFreeTrajPose ?t ?o2 ?p2)
-
-    (AtPose ?o ?p)
-    (AtGrasp ?o ?g)
-    (HandEmpty)
-    (AtConf ?q)
-    (CanMove)
-    (Cleaned ?o)
-    (Cooked ?o)
-
-    (On ?objUp ?objDn)
-    (Holding ?o)
-
-    (UnsafePose ?o ?p)
-    (UnsafeApproach ?o ?p ?g)
-    (UnsafeTraj ?t)
-  )
-
-  (:action move_free
-    :parameters (?q1 ?q2 ?t)
-    :precondition (and (FreeMotion ?q1 ?t ?q2)
-                       (AtConf ?q1) (HandEmpty) (CanMove)
-                       ;(not (UnsafeTraj ?t))
-                  )
-    :effect (and (AtConf ?q2)
-                 (not (AtConf ?q1)) (not (CanMove)))
-  )
-  (:action move_holding
-    :parameters (?q1 ?q2 ?o ?g ?t)
-    :precondition (and (HoldingMotion ?q1 ?t ?q2 ?o ?g)
-                       (AtConf ?q1) (AtGrasp ?o ?g) (CanMove)
-                       ;(not (UnsafeTraj ?t))
-                  )
-    :effect (and (AtConf ?q2)
-                 (not (AtConf ?q1)) (not (CanMove)))
-  )
-
-  (:action pick
-    :parameters (?o ?p ?g ?q ?t)
-    :precondition (and (Kin ?o ?p ?g ?q ?t)
-                       (HandEmpty) (AtConf ?q) ; `AtPose` was INCONSISTENT precond!
-                       (not (UnsafeApproach ?o ?p ?g))
-                       (not (UnsafeTraj ?t))
-                  )
-    :effect (and (AtGrasp ?o ?g) (CanMove)
-                 (not (HandEmpty)))
+    ;;; Checks ;;;
+    (FreePlacement ?label ?pose) ; Checked by world
+    (SafeTransit ?label ?bgnPose ?endPose ) ; Checked by world
+    (SafeMotion ?config1 ?config2) ; Checked by world
   )
 
   (:action place
-    :parameters (?o ?p ?g ?q ?t)
-    :precondition (and (Kin ?o ?p ?g ?q ?t)
-                       (AtGrasp ?o ?g) (AtConf ?q)
-                       (not (UnsafePose ?o ?p))
-                       (not (UnsafeApproach ?o ?p ?g))
-                       (not (UnsafeTraj ?t))
+    :parameters (?label ?pose ?effPose)
+    :precondition (and (FreePlacement ?label ?pose)
+                       (Holding ?label)
+                       (Grasp ?pose ?effPose)
+                       (AtPose ?effPose)
                   )
-    :effect (and (AtPose ?o ?p) (HandEmpty) (CanMove)
-                 (not (AtGrasp ?o ?g)))
+    :effect (and (HandEmpty) 
+                 (not (Holding ?label)))
   )
 
-  (:action clean
-    :parameters (?objUp ?objDn)
-    :precondition (and (Stackable ?objUp ?objDn) (Sink ?objDn)
-                       (On ?objUp ?objDn))
-    :effect (Cleaned ?objUp)
+  (:action move_holding
+    :parameters (?config1 ?config2 ?label ?bgnPose ?endPose ?effPose1 ?effPose2)
+    :precondition (and (Holding ?label)
+                       (AtConf ?config1) 
+                       (Grasp ?bgnPose ?effPose1)
+                       (Grasp ?endPose ?effPose2)
+                       (IKSoln ?effPose2 ?config2)
+                       (Object ?label ?bgnPose)
+                       (SafeMotion ?config1 ?config2)
+                       (SafeTransit ?label ?bgnPose ?endPose )
+                  )
+    :effect (and (AtPose ?effPose2)
+                 (not (AtPose ?effPose1))
+                 (AtConf ?config2)
+                 (not (AtConf ?config1))
+                 (Object ?label ?endPose) 
+                 (not (Object ?label ?bgnPose))
+            )
   )
 
-  (:action cook
-    :parameters (?objUp ?objDn)
-    :precondition (and (Stackable ?objUp ?objDn) (Stove ?objDn)
-                       (On ?objUp ?objDn) (Cleaned ?objUp))
-    :effect (and (Cooked ?objUp)
-                 (not (Cleaned ?objUp)))
+  (:action pick
+    :parameters (?label ?pose ?effPose)
+    :precondition (and (Grasp ?pose ?effPose)
+                       (AtPose ?effPose)
+                       (HandEmpty)
+                  )
+    :effect (and (Holding ?label) 
+                 (not (HandEmpty)))
   )
 
-  (:derived (On ?objUp ?objDn)
-    (exists (?p) (and (Supported ?objUp ?p ?objDn)
-                      (AtPose ?objUp ?p)))
+  (:action move_free
+    :parameters (?config1 ?config2 ?effPose1 ?effPose2)
+    :precondition (and (SafeMotion ?config1 ?config2)
+                       (AtConf ?config1) 
+                       (IKSoln ?effPose2 ?config2)
+                       (HandEmpty) 
+                  )
+    :effect (and (AtConf ?config2)
+                 (not (AtConf ?config1)) ) 
   )
-  (:derived (Holding ?o)
-    (exists (?g) (and (Grasp ?o ?g)
-                      (AtGrasp ?o ?g)))
-  )
-
-  (:derived (UnsafePose ?o ?p)
-    (exists (?o2 ?p2) (and (Pose ?o ?p) (Pose ?o2 ?p2) (not (= ?o ?o2))
-                           (not (CFreePosePose ?o ?p ?o2 ?p2))
-                           (AtPose ?o2 ?p2)))
-  )
-  (:derived (UnsafeApproach ?o ?p ?g)
-    (exists (?o2 ?p2) (and (Pose ?o ?p) (Grasp ?o ?g) (Pose ?o2 ?p2) (not (= ?o ?o2))
-                           (not (CFreeApproachPose ?o ?p ?g ?o2 ?p2))
-                           (AtPose ?o2 ?p2)))
-  )
-  (:derived (UnsafeTraj ?t)
-    (exists (?o2 ?p2) (and (Traj ?t) (Pose ?o2 ?p2)
-                           (not (CFreeTrajPose ?t ?o2 ?p2))
-                           ; (TrajCollision ?t ?o2 ?p2)
-                           (AtPose ?o2 ?p2)))
-  )
+  
 )

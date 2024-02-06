@@ -7,15 +7,15 @@ import pybullet_data
 
 from UR5Sim import UR5Sim
 from utils import row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec
-from beliefs import ObjectSymbol, ObjectBelief
+from beliefs import Pose, ObjectBelief
 from env_config import ( _MIN_X_OFFSET, _BLOCK_SCALE, TABLE_URDF_PATH, _BLOCK_NAMES, _POSN_STDDEV, 
-                         _GRASP_VERT_OFFSET, _GRASP_ORNT_XYZW, )
+                         _GRASP_VERT_OFFSET, _GRASP_ORNT_XYZW, _ACTUAL_NAMES, )
 
 ##### Paths #####
 
 
 ########## ENVIRONMENT #############################################################################
-
+_ONLY_RED = True
 
 class DummyBelief:
     """ Stand-in for an actual `ObjectBelief` """
@@ -34,6 +34,11 @@ def rand_table_pose():
         random()*16.0*_BLOCK_SCALE-8.0*_BLOCK_SCALE, 
         _BLOCK_SCALE 
     ], [0, 0, 0, 1]
+
+
+def banished_pose():
+    """ Send it to the shadow realm """
+    return [100,100,100], [0, 0, 0, 1]
 
 def make_block():
     """ Load a block at the correct scale, place it random, and return the int handle """
@@ -88,6 +93,9 @@ class PB_BlocksWorld:
             if blockHandl is not None:
                 posn, ornt = rand_table_pose()
                 pb.resetBasePositionAndOrientation( blockHandl, posn, ornt )
+                if _ONLY_RED and (blockHandl != self.get_handle( 'redBlock' )):
+                    posn, ornt = banished_pose()
+                    pb.resetBasePositionAndOrientation( blockHandl, posn, ornt )
 
     def get_handle( self, name ):
         """ Get the ID of the requested object by `name` """
@@ -135,7 +143,7 @@ class PB_BlocksWorld:
             idx = _BLOCK_NAMES.index( blockName )
             blockPos, blockOrn = pb.getBasePositionAndOrientation( self.blocks[idx] )
             blockPos = np.array( blockPos )
-            return ObjectSymbol( 
+            return Pose( 
                 DummyBelief( blockName ), 
                 blockName, 
                 pb_posn_ornt_to_row_vec( blockPos, blockOrn ) 
@@ -146,7 +154,7 @@ class PB_BlocksWorld:
     def full_scan_true( self ):
         """ Find all of the ROYGBV blocks, Fully Observable """
         rtnSym = []
-        for name in _BLOCK_NAMES[:-1]:
+        for name in _ACTUAL_NAMES:
             rtnSym.append( self.get_block_true( name ) )
         return rtnSym
         
@@ -193,7 +201,7 @@ class PB_BlocksWorld:
     def full_scan_noisy( self, confuseProb = 0.10, poseStddev = _POSN_STDDEV ):
         """ Find all of the ROYGBV blocks, Partially Observable """
         rtnBel = []
-        for name in _BLOCK_NAMES[:-1]:
+        for name in _ACTUAL_NAMES:
             rtnBel.append( self.get_block_noisy( name, confuseProb, poseStddev ) )
         return rtnBel
     

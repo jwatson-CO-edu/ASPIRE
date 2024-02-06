@@ -49,6 +49,11 @@ class UR5Sim:
         self.Nfails =  0
         self.Nlimit =  3
         self.lastT  = self.get_current_pose()
+        self.name   = "UR5e"
+
+    def get_name( self ):
+        """ Return name """
+        return self.name
 
     def set_joint_angles( self, joint_angles ):
         """ Set a joint-space goal and pursue it with maximum force """
@@ -94,7 +99,6 @@ class UR5Sim:
         """ Return the current joint configuration """
         j = pb.getJointStates( self.ur5, self.jntIndices )
         return [i[0] for i in j]
-    
 
     def check_collisions( self, verbose = False ):
         """ Return True if there is a self-collision """
@@ -104,7 +108,6 @@ class UR5Sim:
                 print("[Collision detected!] {}".format(datetime.now()))
             return True
         return False
-
 
     def calculate_ik_euler( self, position, orientation ):
         """ Get the target joint angles to achieve the desired `position` and `orientation` (Euler Angles) """

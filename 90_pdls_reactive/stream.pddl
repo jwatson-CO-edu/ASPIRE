@@ -12,13 +12,13 @@
     :inputs (?objUp ?objDn1 ?objDn2)
     :domain (and (Stackable ?objUp ?objDn1) (Stackable ?objUp ?objDn2))
     :outputs (?p)
-    :certified (and (Pose ?objUp ?p) (Supported ?objUp ?p ?objDn1) (Supported ?objUp ?p ?objDn2))
+    :certified (and (Pose ?objUp ?p) (Supported ?objUp ?p ?objDn1) (Supported ?objUp ?p ?objDn2) (Arched ?objUp ?objdn1 ?objdn2) )
   )
 
   ;; Object Grasp Stream ;;
   (:stream sample-grasp
     :inputs (?o ?p)
-    :domain (and (Graspable ?o) (Pose ?o ?p)) ; We have to have a pose for this object before we can grasp it!
+    :domain (and (Pose ?o ?p)) ; We have to have a pose for this object before we can grasp it!
     :outputs (?g)
     :certified (Grasp ?o ?g)
   )
@@ -36,7 +36,8 @@
     :inputs (?o ?p ?g)
     :domain (and (Pose ?o ?p) (Grasp ?o ?g))
     :outputs (?q ?t)
-    :certified (and (Conf ?q) (Traj ?t) (Kin ?o ?p ?g ?q ?t))
+    :certified (and (Conf ?q) (Traj ?t) (Kin ?o ?p ?g ?q ?t) 
+                    (CFreeTrajPose ?t ?o ?p) ) ; WARNING: This one is NEW
   )
 
   ;; Pose Collision Test ;;
@@ -45,4 +46,11 @@
     :domain (and (Pose ?o1 ?p1) (Pose ?o2 ?p2))
     :certified (CFreePosePose ?o1 ?p1 ?o2 ?p2)
   )
+
+  ;; Trajectory Collision Test ;;
+  ; (:stream test-cfree-pose-pose
+  ;   :inputs (?o1 ?p1 ?o2 ?p2)
+  ;   :domain (and (Pose ?o1 ?p1) (Pose ?o2 ?p2))
+  ;   :certified (CFreePosePose ?o1 ?p1 ?o2 ?p2)
+  ; )
 )

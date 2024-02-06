@@ -1,6 +1,18 @@
 ########## DEV PLAN ################################################################################
 """
-[Y] Finish Action drafts, 2024-02-05: Seems correct!
+[ ] Rewrite `Object`
+[ ] Rewrite Action drafts
+    [ ] Place
+    [ ] Move_Holding
+    [ ] Pick
+    [ ] Move_Free
+[ ] Rewrite Stream specs and functions
+    [ ] Object poses
+    [ ] Grasp effector pose from object pose
+    [ ] IK Soln from effector pose
+    [ ] FreePlacement, Checked by world
+    [ ] SafeTransit, Checked by world
+    [ ] SafeMotion, Checked by world
 [ ] Instantiate a PDLS world
 [ ] Successful Planning
 [ ] Successful Plan Execution
@@ -23,7 +35,6 @@ from itertools import count
 
 ### Special ###
 import numpy as np
-from scipy.stats import chi2
 
 import py_trees
 from py_trees.common import Status
@@ -47,166 +58,23 @@ from utils import ( row_vec_to_homog, row_vec_to_pb_posn_ornt, roll_outcome, get
                     diff_norm, pb_posn_ornt_to_homog, )
 # from beliefs import ObjectSymbol
 from env_config import ( _ACCEPT_POSN_ERR, _GRASP_VERT_OFFSET, _Z_SAFE, _GRASP_ORNT_XYZW, _NULL_NAME, 
-                         _NULL_THRESH, _POSN_STDDEV, _BLOCK_NAMES, _N_POSE_UPDT, _SUPPORT_NAME, _BLOCK_SCALE, )
+                         _NULL_THRESH, _SUPPORT_NAME, _BLOCK_SCALE, _ACTUAL_NAMES, _MIN_X_OFFSET, )
 from pb_BT import Pick_at_Pose, Place_at_Pose, connect_BT_to_robot_world
+from PB_BlocksWorld import PB_BlocksWorld
+from beliefs import Pose
 
 ########## DOMAIN OBJECTS ##########################################################################
 
-class Pose: 
-    """ A named object, it's pose, and the surface that supports it """
-    num = count()
-    def __init__( self, ref, label, pose, surf = _SUPPORT_NAME ):
-        self.ref    = ref # - Belief from which this symbols was sampled
-        self.label  = label # Sampled object label
-        self.pose   = pose #- Sampled object pose
-        self.action = None #- Action to which this symbol was assigned
-        self.surf   = surf # WARNING: I do not like that this is part of the predicate!
-        self.index  = next( self.num )
 
-    def prob( self ):
-        """ Get the current belief this symbol is true based on the belief this symbol was drawn from """
-        return self.ref.labels[self.label]
-    
-    def __repr__( self ):
-        """ String representation, Including current symbol belief """
-        return f"<{self.label} @ {self.pose}, P={self.prob() if (self.ref is not None) else None}>"
-    
-    def p_attached( self ):
-        """ Return true if this symbol has been assigned to an action """
-        return (self.action is not None)
-    
-    @property
-    def value( self ):
-        return self.pose
-
-
-class ObjectBelief:
-    """ Hybrid belief: A discrete distribution of classes that may exist at a continuous distribution of poses """
-
-    def reset_covar( self ):
-        self.covar   = np.zeros( (7,7,) ) # ------ Pose covariance matrix
-        for i, stdDev in enumerate( self.pStdDev ):
-            self.covar[i,i] = stdDev * stdDev
-
-    def __init__( self, initStddev = _POSN_STDDEV ):
-        """ Initialize with origin poses and uniform, independent variance """
-        # stdDev = [initStddev if (i<3) else 0.0 for i in range(7)]
-        stdDev = [initStddev for i in range(7)]
-        self.labels  = {} # ---------------------- Current belief in each class
-        self.pose    = np.array([0,0,0,1,0,0,0]) # Mean pose
-        self.pStdDev = np.array(stdDev) # -------- Pose variance
-        self.pHist   = [] # ---------------------- Recent history of poses
-        self.pThresh = 0.5 # --------------------- Minimum prob density at which a nearby pose is relevant
-        self.reset_covar()
-        self.visited = False
-
-    def get_posn( self, poseOrBelief ):
-        """ Get the position from the object """
-        if isinstance( poseOrBelief, (ObjectBelief, Pose) ):
-            return poseOrBelief.pose[0:3]
-        elif isinstance( poseOrBelief, np.ndarray ):
-            if poseOrBelief.size == (4,4,):
-                return poseOrBelief[0:3,3]
-            else:
-                return poseOrBelief[0:3]
-
-    def p_pose_relevant( self, poseOrBelief ):
-        """ Determine if a nearby pose is relevant """
-        x        = self.get_posn( poseOrBelief )
-        mu       = self.get_posn( self.pose )
-        sigma    = self.covar[0:3,0:3]
-        m_dist_x = np.dot((x-mu).transpose(),np.linalg.inv(sigma))
-        m_dist_x = np.dot(m_dist_x, (x-mu))
-        return (1-chi2.cdf( m_dist_x, 3 ) >= self.pThresh)
-    
-    def object_supporting_pose( self, pose ):
-        """ Return the name of the object that this pose is resting on """
-        # GRIEF: GEO GRAMMAR WOULD BE GOOD HERE
-        # HACK:  WE ONLY SAMPLE RAW POSES FOR UNSTACKED BLOCKS, SO ALWAYS RETURN TABLE
-        return _SUPPORT_NAME
-
-    def sample_symbol( self ):
-        """ Sample a determinized symbol from the hybrid distribution """
-        label = roll_outcome( self.labels )
-        try:
-            poseSample = np.random.multivariate_normal( self.pose, self.covar ) 
-            support    = self.object_supporting_pose( poseSample )
-        except np.linalg.LinAlgError:
-            self.reset_covar()
-            poseSample = np.random.multivariate_normal( self.pose, self.covar ) 
-        return Pose( 
-            self,
-            label, 
-            poseSample,
-            support
-        )
-    
-    def sample_nothing( self, confuseProb = 0.1 ):
-        """ Sample a negative indication for this pose """
-        rtnObj = ObjectBelief()
-        for i in range( len( _BLOCK_NAMES ) ):
-            blkName_i = _BLOCK_NAMES[i]
-            if blkName_i == _NULL_NAME:
-                rtnObj.labels[ blkName_i ] = 1.0-confuseProb*(len( _BLOCK_NAMES )-1)
-            else:
-                rtnObj.labels[ blkName_i ] = confuseProb
-        rtnObj.pose = np.array( self.pose )
-        return rtnObj
-
-    def update_pose_dist( self ):
-        """ Update the pose distribution from the history of observations """
-        poseHist   = np.array( self.pHist )
-        self.pHist = []
-        nuPose     = np.mean( poseHist, axis = 0 )
-        nuStdDev   = np.std( poseHist, axis = 0 )
-        nuvar      = np.zeros( (7,7,) ) # ------ Pose covariance matrix
-        for i, stdDev in enumerate( nuStdDev ):
-            nuvar[i,i] = stdDev * stdDev
-        self.pose = self.pose + np.dot(
-            np.divide( 
-                self.covar,
-                np.add( self.covar, nuvar ), 
-                where = self.covar != 0.0 
-            ),
-            np.subtract( nuPose, self.pose )
-        )
-        # print( self.covar )
-        nuSum = np.add( 
-            np.reciprocal( self.covar, where = self.covar != 0.0 ), 
-            np.reciprocal( nuvar, where = nuvar != 0.0 ) 
-        )
-        self.covar = np.reciprocal( nuSum, where = nuSum != 0.0 )
-    
-    def integrate_belief( self, objBelief ):
-        """ if `objBelief` is relevant, then Update this belief with evidence and return True, Otherwise return False """
-        # NOTE: THIS WILL NOT BE AS CLEAN IF THE CLASSIFIER DOES NO PROVIDE A DIST ACROSS ALL CLASSES
-        if self.p_pose_relevant( objBelief ):
-            Nclass = len( _BLOCK_NAMES )
-            cnfMtx = get_confusion_matx( Nclass )
-            priorB = [ self.labels[ label ] for label in _BLOCK_NAMES ] 
-            evidnc = [ objBelief.labels[ label ] for label in _BLOCK_NAMES ]
-            updatB = multiclass_Bayesian_belief_update( cnfMtx, priorB, evidnc )
-            self.labels = {}
-            for i, name in enumerate( _BLOCK_NAMES ):
-                self.labels[ name ] = updatB[i]
-            self.pHist.append( objBelief.pose )
-            if len( self.pHist ) >= _N_POSE_UPDT:
-                self.update_pose_dist()
-            return True
-        else:
-            return False
-
-
-    
 class BodyConf:
     """ A robot configuration """
     num = count()
     def __init__( self, name, config ):
-        self.name = name
-        self.cnfg = config
+        self.name  = name
+        self.cnfg  = np.around( config, 6 )
         self.index = next( self.num )
     def __repr__( self ):
-        return f"<Config: {self.name}, {self.index}>"
+        return f"<BodyConf, Robot: {self.name}, Index: {self.index}, q = {self.cnfg}>"
     @property
     def value( self ):
         return self.cnfg
@@ -214,6 +82,7 @@ class BodyConf:
     def values( self ):
         return self.cnfg
     
+
 class BodyGrasp:
     """ Enough info to pick up something """
     num = count()
@@ -229,6 +98,7 @@ class BodyGrasp:
     def value( self ):
         return self.grasp_pose
     
+
 class BodyPath:
     """ Path of something between two configs """
     num = count()
@@ -245,6 +115,8 @@ class BodyPath:
     @property
     def value( self ):
         return self.path
+
+
 
 ########## BT-PLANNER INTERFACE ####################################################################
 
@@ -470,6 +342,46 @@ class Place( GroundedAction ):
             self.status = Status.FAILURE
             self.msg    = "Object miss"
 
+
+class Stack( GroundedAction ):
+    """ BT that produces <OBJ@HAND> """
+
+    def __init__( self, objName, goal, world = None, robot = None, name = None ):
+        if name is None:
+            name = f"Place: {objName} --> {goal}"
+        super().__init__( objName, goal, world, robot, name )
+    
+    def __repr__( self ):
+        """ String representation of the action """
+        return f"Stack: {self.objName} --> {self.goal}"
+
+    def cost( self ):
+        """ Get the linear distance between the symbol pose and the destination """
+        robtPosn, robtOrnt = self.ctrl.get_current_pose()
+        return translation_diff( pb_posn_ornt_to_homog( robtPosn, robtOrnt ), row_vec_to_homog( self.goal ) )
+    
+    def prep( self ):
+        """ Use the symbol grounding to parameterize the BT """
+
+        # 0. Check if the goal has already been met, PDLS FIXME
+        if self.validate_in_world():
+            print( f"{self.name} ALREADY DONE" )
+            self.status = Status.SUCCESS
+            return
+
+        # 1. Fetch ref to the object nearest the pose, if any
+        posnEnd, orntEnd = row_vec_to_pb_posn_ornt( self.goal )
+
+        if self.symbol is not None:
+            
+            posnEnd[2] += _GRASP_VERT_OFFSET
+            orntEnd = _GRASP_ORNT_XYZW.copy()
+            self.add_child( Place_at_Pose( posnEnd, orntEnd, zSAFE = _Z_SAFE, name = "Place_at_Pose", 
+                                           ctrl = self.ctrl, world = self.world ) )
+        else:
+            self.status = Status.FAILURE
+            self.msg    = "Object miss"
+
 ########## PLANNER HELPERS #########################################################################
 
 def prep_plan( plan ):
@@ -572,7 +484,7 @@ class ReactiveExecutive:
 
     def __init__( self, world ):
         """ Create a pre-determined collection of poses and plan skeletons """
-        self.world   = world
+        self.world = world
         self.reset_beliefs()
 
     ##### Belief Updates ##################################################
@@ -607,6 +519,27 @@ class ReactiveExecutive:
             else:
                 print( f"{str(belief)} DESTROYED!" )
 
+    def belief_update( self ):
+        """ Gather and aggregate evidence """
+        objEvidence = self.world.full_scan_noisy()
+        print( f"Got {len(objEvidence)} beliefs!" )
+
+        ## Integrate Beliefs ##
+        cNu = 0
+        cIn = 0
+        self.unvisit_beliefs()
+        for objEv in objEvidence:
+            if self.integrate_one_segmentation( objEv ):
+                cIn += 1
+            else:
+                cNu += 1
+        if (cNu or cIn):
+            print( f"\t{cNu} new object beliefs this iteration!" )
+            print( f"\t{cIn} object beliefs updated!" )
+        else:
+            print( f"\tNO belief update!" )
+        print( f"Total Beliefs: {len(self.beliefs)}" )
+
     def check_OOB( self, thresh_m = 10.0 ):
         """ Return true if any of the simulated objects are out of bounds """
         truSym = self.world.full_scan_true()
@@ -628,11 +561,47 @@ class ReactiveExecutive:
             objName, spprtName = args
 
             ## Sample Symbols ##
+            self.belief_update()
             nuSym = [bel.sample_symbol() for bel in self.beliefs]
+            # nuSym = [bel.sample_fresh() for bel in self.beliefs]
+            print( f"Symbols: {nuSym}" )
             for sym in nuSym:
-                if (sym.surf == spprtName) and (objName == sym.name):
-                    yield sym
-            # else yield nothing if we cannot certify the object!
+                if (sym.surf == spprtName) and (objName == sym.label):
+                    # yield Pose( sym, objName, sym.pose )
+                    # yield sym
+                    yield (sym,) 
+                # else yield nothing if we cannot certify the object!
+
+        return stream_func
+    
+    def get_arch_stream( self ):
+        """ Return a stream that samples arch locations """
+
+        def stream_func( *args ):
+            """ A function that returns poses """
+            objUp,  objDn1,  objDn2  = args
+            upPose, dn1Pose, dn2Pose = None, None, None
+
+            ## Sample Symbols ##
+            nuSym = [bel.sample_symbol() for bel in self.beliefs]
+            nuNam = [sym.label for sym in nuSym]
+            nuPos = [sym.pose  for sym in nuSym]
+            try:
+                idx     = nuNam.index( objDn1 )
+                dn1Pose = nuPos[ idx ]
+                idx     = nuNam.index( objDn2 )
+                dn2Pose = nuPos[ idx ]
+            except ValueError:
+                pass
+            if (dn1Pose is not None) and (dn2Pose is not None):
+                dn1Posn, _ = row_vec_to_pb_posn_ornt( dn1Pose )
+                dn2Posn, _ = row_vec_to_pb_posn_ornt( dn2Pose )
+                if diff_norm( dn1Posn, dn2Posn ) <= (2.5*_BLOCK_SCALE):
+                    midPosn = np.add( dn1Posn, dn2Posn ) / 2.0
+                    midPosn[2] += 2.0*_BLOCK_SCALE
+                    upPose = midPosn.tolist()
+                    upPose.extend( [1,0,0,0] )
+                    yield (Pose( None, objUp, upPose ),)
 
         return stream_func
 
@@ -667,22 +636,26 @@ class ReactiveExecutive:
         def stream_func( *args ):
             """ A function that checks if the path is free """
 
+            print( args )
+
             (bgn, end) = args
             if bgn != end:
 
-                posnBgn, _ = row_vec_to_pb_posn_ornt( bgn )
-                posnEnd, _ = row_vec_to_pb_posn_ornt( end )
+                # FIXME: USE ACTUAL COLLISION DETECTION @ KDL
 
-                objs = self.world.full_scan_true()
-                okay = True
-                for sym in objs:
-                    Q, _ = row_vec_to_pb_posn_ornt( sym.pose )
-                    d = closest_dist_Q_to_segment_AB( Q, posnBgn, posnEnd )
-                    if d < 2.0*_BLOCK_SCALE:
-                        okay = False
-                        break
-                if okay:
-                    yield (BodyPath( self.world.robotName, [bgn, end] ),) 
+                # posnBgn, _ = row_vec_to_pb_posn_ornt( bgn )
+                # posnEnd, _ = row_vec_to_pb_posn_ornt( end )
+
+                # objs = self.world.full_scan_true()
+                # okay = True
+                # for sym in objs:
+                #     Q, _ = row_vec_to_pb_posn_ornt( sym.pose )
+                #     d = closest_dist_Q_to_segment_AB( Q, posnBgn, posnEnd )
+                #     if d < 2.0*_BLOCK_SCALE:
+                #         okay = False
+                #         break
+                # if okay:
+                yield (BodyPath( self.world.robotName, [bgn, end] ),) 
 
         return stream_func
 
@@ -713,23 +686,94 @@ class ReactiveExecutive:
         """ Return a function that returns True if two objects are a safe distance apart """
 
         def test( *args ):
-            """ Do not pass if it is too close to other blocks """
-            label1, pose1, label2, pose2 = args
-            if diff_norm( pose1[:3], pose2[:3] ) <= 2.0*_BLOCK_SCALE:
-                return False
-            else:
-                return True
+            # """ Do not pass if it is too close to other blocks """
+            # label1, pose1, label2, pose2 = args
+            # if diff_norm( pose1.pose[:3], pose2.pose[:3] ) <= 2.0*_BLOCK_SCALE:
+            #     return False
+            # else:
+            #     return True
+            """ WARNING: TEST ALWAYS PASSES """
+            print( "\nPose Test Args:", args, '\n' )
+            return True
             
         return test
+    
 
-    def get_arch_stream( self ):
-        """ Return a stream that samples arch locations """
+    ##### PDLS Solver #####################################################
 
-        # FIXME, START HERE: WHEN TO YIELD THIS? WHAT DOES IT MEAN?
+    def pddlstream_from_problem( self ):
+        """ Set up a PDDLStream problem with the UR5 """
 
-        def stream_func( *args ):
-            """ A function that returns poses """
-            objName, spprt1, spprt2 = args
+        domain_pddl = read(get_file_path(__file__, 'domain.pddl'))
+        stream_pddl = read(get_file_path(__file__, 'stream.pddl'))
+        constant_map = {}
+        print( "Read files!" )
+
+        print( 'Robot:', self.world.robot.get_name() )
+        conf = BodyConf( self.world.robot.get_name(), self.world.robot.get_joint_angles() )
+        init = [('CanMove',),
+                # ('Conf', conf),
+                ('AtConf', conf),
+                ('HandEmpty',)]
+        print( "Robot grounded!" )
+
+        for body in _ACTUAL_NAMES:
+            # init += [('Graspable', body),]
+            init += [('Stackable', body, _SUPPORT_NAME)]
+            for sppt in _ACTUAL_NAMES:
+                if sppt != body:
+                    init += [('Stackable', body, sppt)]
+
+        # goal = ( 'and',
+        #     ('AtPose', 'redBlock', Pose(None, 'redBlock', [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ])),
+        #     ('AtPose', 'ylwBlock', Pose(None, 'ylwBlock', [ _MIN_X_OFFSET+4.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ])),
+        #     ('Arched', 'bluBlock', 'redBlock', 'ylwBlock'),
+        # ) 
+
+        # goal = ('AtPose', 'redBlock', Pose(None, 'redBlock', [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ]))
+        goal = ('AtPose', 'redBlock', [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ])
+
+        stream_map = {
+            ### Symbol Streams ###
+            'sample-pose':        from_gen_fn( self.get_pose_stream()         ), 
+            'sample-arch':        from_gen_fn( self.get_arch_stream()         ), 
+            'sample-grasp':       from_gen_fn( self.get_grasp_stream()        ),
+            'plan-free-motion':   from_gen_fn( self.get_free_motion_planner() ),
+            'inverse-kinematics': from_gen_fn( self.get_IK_solver()           ),
+            ### Symbol Tests ###
+            'test-cfree-pose-pose': from_test( self.get_safe_pose_test() ),
+        }
+
+        print( "About to create problem ... " )
+    
+        return PDDLProblem( domain_pddl, constant_map, stream_pddl, stream_map, init, goal )
+
+########## MAIN ####################################################################################
+
+##### Env. Settings #####
+np.set_printoptions( precision = 3, linewidth = 145 )
+
+
+##### Run Sim #####
+if __name__ == "__main__":
+
+    ### Init ###
+
+    world = PB_BlocksWorld()
+    world.reset_blocks()
+    robot = world.robot
+    robot.goto_home()
+    world.spin_for( 500 )
+
+    planner = ReactiveExecutive( world )
+    problem = planner.pddlstream_from_problem()
+
+    solution = solve( problem, 
+                      algorithm = "incremental", #"adaptive", 
+                      unit_costs=True, success_cost=1 )
+    print( "Solver has completed!" )
+    print_solution( solution )
+    plan, cost, evaluations = solution
 
 #     def exec_plans_noisy( self, N = 1200,  Npause = 200 ):
 #         """ Execute partially observable plans """
@@ -749,24 +793,7 @@ class ReactiveExecutive:
 #         # 2023-12-11: For now, loop a limited number of times
 #         for i in range(N):
 
-#             objEvidence = self.world.full_scan_noisy()
-#             print( f"{i+1}: Got {len(objEvidence)} beliefs!" )
-
-#             ## Integrate Beliefs ##
-#             cNu = 0
-#             cIn = 0
-#             self.unvisit_beliefs()
-#             for objEv in objEvidence:
-#                 if self.integrate_one_segmentation( objEv ):
-#                     cIn += 1
-#                 else:
-#                     cNu += 1
-#             if (cNu or cIn):
-#                 print( f"\t{cNu} new object beliefs this iteration!" )
-#                 print( f"\t{cIn} object beliefs updated!" )
-#             else:
-#                 print( f"\tNO belief update!" )
-#             print( f"Total Beliefs: {len(self.beliefs)}" )
+#             
             
 #             ## Retain only fresh beliefs ##
 #             belObj = []
@@ -926,21 +953,7 @@ class ReactiveExecutive:
 #         end_trial( pPass, trialMetrics )
         
 
-# ########## MAIN ####################################################################################
 
-# ##### Env. Settings #####
-# np.set_printoptions( precision = 3, linewidth = 145 )
-
-
-# ##### Run Sim #####
-# if __name__ == "__main__":
-
-#     ### Init ###
-
-#     world   = PB_BlocksWorld()
-#     robot = world.robot
-#     robot.goto_home()
-#     world.spin_for( 500 )
 
 #     planner = MockPlanner( world )
 #     Nruns   = 250
