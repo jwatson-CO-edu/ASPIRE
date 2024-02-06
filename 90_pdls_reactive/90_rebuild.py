@@ -1,20 +1,29 @@
 ########## DEV PLAN ################################################################################
 """
-[ ] Rewrite `Object`
+##### Planning #####
+[Y] Rewrite `Object`, 2024-02-05: Seems correct!
+[>] Rewrite Functions and Stream specs
+    [Y] Object poses, 2024-02-05: Seems correct!
+        [Y] Stream spec, 2024-02-05: Seems correct!
+    [Y] Grasp effector pose from object pose, 2024-02-05: Seems correct!
+        [Y] Stream spec, 2024-02-05: Unsure if the certification will create the correct object
+    [>] IK Soln from effector pose
+        [>] Stream spec
+    [ ] FreePlacement, Checked by world
+        [ ] Stream spec
+    [ ] SafeTransit, Checked by world
+        [ ] Stream spec
+    [ ] SafeMotion, Checked by world
+        [ ] Stream spec
+[ ] Instantiate a PDLS world
+[ ] Successful Planning
+
+##### Execution #####
 [ ] Rewrite Action drafts
     [ ] Place
     [ ] Move_Holding
     [ ] Pick
     [ ] Move_Free
-[ ] Rewrite Stream specs and functions
-    [ ] Object poses
-    [ ] Grasp effector pose from object pose
-    [ ] IK Soln from effector pose
-    [ ] FreePlacement, Checked by world
-    [ ] SafeTransit, Checked by world
-    [ ] SafeMotion, Checked by world
-[ ] Instantiate a PDLS world
-[ ] Successful Planning
 [ ] Successful Plan Execution
     [ ] Test reactivity
 [ ] Non-Reactive Version
@@ -60,9 +69,7 @@ from env_config import ( _ACCEPT_POSN_ERR, _GRASP_VERT_OFFSET, _Z_SAFE, _GRASP_O
                          _NULL_THRESH, _SUPPORT_NAME, _BLOCK_SCALE, _ACTUAL_NAMES, _MIN_X_OFFSET, )
 from pb_BT import Pick_at_Pose, Place_at_Pose, connect_BT_to_robot_world
 from PB_BlocksWorld import PB_BlocksWorld
-# from beliefs import Pose
-
-
+from symbols import Grasp, Pose
 
 
 
@@ -160,175 +167,175 @@ class DataLogger:
 ########## ACTIONS #################################################################################
 
     
-class GroundedAction( Sequence ):
-    """ This is the parent class for all actions available to the planner """
+# class GroundedAction( Sequence ):
+#     """ This is the parent class for all actions available to the planner """
 
-    def __init__( self, objName, goal, world = None, robot = None, name = "Grounded Sequence" ):
-        super().__init__( name = name )
-        self.objName = objName # Type of object required
-        self.goal    = goal # -- Destination pose
-        self.symbol  = None # -- Symbol on which this behavior relies
-        self.msg     = "" # ---- Message: Reason this action failed -or- OTHER
-        self.ctrl    = robot # - Agent that executes
-        self.world   = world  #- Simulation ref
+#     def __init__( self, objName, goal, world = None, robot = None, name = "Grounded Sequence" ):
+#         super().__init__( name = name )
+#         self.objName = objName # Type of object required
+#         self.goal    = goal # -- Destination pose
+#         self.symbol  = None # -- Symbol on which this behavior relies
+#         self.msg     = "" # ---- Message: Reason this action failed -or- OTHER
+#         self.ctrl    = robot # - Agent that executes
+#         self.world   = world  #- Simulation ref
 
-    def get_grounded( self, symbol ):
-        """ Copy action with a symbol attached """
-        rtnAct = self.__class__( self.objName, self.goal, self.world, self.ctrl, self.name )
-        rtnAct.symbol = symbol
-        symbol.action = rtnAct
-        return rtnAct
+#     def get_grounded( self, symbol ):
+#         """ Copy action with a symbol attached """
+#         rtnAct = self.__class__( self.objName, self.goal, self.world, self.ctrl, self.name )
+#         rtnAct.symbol = symbol
+#         symbol.action = rtnAct
+#         return rtnAct
     
-    def copy( self ):
-        """ Deep copy """
-        rtnObj = self.__class__( self.objName, self.goal, self.world, self.ctrl, self.name )
-        rtnObj.status = self.status
-        rtnObj.symbol = self.symbol
-        return rtnObj
+#     def copy( self ):
+#         """ Deep copy """
+#         rtnObj = self.__class__( self.objName, self.goal, self.world, self.ctrl, self.name )
+#         rtnObj.status = self.status
+#         rtnObj.symbol = self.symbol
+#         return rtnObj
     
-    def p_grounded( self ):
-        """ Return true if a symbol was assigned to this action """
-        return (self.symbol is not None)
+#     def p_grounded( self ):
+#         """ Return true if a symbol was assigned to this action """
+#         return (self.symbol is not None)
     
-    def set_ground( self, symbol ):
-        """ Attach symbol """
-        self.symbol   = symbol
-        symbol.action = self
+#     def set_ground( self, symbol ):
+#         """ Attach symbol """
+#         self.symbol   = symbol
+#         symbol.action = self
 
-    def cost( self ):
-        raise NotImplementedError( f"{self.name} REQUIRES a `cost` implementation!" )
+#     def cost( self ):
+#         raise NotImplementedError( f"{self.name} REQUIRES a `cost` implementation!" )
 
-    def prep( self ):
-        raise NotImplementedError( f"{self.name} REQUIRES a `prep` implementation!" )
+#     def prep( self ):
+#         raise NotImplementedError( f"{self.name} REQUIRES a `prep` implementation!" )
     
-    def validate_in_world( self ):
-        """ Check if the goal is already met """
-        return self.world.check_predicate( self.goal, _ACCEPT_POSN_ERR )
+#     def validate_in_world( self ):
+#         """ Check if the goal is already met """
+#         return self.world.check_predicate( self.goal, _ACCEPT_POSN_ERR )
 
 
-class Pick( GroundedAction ):
-    """ BT that produces <OBJ@HAND> """
+# class Pick( GroundedAction ):
+#     """ BT that produces <OBJ@HAND> """
 
-    def __init__( self, objName, goal = None, world = None, robot = None, name = None ):
-        if name is None:
-            name = f"Pick: {objName} --> HAND"
-        super().__init__( objName, "HAND", world, robot, name )
+#     def __init__( self, objName, goal = None, world = None, robot = None, name = None ):
+#         if name is None:
+#             name = f"Pick: {objName} --> HAND"
+#         super().__init__( objName, "HAND", world, robot, name )
     
-    def __repr__( self ):
-        """ String representation of the action """
-        return f"Pick: {self.objName} --> HAND"
+#     def __repr__( self ):
+#         """ String representation of the action """
+#         return f"Pick: {self.objName} --> HAND"
 
-    def cost( self ):
-        """ Get the linear distance between the symbol pose and the destination """
-        robtPosn, robtOrnt = self.ctrl.get_current_pose()
-        return translation_diff( pb_posn_ornt_to_homog( robtPosn, robtOrnt ), row_vec_to_homog( self.symbol.pose ) )
+#     def cost( self ):
+#         """ Get the linear distance between the symbol pose and the destination """
+#         robtPosn, robtOrnt = self.ctrl.get_current_pose()
+#         return translation_diff( pb_posn_ornt_to_homog( robtPosn, robtOrnt ), row_vec_to_homog( self.symbol.pose ) )
 
-    def prep( self ):
-        """ Use the symbol grounding to parameterize the BT """
+#     def prep( self ):
+#         """ Use the symbol grounding to parameterize the BT """
 
-        # 0. Check if the goal has already been met, PDLS FIXME
-        if self.validate_in_world():
-            print( f"{self.name} ALREADY DONE" )
-            self.status = Status.SUCCESS
-            return
+#         # 0. Check if the goal has already been met, PDLS FIXME
+#         if self.validate_in_world():
+#             print( f"{self.name} ALREADY DONE" )
+#             self.status = Status.SUCCESS
+#             return
 
-        # 1. Fetch ref to the object nearest the pose, if any
-        graspPose = self.symbol.pose
-        handle    = self.world.get_handle_at_pose( graspPose )
+#         # 1. Fetch ref to the object nearest the pose, if any
+#         graspPose = self.symbol.pose
+#         handle    = self.world.get_handle_at_pose( graspPose )
 
-        if handle is not None:
-            goalNam = self.world.get_handle_name( handle )
+#         if handle is not None:
+#             goalNam = self.world.get_handle_name( handle )
 
-            posnTgt, orntTgt = row_vec_to_pb_posn_ornt( graspPose )
+#             posnTgt, orntTgt = row_vec_to_pb_posn_ornt( graspPose )
             
-            posnTgt[2] += _GRASP_VERT_OFFSET
-            orntTgt = _GRASP_ORNT_XYZW.copy()
+#             posnTgt[2] += _GRASP_VERT_OFFSET
+#             orntTgt = _GRASP_ORNT_XYZW.copy()
 
-            self.add_child( Pick_at_Pose( posnTgt, orntTgt, goalNam, zSAFE = _Z_SAFE, name = f"Pick_at_Pose: {graspPose}", 
-                                          ctrl = self.ctrl, world = self.world ) )
-        else:
-            self.status = Status.FAILURE
-            self.msg    = "Object miss"
+#             self.add_child( Pick_at_Pose( posnTgt, orntTgt, goalNam, zSAFE = _Z_SAFE, name = f"Pick_at_Pose: {graspPose}", 
+#                                           ctrl = self.ctrl, world = self.world ) )
+#         else:
+#             self.status = Status.FAILURE
+#             self.msg    = "Object miss"
 
         
-class Place( GroundedAction ):
-    """ BT that produces <OBJ@HAND> """
+# class Place( GroundedAction ):
+#     """ BT that produces <OBJ@HAND> """
 
-    def __init__( self, objName, goal, world = None, robot = None, name = None ):
-        if name is None:
-            name = f"Place: {objName} --> {goal}"
-        super().__init__( objName, goal, world, robot, name )
+#     def __init__( self, objName, goal, world = None, robot = None, name = None ):
+#         if name is None:
+#             name = f"Place: {objName} --> {goal}"
+#         super().__init__( objName, goal, world, robot, name )
     
-    def __repr__( self ):
-        """ String representation of the action """
-        return f"Place: {self.objName} --> {self.goal}"
+#     def __repr__( self ):
+#         """ String representation of the action """
+#         return f"Place: {self.objName} --> {self.goal}"
 
-    def cost( self ):
-        """ Get the linear distance between the symbol pose and the destination """
-        robtPosn, robtOrnt = self.ctrl.get_current_pose()
-        return translation_diff( pb_posn_ornt_to_homog( robtPosn, robtOrnt ), row_vec_to_homog( self.goal ) )
+#     def cost( self ):
+#         """ Get the linear distance between the symbol pose and the destination """
+#         robtPosn, robtOrnt = self.ctrl.get_current_pose()
+#         return translation_diff( pb_posn_ornt_to_homog( robtPosn, robtOrnt ), row_vec_to_homog( self.goal ) )
     
-    def prep( self ):
-        """ Use the symbol grounding to parameterize the BT """
+#     def prep( self ):
+#         """ Use the symbol grounding to parameterize the BT """
 
-        # 0. Check if the goal has already been met, PDLS FIXME
-        if self.validate_in_world():
-            print( f"{self.name} ALREADY DONE" )
-            self.status = Status.SUCCESS
-            return
+#         # 0. Check if the goal has already been met, PDLS FIXME
+#         if self.validate_in_world():
+#             print( f"{self.name} ALREADY DONE" )
+#             self.status = Status.SUCCESS
+#             return
 
-        # 1. Fetch ref to the object nearest the pose, if any
-        posnEnd, orntEnd = row_vec_to_pb_posn_ornt( self.goal )
+#         # 1. Fetch ref to the object nearest the pose, if any
+#         posnEnd, orntEnd = row_vec_to_pb_posn_ornt( self.goal )
 
-        if self.symbol is not None:
+#         if self.symbol is not None:
             
-            posnEnd[2] += _GRASP_VERT_OFFSET
-            orntEnd = _GRASP_ORNT_XYZW.copy()
-            self.add_child( Place_at_Pose( posnEnd, orntEnd, zSAFE = _Z_SAFE, name = "Place_at_Pose", 
-                                           ctrl = self.ctrl, world = self.world ) )
-        else:
-            self.status = Status.FAILURE
-            self.msg    = "Object miss"
+#             posnEnd[2] += _GRASP_VERT_OFFSET
+#             orntEnd = _GRASP_ORNT_XYZW.copy()
+#             self.add_child( Place_at_Pose( posnEnd, orntEnd, zSAFE = _Z_SAFE, name = "Place_at_Pose", 
+#                                            ctrl = self.ctrl, world = self.world ) )
+#         else:
+#             self.status = Status.FAILURE
+#             self.msg    = "Object miss"
 
 
-class Stack( GroundedAction ):
-    """ BT that produces <OBJ@HAND> """
+# class Stack( GroundedAction ):
+#     """ BT that produces <OBJ@HAND> """
 
-    def __init__( self, objName, goal, world = None, robot = None, name = None ):
-        if name is None:
-            name = f"Place: {objName} --> {goal}"
-        super().__init__( objName, goal, world, robot, name )
+#     def __init__( self, objName, goal, world = None, robot = None, name = None ):
+#         if name is None:
+#             name = f"Place: {objName} --> {goal}"
+#         super().__init__( objName, goal, world, robot, name )
     
-    def __repr__( self ):
-        """ String representation of the action """
-        return f"Stack: {self.objName} --> {self.goal}"
+#     def __repr__( self ):
+#         """ String representation of the action """
+#         return f"Stack: {self.objName} --> {self.goal}"
 
-    def cost( self ):
-        """ Get the linear distance between the symbol pose and the destination """
-        robtPosn, robtOrnt = self.ctrl.get_current_pose()
-        return translation_diff( pb_posn_ornt_to_homog( robtPosn, robtOrnt ), row_vec_to_homog( self.goal ) )
+#     def cost( self ):
+#         """ Get the linear distance between the symbol pose and the destination """
+#         robtPosn, robtOrnt = self.ctrl.get_current_pose()
+#         return translation_diff( pb_posn_ornt_to_homog( robtPosn, robtOrnt ), row_vec_to_homog( self.goal ) )
     
-    def prep( self ):
-        """ Use the symbol grounding to parameterize the BT """
+#     def prep( self ):
+#         """ Use the symbol grounding to parameterize the BT """
 
-        # 0. Check if the goal has already been met, PDLS FIXME
-        if self.validate_in_world():
-            print( f"{self.name} ALREADY DONE" )
-            self.status = Status.SUCCESS
-            return
+#         # 0. Check if the goal has already been met, PDLS FIXME
+#         if self.validate_in_world():
+#             print( f"{self.name} ALREADY DONE" )
+#             self.status = Status.SUCCESS
+#             return
 
-        # 1. Fetch ref to the object nearest the pose, if any
-        posnEnd, orntEnd = row_vec_to_pb_posn_ornt( self.goal )
+#         # 1. Fetch ref to the object nearest the pose, if any
+#         posnEnd, orntEnd = row_vec_to_pb_posn_ornt( self.goal )
 
-        if self.symbol is not None:
+#         if self.symbol is not None:
             
-            posnEnd[2] += _GRASP_VERT_OFFSET
-            orntEnd = _GRASP_ORNT_XYZW.copy()
-            self.add_child( Place_at_Pose( posnEnd, orntEnd, zSAFE = _Z_SAFE, name = "Place_at_Pose", 
-                                           ctrl = self.ctrl, world = self.world ) )
-        else:
-            self.status = Status.FAILURE
-            self.msg    = "Object miss"
+#             posnEnd[2] += _GRASP_VERT_OFFSET
+#             orntEnd = _GRASP_ORNT_XYZW.copy()
+#             self.add_child( Place_at_Pose( posnEnd, orntEnd, zSAFE = _Z_SAFE, name = "Place_at_Pose", 
+#                                            ctrl = self.ctrl, world = self.world ) )
+#         else:
+#             self.status = Status.FAILURE
+#             self.msg    = "Object miss"
 
 ########## PLANNER HELPERS #########################################################################
 
@@ -502,82 +509,50 @@ class ReactiveExecutive:
     ##### Stream Creators #################################################
     # I hate this problem formulation so very much, We need a geometric grammar
 
-    # def get_pose_stream( self ):
-    #     """ Return a function that returns poses """
+    def get_object_stream( self ):
+        """ Return a function that returns poses """
 
-    #     def stream_func( *args ):
-    #         """ A function that returns poses """
-    #         objName, spprtName = args
+        def stream_func( *args ):
+            """ A function that returns poses """
 
-    #         ## Sample Symbols ##
-    #         self.belief_update()
-    #         nuSym = [bel.sample_symbol() for bel in self.beliefs]
-    #         # nuSym = [bel.sample_fresh() for bel in self.beliefs]
-    #         print( f"Symbols: {nuSym}" )
-    #         for sym in nuSym:
-    #             if (sym.surf == spprtName) and (objName == sym.label):
-    #                 # yield Pose( sym, objName, sym.pose )
-    #                 # yield sym
-    #                 yield (sym,) 
-    #             # else yield nothing if we cannot certify the object!
+            print( f"\nEvaluate OBJECT stream with args: {args}\n" )
 
-    #     return stream_func
+            objName = args[0]
+
+            ## Sample Symbols ##
+            self.belief_update()
+            nuSym = [bel.sample_symbol() for bel in self.beliefs]
+            # nuSym = [bel.sample_fresh() for bel in self.beliefs]
+            print( f"Symbols: {nuSym}" )
+            for sym in nuSym:
+                if objName == sym.label:
+                    yield (sym,) 
+                # else yield nothing if we cannot certify the object!
+
+        return stream_func
     
-    # def get_arch_stream( self ):
-    #     """ Return a stream that samples arch locations """
 
-    #     def stream_func( *args ):
-    #         """ A function that returns poses """
-    #         objUp,  objDn1,  objDn2  = args
-    #         upPose, dn1Pose, dn2Pose = None, None, None
-
-    #         ## Sample Symbols ##
-    #         nuSym = [bel.sample_symbol() for bel in self.beliefs]
-    #         nuNam = [sym.label for sym in nuSym]
-    #         nuPos = [sym.pose  for sym in nuSym]
-    #         try:
-    #             idx     = nuNam.index( objDn1 )
-    #             dn1Pose = nuPos[ idx ]
-    #             idx     = nuNam.index( objDn2 )
-    #             dn2Pose = nuPos[ idx ]
-    #         except ValueError:
-    #             pass
-    #         if (dn1Pose is not None) and (dn2Pose is not None):
-    #             dn1Posn, _ = row_vec_to_pb_posn_ornt( dn1Pose )
-    #             dn2Posn, _ = row_vec_to_pb_posn_ornt( dn2Pose )
-    #             if diff_norm( dn1Posn, dn2Posn ) <= (2.5*_BLOCK_SCALE):
-    #                 midPosn = np.add( dn1Posn, dn2Posn ) / 2.0
-    #                 midPosn[2] += 2.0*_BLOCK_SCALE
-    #                 upPose = midPosn.tolist()
-    #                 upPose.extend( [1,0,0,0] )
-    #                 yield (Pose( None, objUp, upPose ),)
-
-    #     return stream_func
-
-    # def get_grasp_stream( self ):
-    #     """ Return a function that returns grasps """
+    def get_grasp_stream( self ):
+        """ Return a function that returns grasps """
         
-    #     def stream_func( *args ):
-    #         """ A function that returns grasps """
-    #         objName = args[0]
-    #         objPose = args[1].pose
+        def stream_func( *args ):
+            """ A function that returns grasps """
+            
+            print( f"\nEvaluate GRASP stream with args: {args}\n" )
 
-    #         if objPose is not None:
-    #             grasp_pose = objPose[:]
-    #             grasp_pose[2] += _GRASP_VERT_OFFSET
-    #             posn, _ = row_vec_to_pb_posn_ornt( grasp_pose )
-    #             ornt = _GRASP_ORNT_XYZW.copy()
-    #             grasp_pose = pb_posn_ornt_to_row_vec( posn, ornt )
+            targetPose = args[0]
 
-    #             posn[2] = _Z_SAFE
-    #             approach_pose = pb_posn_ornt_to_row_vec( posn, ornt )
+            if targetPose is not None:
+                grasp_pose = targetPose[:]
+                grasp_pose[2] += _GRASP_VERT_OFFSET
+                posn, _ = row_vec_to_pb_posn_ornt( grasp_pose )
+                ornt = _GRASP_ORNT_XYZW.copy()
+                grasp_pose = pb_posn_ornt_to_row_vec( posn, ornt )
+                # yield (Grasp(  Pose( targetPose ), Pose( grasp_pose ) ),)
+                yield (Pose( grasp_pose ),) # FIXME: CHECK THAT THIS GETS CERTIFIED
+             # else yield nothing if we cannot certify the object!
 
-    #             grasp = BodyGrasp( objName, grasp_pose, approach_pose )
-    #             print( "Got a grasp!\n", grasp_pose )
-    #             yield (grasp,)
-    #          # else yield nothing if we cannot certify the object!
-
-    #     return stream_func
+        return stream_func
 
     # def get_free_motion_planner( self ):
     #     """ Return a function that checks if the path is free """

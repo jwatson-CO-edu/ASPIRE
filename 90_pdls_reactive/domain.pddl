@@ -1,12 +1,18 @@
 (define (domain pick-and-place)
   (:requirements :strips :equality 
                  :negative-preconditions :derived-predicates )
+
+  ;;;;;;;;;; PREDICATES ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
   (:predicates
 
     ;;; Symbols ;;;
     (Object ?label ?pose); Sample from world -or- Produced by actions
     (IKSoln ?pose ?config) ; Sample from pose
     (Grasp ?pose ?effPose) ; Sample from pose
+
+    ;;; Domains ;;;
+    (Graspable ?label)
   
     ;;; States ;;;
     (Holding ?label) ; From Pick
@@ -19,6 +25,8 @@
     (SafeTransit ?label ?bgnPose ?endPose ) ; Checked by world
     (SafeMotion ?config1 ?config2) ; Checked by world
   )
+
+  ;;;;;;;;;; ACTIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
   (:action place
     :parameters (?label ?pose ?effPose)
@@ -53,7 +61,8 @@
 
   (:action pick
     :parameters (?label ?pose ?effPose)
-    :precondition (and (Grasp ?pose ?effPose)
+    :precondition (and (Object ?label ?pose)
+                       (Grasp ?pose ?effPose)
                        (AtPose ?effPose)
                        (HandEmpty)
                   )
