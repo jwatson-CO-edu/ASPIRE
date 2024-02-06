@@ -1,5 +1,4 @@
 ########## INIT ####################################################################################
-from itertools import count
 
 import numpy as np
 from scipy.stats import chi2
@@ -8,37 +7,11 @@ from utils import ( roll_outcome, get_confusion_matx, multiclass_Bayesian_belief
 
 from env_config import ( _SUPPORT_NAME, _POSN_STDDEV, _BLOCK_NAMES, _NULL_NAME, _N_POSE_UPDT, _POSE_DIM )
 
+from symbols import Object
+
 
 
 ########## SYMBOLS & BELIEFS #######################################################################
-
-
-class Pose: 
-    """ A named object, it's pose, and the surface that supports it """
-    num = count()
-    def __init__( self, ref, label, pose, surf = _SUPPORT_NAME ):
-        self.ref    = ref # - Belief from which this symbols was sampled
-        self.label  = label # Sampled object label
-        self.pose   = pose #- Sampled object pose
-        self.action = None #- Action to which this symbol was assigned
-        self.surf   = surf # WARNING: I do not like that this is part of the predicate!
-        self.index  = next( self.num )
-
-    def prob( self ):
-        """ Get the current belief this symbol is true based on the belief this symbol was drawn from """
-        return self.ref.labels[self.label]
-    
-    def __repr__( self ):
-        """ String representation, Including current symbol belief """
-        return f"<{self.label} @ {self.pose}, P={self.prob() if (self.ref is not None) else None}>"
-    
-    def p_attached( self ):
-        """ Return true if this symbol has been assigned to an action """
-        return (self.action is not None)
-    
-    @property
-    def value( self ):
-        return self.pose
 
 
 class ObjectBelief:
@@ -64,7 +37,7 @@ class ObjectBelief:
 
     def get_posn( self, poseOrBelief ):
         """ Get the position from the object """
-        if isinstance( poseOrBelief, (ObjectBelief, Pose) ):
+        if isinstance( poseOrBelief, (ObjectBelief, Object) ):
             return poseOrBelief.pose[0:3]
         elif isinstance( poseOrBelief, np.ndarray ):
             if poseOrBelief.size == (4,4,):

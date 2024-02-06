@@ -53,68 +53,16 @@ from pddlstream.language.constants import print_solution, PDDLProblem
 sys.path.append( "../" )
 from magpie.poses import translation_diff
 
-from utils import ( row_vec_to_homog, row_vec_to_pb_posn_ornt, roll_outcome, get_confusion_matx, 
-                    multiclass_Bayesian_belief_update, pb_posn_ornt_to_row_vec, closest_dist_Q_to_segment_AB,
-                    diff_norm, pb_posn_ornt_to_homog, )
-# from beliefs import ObjectSymbol
+from utils import ( row_vec_to_homog, row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec, diff_norm, 
+                    pb_posn_ornt_to_homog, )
+
 from env_config import ( _ACCEPT_POSN_ERR, _GRASP_VERT_OFFSET, _Z_SAFE, _GRASP_ORNT_XYZW, _NULL_NAME, 
                          _NULL_THRESH, _SUPPORT_NAME, _BLOCK_SCALE, _ACTUAL_NAMES, _MIN_X_OFFSET, )
 from pb_BT import Pick_at_Pose, Place_at_Pose, connect_BT_to_robot_world
 from PB_BlocksWorld import PB_BlocksWorld
-from beliefs import Pose
-
-########## DOMAIN OBJECTS ##########################################################################
+# from beliefs import Pose
 
 
-class BodyConf:
-    """ A robot configuration """
-    num = count()
-    def __init__( self, name, config ):
-        self.name  = name
-        self.cnfg  = np.around( config, 6 )
-        self.index = next( self.num )
-    def __repr__( self ):
-        return f"<BodyConf, Robot: {self.name}, Index: {self.index}, q = {self.cnfg}>"
-    @property
-    def value( self ):
-        return self.cnfg
-    @property # WARNING: IS THIS REDUNDANT?
-    def values( self ):
-        return self.cnfg
-    
-
-class BodyGrasp:
-    """ Enough info to pick up something """
-    num = count()
-    def __init__( self, body, grasp_pose, approach_pose ):
-        self.body          = body
-        self.grasp_pose    = grasp_pose
-        self.approach_pose = approach_pose
-        self.index = next( self.num )
-    def __repr__( self ):
-        # return f"<Grasp: {self.body}, [{self.grasp_pose[0,3]}, {self.grasp_pose[1,3]}, {self.grasp_pose[2,3]}]>"
-        return f"<Grasp: {self.body}, {self.index}>"
-    @property
-    def value( self ):
-        return self.grasp_pose
-    
-
-class BodyPath:
-    """ Path of something between two configs """
-    num = count()
-    def __init__( self, body, path ):
-        self.body = body
-        self.path = path[:]
-        self.index = next( self.num )
-    def __repr__( self ):
-        wpStr = "["
-        for wp in self.path:
-            wpStr += str( wp ) + ","
-        wpStr += "]"
-        return f"<Trajectory: {self.body}, {self.index}, {wpStr}>"
-    @property
-    def value( self ):
-        return self.path
 
 
 
@@ -462,10 +410,11 @@ class Plan( Sequence ):
 
     def get_goal_spec( self ):
         """ Get a fully specified goal for this plan """
-        rtnGoal = []
-        for action in self:
-            rtnGoal.append( Pose( None, action.objName, action.goal, _SUPPORT_NAME ) )
-        return rtnGoal
+        raise NotImplementedError( "get_goal_spec" )
+        # rtnGoal = []
+        # for action in self:
+        #     rtnGoal.append( Pose( None, action.objName, action.goal, _SUPPORT_NAME ) )
+        # return rtnGoal
     
 
 
@@ -553,150 +502,150 @@ class ReactiveExecutive:
     ##### Stream Creators #################################################
     # I hate this problem formulation so very much, We need a geometric grammar
 
-    def get_pose_stream( self ):
-        """ Return a function that returns poses """
+    # def get_pose_stream( self ):
+    #     """ Return a function that returns poses """
 
-        def stream_func( *args ):
-            """ A function that returns poses """
-            objName, spprtName = args
+    #     def stream_func( *args ):
+    #         """ A function that returns poses """
+    #         objName, spprtName = args
 
-            ## Sample Symbols ##
-            self.belief_update()
-            nuSym = [bel.sample_symbol() for bel in self.beliefs]
-            # nuSym = [bel.sample_fresh() for bel in self.beliefs]
-            print( f"Symbols: {nuSym}" )
-            for sym in nuSym:
-                if (sym.surf == spprtName) and (objName == sym.label):
-                    # yield Pose( sym, objName, sym.pose )
-                    # yield sym
-                    yield (sym,) 
-                # else yield nothing if we cannot certify the object!
+    #         ## Sample Symbols ##
+    #         self.belief_update()
+    #         nuSym = [bel.sample_symbol() for bel in self.beliefs]
+    #         # nuSym = [bel.sample_fresh() for bel in self.beliefs]
+    #         print( f"Symbols: {nuSym}" )
+    #         for sym in nuSym:
+    #             if (sym.surf == spprtName) and (objName == sym.label):
+    #                 # yield Pose( sym, objName, sym.pose )
+    #                 # yield sym
+    #                 yield (sym,) 
+    #             # else yield nothing if we cannot certify the object!
 
-        return stream_func
+    #     return stream_func
     
-    def get_arch_stream( self ):
-        """ Return a stream that samples arch locations """
+    # def get_arch_stream( self ):
+    #     """ Return a stream that samples arch locations """
 
-        def stream_func( *args ):
-            """ A function that returns poses """
-            objUp,  objDn1,  objDn2  = args
-            upPose, dn1Pose, dn2Pose = None, None, None
+    #     def stream_func( *args ):
+    #         """ A function that returns poses """
+    #         objUp,  objDn1,  objDn2  = args
+    #         upPose, dn1Pose, dn2Pose = None, None, None
 
-            ## Sample Symbols ##
-            nuSym = [bel.sample_symbol() for bel in self.beliefs]
-            nuNam = [sym.label for sym in nuSym]
-            nuPos = [sym.pose  for sym in nuSym]
-            try:
-                idx     = nuNam.index( objDn1 )
-                dn1Pose = nuPos[ idx ]
-                idx     = nuNam.index( objDn2 )
-                dn2Pose = nuPos[ idx ]
-            except ValueError:
-                pass
-            if (dn1Pose is not None) and (dn2Pose is not None):
-                dn1Posn, _ = row_vec_to_pb_posn_ornt( dn1Pose )
-                dn2Posn, _ = row_vec_to_pb_posn_ornt( dn2Pose )
-                if diff_norm( dn1Posn, dn2Posn ) <= (2.5*_BLOCK_SCALE):
-                    midPosn = np.add( dn1Posn, dn2Posn ) / 2.0
-                    midPosn[2] += 2.0*_BLOCK_SCALE
-                    upPose = midPosn.tolist()
-                    upPose.extend( [1,0,0,0] )
-                    yield (Pose( None, objUp, upPose ),)
+    #         ## Sample Symbols ##
+    #         nuSym = [bel.sample_symbol() for bel in self.beliefs]
+    #         nuNam = [sym.label for sym in nuSym]
+    #         nuPos = [sym.pose  for sym in nuSym]
+    #         try:
+    #             idx     = nuNam.index( objDn1 )
+    #             dn1Pose = nuPos[ idx ]
+    #             idx     = nuNam.index( objDn2 )
+    #             dn2Pose = nuPos[ idx ]
+    #         except ValueError:
+    #             pass
+    #         if (dn1Pose is not None) and (dn2Pose is not None):
+    #             dn1Posn, _ = row_vec_to_pb_posn_ornt( dn1Pose )
+    #             dn2Posn, _ = row_vec_to_pb_posn_ornt( dn2Pose )
+    #             if diff_norm( dn1Posn, dn2Posn ) <= (2.5*_BLOCK_SCALE):
+    #                 midPosn = np.add( dn1Posn, dn2Posn ) / 2.0
+    #                 midPosn[2] += 2.0*_BLOCK_SCALE
+    #                 upPose = midPosn.tolist()
+    #                 upPose.extend( [1,0,0,0] )
+    #                 yield (Pose( None, objUp, upPose ),)
 
-        return stream_func
+    #     return stream_func
 
-    def get_grasp_stream( self ):
-        """ Return a function that returns grasps """
+    # def get_grasp_stream( self ):
+    #     """ Return a function that returns grasps """
         
-        def stream_func( *args ):
-            """ A function that returns grasps """
-            objName = args[0]
-            objPose = args[1].pose
+    #     def stream_func( *args ):
+    #         """ A function that returns grasps """
+    #         objName = args[0]
+    #         objPose = args[1].pose
 
-            if objPose is not None:
-                grasp_pose = objPose[:]
-                grasp_pose[2] += _GRASP_VERT_OFFSET
-                posn, _ = row_vec_to_pb_posn_ornt( grasp_pose )
-                ornt = _GRASP_ORNT_XYZW.copy()
-                grasp_pose = pb_posn_ornt_to_row_vec( posn, ornt )
+    #         if objPose is not None:
+    #             grasp_pose = objPose[:]
+    #             grasp_pose[2] += _GRASP_VERT_OFFSET
+    #             posn, _ = row_vec_to_pb_posn_ornt( grasp_pose )
+    #             ornt = _GRASP_ORNT_XYZW.copy()
+    #             grasp_pose = pb_posn_ornt_to_row_vec( posn, ornt )
 
-                posn[2] = _Z_SAFE
-                approach_pose = pb_posn_ornt_to_row_vec( posn, ornt )
+    #             posn[2] = _Z_SAFE
+    #             approach_pose = pb_posn_ornt_to_row_vec( posn, ornt )
 
-                grasp = BodyGrasp( objName, grasp_pose, approach_pose )
-                print( "Got a grasp!\n", grasp_pose )
-                yield (grasp,)
-             # else yield nothing if we cannot certify the object!
+    #             grasp = BodyGrasp( objName, grasp_pose, approach_pose )
+    #             print( "Got a grasp!\n", grasp_pose )
+    #             yield (grasp,)
+    #          # else yield nothing if we cannot certify the object!
 
-        return stream_func
+    #     return stream_func
 
-    def get_free_motion_planner( self ):
-        """ Return a function that checks if the path is free """
+    # def get_free_motion_planner( self ):
+    #     """ Return a function that checks if the path is free """
 
-        def stream_func( *args ):
-            """ A function that checks if the path is free """
+    #     def stream_func( *args ):
+    #         """ A function that checks if the path is free """
 
-            print( args )
+    #         print( args )
 
-            (bgn, end) = args
-            if bgn != end:
+    #         (bgn, end) = args
+    #         if bgn != end:
 
-                # FIXME: USE ACTUAL COLLISION DETECTION @ KDL
+    #             # FIXME: USE ACTUAL COLLISION DETECTION @ KDL
 
-                # posnBgn, _ = row_vec_to_pb_posn_ornt( bgn )
-                # posnEnd, _ = row_vec_to_pb_posn_ornt( end )
+    #             # posnBgn, _ = row_vec_to_pb_posn_ornt( bgn )
+    #             # posnEnd, _ = row_vec_to_pb_posn_ornt( end )
 
-                # objs = self.world.full_scan_true()
-                # okay = True
-                # for sym in objs:
-                #     Q, _ = row_vec_to_pb_posn_ornt( sym.pose )
-                #     d = closest_dist_Q_to_segment_AB( Q, posnBgn, posnEnd )
-                #     if d < 2.0*_BLOCK_SCALE:
-                #         okay = False
-                #         break
-                # if okay:
-                yield (BodyPath( self.world.robotName, [bgn, end] ),) 
+    #             # objs = self.world.full_scan_true()
+    #             # okay = True
+    #             # for sym in objs:
+    #             #     Q, _ = row_vec_to_pb_posn_ornt( sym.pose )
+    #             #     d = closest_dist_Q_to_segment_AB( Q, posnBgn, posnEnd )
+    #             #     if d < 2.0*_BLOCK_SCALE:
+    #             #         okay = False
+    #             #         break
+    #             # if okay:
+    #             yield (BodyPath( self.world.robotName, [bgn, end] ),) 
 
-        return stream_func
+    #     return stream_func
 
-    def get_IK_solver( self ):
-        """ Return a function that computes Inverse Kinematics for a pose """
+    # def get_IK_solver( self ):
+    #     """ Return a function that computes Inverse Kinematics for a pose """
 
-        def stream_func( *args ):
-            """ A function that computes Inverse Kinematics for a pose """
+    #     def stream_func( *args ):
+    #         """ A function that computes Inverse Kinematics for a pose """
 
-            (trgt, pose, grasp) = args
+    #         (trgt, pose, grasp) = args
 
-            posn, ornt = row_vec_to_pb_posn_ornt( grasp.approach_pose )
-            apprcQ = self.world.robot.calculate_ik_quat( posn, ornt )
-            posn, ornt = row_vec_to_pb_posn_ornt( grasp.grasp_pose )
-            graspQ = self.world.robot.calculate_ik_quat( posn, ornt )
+    #         posn, ornt = row_vec_to_pb_posn_ornt( grasp.approach_pose )
+    #         apprcQ = self.world.robot.calculate_ik_quat( posn, ornt )
+    #         posn, ornt = row_vec_to_pb_posn_ornt( grasp.grasp_pose )
+    #         graspQ = self.world.robot.calculate_ik_quat( posn, ornt )
 
-            #     ( <IK Sol'n>, <Trajectory> )
-            yield ( BodyConf( self.world.robotName, graspQ ), 
-                    BodyPath( self.world.robotName, [
-                        BodyConf( self.world.robotName, apprcQ ),
-                        BodyConf( self.world.robotName, graspQ ),
-                    ] ) )
-            # FIXME: DO NOT YIELD OF THE POSE CANNOT BE REACHED!
+    #         #     ( <IK Sol'n>, <Trajectory> )
+    #         yield ( BodyConf( self.world.robotName, graspQ ), 
+    #                 BodyPath( self.world.robotName, [
+    #                     BodyConf( self.world.robotName, apprcQ ),
+    #                     BodyConf( self.world.robotName, graspQ ),
+    #                 ] ) )
+    #         # FIXME: DO NOT YIELD OF THE POSE CANNOT BE REACHED!
             
-        return stream_func
+    #     return stream_func
 
-    def get_safe_pose_test( self ):
-        """ Return a function that returns True if two objects are a safe distance apart """
+    # def get_safe_pose_test( self ):
+    #     """ Return a function that returns True if two objects are a safe distance apart """
 
-        def test( *args ):
-            # """ Do not pass if it is too close to other blocks """
-            # label1, pose1, label2, pose2 = args
-            # if diff_norm( pose1.pose[:3], pose2.pose[:3] ) <= 2.0*_BLOCK_SCALE:
-            #     return False
-            # else:
-            #     return True
-            """ WARNING: TEST ALWAYS PASSES """
-            print( "\nPose Test Args:", args, '\n' )
-            return True
+    #     def test( *args ):
+    #         # """ Do not pass if it is too close to other blocks """
+    #         # label1, pose1, label2, pose2 = args
+    #         # if diff_norm( pose1.pose[:3], pose2.pose[:3] ) <= 2.0*_BLOCK_SCALE:
+    #         #     return False
+    #         # else:
+    #         #     return True
+    #         """ WARNING: TEST ALWAYS PASSES """
+    #         print( "\nPose Test Args:", args, '\n' )
+    #         return True
             
-        return test
+    #     return test
     
 
     ##### PDLS Solver #####################################################
@@ -710,43 +659,43 @@ class ReactiveExecutive:
         print( "Read files!" )
 
         print( 'Robot:', self.world.robot.get_name() )
-        conf = BodyConf( self.world.robot.get_name(), self.world.robot.get_joint_angles() )
-        init = [('CanMove',),
-                # ('Conf', conf),
-                ('AtConf', conf),
-                ('HandEmpty',)]
-        print( "Robot grounded!" )
+        # conf = BodyConf( self.world.robot.get_name(), self.world.robot.get_joint_angles() )
+        # init = [('CanMove',),
+        #         # ('Conf', conf),
+        #         ('AtConf', conf),
+        #         ('HandEmpty',)]
+        # print( "Robot grounded!" )
 
-        for body in _ACTUAL_NAMES:
-            # init += [('Graspable', body),]
-            init += [('Stackable', body, _SUPPORT_NAME)]
-            for sppt in _ACTUAL_NAMES:
-                if sppt != body:
-                    init += [('Stackable', body, sppt)]
+        # for body in _ACTUAL_NAMES:
+        #     # init += [('Graspable', body),]
+        #     init += [('Stackable', body, _SUPPORT_NAME)]
+        #     for sppt in _ACTUAL_NAMES:
+        #         if sppt != body:
+        #             init += [('Stackable', body, sppt)]
 
-        # goal = ( 'and',
-        #     ('AtPose', 'redBlock', Pose(None, 'redBlock', [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ])),
-        #     ('AtPose', 'ylwBlock', Pose(None, 'ylwBlock', [ _MIN_X_OFFSET+4.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ])),
-        #     ('Arched', 'bluBlock', 'redBlock', 'ylwBlock'),
-        # ) 
+        # # goal = ( 'and',
+        # #     ('AtPose', 'redBlock', Pose(None, 'redBlock', [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ])),
+        # #     ('AtPose', 'ylwBlock', Pose(None, 'ylwBlock', [ _MIN_X_OFFSET+4.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ])),
+        # #     ('Arched', 'bluBlock', 'redBlock', 'ylwBlock'),
+        # # ) 
 
-        # goal = ('AtPose', 'redBlock', Pose(None, 'redBlock', [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ]))
-        goal = ('AtPose', 'redBlock', [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ])
+        # # goal = ('AtPose', 'redBlock', Pose(None, 'redBlock', [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ]))
+        # goal = ('AtPose', 'redBlock', [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ])
 
-        stream_map = {
-            ### Symbol Streams ###
-            'sample-pose':        from_gen_fn( self.get_pose_stream()         ), 
-            'sample-arch':        from_gen_fn( self.get_arch_stream()         ), 
-            'sample-grasp':       from_gen_fn( self.get_grasp_stream()        ),
-            'plan-free-motion':   from_gen_fn( self.get_free_motion_planner() ),
-            'inverse-kinematics': from_gen_fn( self.get_IK_solver()           ),
-            ### Symbol Tests ###
-            'test-cfree-pose-pose': from_test( self.get_safe_pose_test() ),
-        }
+        # stream_map = {
+        #     ### Symbol Streams ###
+        #     'sample-pose':        from_gen_fn( self.get_pose_stream()         ), 
+        #     'sample-arch':        from_gen_fn( self.get_arch_stream()         ), 
+        #     'sample-grasp':       from_gen_fn( self.get_grasp_stream()        ),
+        #     'plan-free-motion':   from_gen_fn( self.get_free_motion_planner() ),
+        #     'inverse-kinematics': from_gen_fn( self.get_IK_solver()           ),
+        #     ### Symbol Tests ###
+        #     'test-cfree-pose-pose': from_test( self.get_safe_pose_test() ),
+        # }
 
-        print( "About to create problem ... " )
+        # print( "About to create problem ... " )
     
-        return PDDLProblem( domain_pddl, constant_map, stream_pddl, stream_map, init, goal )
+        # return PDDLProblem( domain_pddl, constant_map, stream_pddl, stream_map, init, goal )
 
 ########## MAIN ####################################################################################
 
