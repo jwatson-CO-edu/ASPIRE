@@ -15,7 +15,7 @@
         [Y] Stream spec, 2024-02-06: Seems correct!
     [Y] SafeMotion, Checked by world, 2024-02-07: Seems correct!
         [Y] Stream spec, 2024-02-07: Seems correct!
-[>] Instantiate a PDLS world
+[Y] Instantiate a PDLS world, 2024-02-07: No errors
 [ ] Successful Planning
     [ ] Q: Can I ask the solver to be VERBOSE?
 
@@ -65,7 +65,7 @@ sys.path.append( "../" )
 
 from utils import ( row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec, diff_norm, closest_dist_Q_to_segment_AB, )
 
-from env_config import ( _GRASP_VERT_OFFSET, _GRASP_ORNT_XYZW, _NULL_NAME, 
+from env_config import ( _GRASP_VERT_OFFSET, _GRASP_ORNT_XYZW, _NULL_NAME, _ACTUAL_NAMES, _MIN_X_OFFSET,
                          _NULL_THRESH, _BLOCK_SCALE, _CLOSEST_TO_BASE )
 from pb_BT import connect_BT_to_robot_world
 from PB_BlocksWorld import PB_BlocksWorld
@@ -657,43 +657,40 @@ class ReactiveExecutive:
         print( "Read files!" )
 
         print( 'Robot:', self.world.robot.get_name() )
-        # conf = BodyConf( self.world.robot.get_name(), self.world.robot.get_joint_angles() )
-        # init = [('CanMove',),
-        #         # ('Conf', conf),
-        #         ('AtConf', conf),
-        #         ('HandEmpty',)]
-        # print( "Robot grounded!" )
+        conf = Config( self.world.robot.get_joint_angles() )
+        init = [('CanMove',),
+                ('Conf', conf),
+                ('AtConf', conf),
+                ('HandEmpty',)]
+        print( "Robot grounded!" )
 
-        # for body in _ACTUAL_NAMES:
-        #     # init += [('Graspable', body),]
-        #     init += [('Stackable', body, _SUPPORT_NAME)]
-        #     for sppt in _ACTUAL_NAMES:
-        #         if sppt != body:
-        #             init += [('Stackable', body, sppt)]
+        for body in _ACTUAL_NAMES:
+            init.append( ('Graspable', body) )
 
-        # # goal = ( 'and',
-        # #     ('AtPose', 'redBlock', Pose(None, 'redBlock', [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ])),
-        # #     ('AtPose', 'ylwBlock', Pose(None, 'ylwBlock', [ _MIN_X_OFFSET+4.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ])),
-        # #     ('Arched', 'bluBlock', 'redBlock', 'ylwBlock'),
-        # # ) 
+        goal = ('AtPose', 'redBlock', [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ])  
 
-        # # goal = ('AtPose', 'redBlock', Pose(None, 'redBlock', [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ]))
-        # goal = ('AtPose', 'redBlock', [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ])
+        """ # SAVE THIS FOR THE FINAL DEMO
+        goal = ( 'and',
+            ('AtPose', 'redBlock', Pose(None, 'redBlock', [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ])),
+            ('AtPose', 'ylwBlock', Pose(None, 'ylwBlock', [ _MIN_X_OFFSET+4.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ])),
+            ('Arched', 'bluBlock', 'redBlock', 'ylwBlock'),
+        ) 
+        """
 
-        # stream_map = {
-        #     ### Symbol Streams ###
-        #     'sample-pose':        from_gen_fn( self.get_pose_stream()         ), 
-        #     'sample-arch':        from_gen_fn( self.get_arch_stream()         ), 
-        #     'sample-grasp':       from_gen_fn( self.get_grasp_stream()        ),
-        #     'plan-free-motion':   from_gen_fn( self.get_free_motion_planner() ),
-        #     'inverse-kinematics': from_gen_fn( self.get_IK_solver()           ),
-        #     ### Symbol Tests ###
-        #     'test-cfree-pose-pose': from_test( self.get_safe_pose_test() ),
-        # }
+        stream_map = {
+            ### Symbol Streams ###
+            'sample-object':      from_gen_fn( self.get_object_stream() ), 
+            'sample-grasp':       from_gen_fn( self.get_grasp_stream()  ),
+            'inverse-kinematics': from_gen_fn( self.get_IK_solver()     ),
+            ### Symbol Tests ###
+            'test-free-placment': from_test( self.get_free_placement_test() ),
+            'test-safe-transit' : from_test( self.get_safe_transit_test()   ),
+            'test-safe-motion':   from_test( self.get_safe_motion_test()    ),
+        }
 
-        # print( "About to create problem ... " )
+        print( "About to create problem ... " )
     
-        # return PDDLProblem( domain_pddl, constant_map, stream_pddl, stream_map, init, goal )
+        return PDDLProblem( domain_pddl, constant_map, stream_pddl, stream_map, init, goal )
 
 ########## MAIN ####################################################################################
 
@@ -713,14 +710,16 @@ if __name__ == "__main__":
     world.spin_for( 500 )
 
     planner = ReactiveExecutive( world )
+    print( '\n\n\n##### PDLS INIT #####' )
     problem = planner.pddlstream_from_problem()
+    print( 'Created!\n\n\n' )
 
-    solution = solve( problem, 
-                      algorithm = "incremental", #"adaptive", 
-                      unit_costs=True, success_cost=1 )
-    print( "Solver has completed!" )
-    print_solution( solution )
-    plan, cost, evaluations = solution
+    # solution = solve( problem, 
+    #                   algorithm = "incremental", #"adaptive", 
+    #                   unit_costs=True, success_cost=1 )
+    # print( "Solver has completed!" )
+    # print_solution( solution )
+    # plan, cost, evaluations = solution
 
 #     def exec_plans_noisy( self, N = 1200,  Npause = 200 ):
 #         """ Execute partially observable plans """

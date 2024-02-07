@@ -44,37 +44,4 @@
     :domain (and (Conf ?config1) (Conf ?config2))
     :certified (FreePlacement ?label ?pose)
   )
-
-  ; (:stream sample-arch
-  ;   :inputs (?objUp ?objDn1 ?objDn2)
-  ;   :domain (and (Stackable ?objUp ?objDn1) (Stackable ?objUp ?objDn2))
-  ;   :outputs (?p)
-  ;   :certified (and (Pose ?objUp ?p) (Supported ?objUp ?p ?objDn1) (Supported ?objUp ?p ?objDn2) (Arched ?objUp ?objdn1 ?objdn2) )
-  ; )
-
-  
-
-  ; ;; MP Path Between Configs ;;
-  ; (:stream plan-free-motion
-  ;   :inputs (?q1 ?q2)
-  ;   :domain (and (Conf ?q1) (Conf ?q2))
-  ;   :outputs (?t)
-  ;   :certified (FreeMotion ?q1 ?t ?q2)
-  ; )
-
-  
-
-  ; ;; Pose Collision Test ;;
-  ; (:stream test-cfree-pose-pose
-  ;   :inputs (?o1 ?p1 ?o2 ?p2)
-  ;   :domain (and (Pose ?o1 ?p1) (Pose ?o2 ?p2))
-  ;   :certified (CFreePosePose ?o1 ?p1 ?o2 ?p2)
-  ; )
-
-  ;; Trajectory Collision Test ;;
-  ; (:stream test-cfree-pose-pose
-  ;   :inputs (?o1 ?p1 ?o2 ?p2)
-  ;   :domain (and (Pose ?o1 ?p1) (Pose ?o2 ?p2))
-  ;   :certified (CFreePosePose ?o1 ?p1 ?o2 ?p2)
-  ; )
 )

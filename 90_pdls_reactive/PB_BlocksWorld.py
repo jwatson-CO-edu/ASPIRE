@@ -7,7 +7,8 @@ import pybullet_data
 
 from UR5Sim import UR5Sim
 from utils import row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec
-from beliefs import Pose, ObjectBelief
+from symbols import Object
+from beliefs import ObjectBelief
 from env_config import ( _MIN_X_OFFSET, _BLOCK_SCALE, TABLE_URDF_PATH, _BLOCK_NAMES, _POSN_STDDEV, 
                          _GRASP_VERT_OFFSET, _GRASP_ORNT_XYZW, _ACTUAL_NAMES, )
 
@@ -143,10 +144,10 @@ class PB_BlocksWorld:
             idx = _BLOCK_NAMES.index( blockName )
             blockPos, blockOrn = pb.getBasePositionAndOrientation( self.blocks[idx] )
             blockPos = np.array( blockPos )
-            return Pose( 
-                DummyBelief( blockName ), 
+            return Object( 
                 blockName, 
-                pb_posn_ornt_to_row_vec( blockPos, blockOrn ) 
+                pb_posn_ornt_to_row_vec( blockPos, blockOrn ),
+                DummyBelief( blockName ), 
             )
         except ValueError:
             return None
