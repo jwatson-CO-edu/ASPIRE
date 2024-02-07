@@ -7,16 +7,17 @@
         [Y] Stream spec, 2024-02-05: Seems correct!
     [Y] Grasp effector pose from object pose, 2024-02-05: Seems correct!
         [Y] Stream spec, 2024-02-05: Unsure if the certification will create the correct object
-    [>] IK Soln from effector pose
+    [Y] IK Soln from effector pose, 2024-02-06: Seems correct!
+        [Y] Stream spec, 2024-02-06: Seems correct!
+    [Y] FreePlacement, Checked by world, 2024-02-06: Seems correct!
+        [Y] Stream spec, 2024-02-06: Seems correct!
+    [Y] SafeTransit, Checked by world, 2024-02-06: Seems correct!
+        [Y] Stream spec, 2024-02-06: Seems correct!
+    [>] SafeMotion, Checked by world
         [>] Stream spec
-    [ ] FreePlacement, Checked by world
-        [ ] Stream spec
-    [ ] SafeTransit, Checked by world
-        [ ] Stream spec
-    [ ] SafeMotion, Checked by world
-        [ ] Stream spec
 [ ] Instantiate a PDLS world
 [ ] Successful Planning
+    [ ] Q: Can I ask the solver to be VERBOSE?
 
 ##### Execution #####
 [ ] Rewrite Action drafts
@@ -62,14 +63,13 @@ from pddlstream.language.constants import print_solution, PDDLProblem
 sys.path.append( "../" )
 from magpie.poses import translation_diff
 
-from utils import ( row_vec_to_homog, row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec, diff_norm, 
-                    pb_posn_ornt_to_homog, )
+from utils import ( row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec, diff_norm, closest_dist_Q_to_segment_AB, )
 
 from env_config import ( _ACCEPT_POSN_ERR, _GRASP_VERT_OFFSET, _Z_SAFE, _GRASP_ORNT_XYZW, _NULL_NAME, 
                          _NULL_THRESH, _SUPPORT_NAME, _BLOCK_SCALE, _ACTUAL_NAMES, _MIN_X_OFFSET, )
 from pb_BT import Pick_at_Pose, Place_at_Pose, connect_BT_to_robot_world
 from PB_BlocksWorld import PB_BlocksWorld
-from symbols import Grasp, Pose
+from symbols import Pose, Config
 
 
 
@@ -540,7 +540,7 @@ class ReactiveExecutive:
             
             print( f"\nEvaluate GRASP stream with args: {args}\n" )
 
-            targetPose = args[0]
+            targetPose = args[0].value
 
             if targetPose is not None:
                 grasp_pose = targetPose[:]
@@ -553,6 +553,78 @@ class ReactiveExecutive:
              # else yield nothing if we cannot certify the object!
 
         return stream_func
+    
+    def get_IK_solver( self ):
+        """ Return a function that computes Inverse Kinematics for a pose """
+
+        def stream_func( *args ):
+            """ A function that computes Inverse Kinematics for a pose """
+
+            print( f"\nEvaluate IK stream with args: {args}\n" )
+
+            effPose = args[0].value
+
+            currPosn, _ = self.world.robot.get_current_pose()
+            grspPosn, grspOrnt = row_vec_to_pb_posn_ornt( effPose )
+            if diff_norm( currPosn, grspPosn ) < 2.0:
+                graspQ = self.world.robot.calculate_ik_quat( grspPosn, grspOrnt )
+                yield ( Config( graspQ ), )
+
+        return stream_func
+    
+    def get_free_placement_test( self ):
+        """ Return a function that checks if the pose is free from obstruction """
+
+        def test_func( *args ):
+            
+            print( f"\nEvaluate PLACEMENT test with args: {args}\n" )
+
+            label, pose = args
+            posn , _    = row_vec_to_pb_posn_ornt( pose )
+
+            ## Sample Symbols ##
+            self.belief_update()
+            nuSym = [bel.sample_symbol() for bel in self.beliefs]
+            # nuSym = [bel.sample_fresh() for bel in self.beliefs]
+            print( f"Symbols: {nuSym}" )
+            for sym in nuSym:
+                if label != sym.label:
+                    symPosn, _ = row_vec_to_pb_posn_ornt( sym.pose )
+                    if diff_norm( posn, symPosn ) < (2.0*_BLOCK_SCALE):
+                        return False
+            return True
+        
+        return test_func
+
+
+    def get_safe_transit_test( self ):
+        """ Return a function that checks if the path is free from obstruction """
+
+        def test_func( *args ):
+            
+            print( f"\nEvaluate TRANSIT test with args: {args}\n" )
+
+            (bgn, end) = args
+            if bgn.value != end.value:
+
+                posnBgn, _ = row_vec_to_pb_posn_ornt( bgn.value )
+                posnEnd, _ = row_vec_to_pb_posn_ornt( end.value )
+
+                ## Sample Symbols ##
+                self.belief_update()
+                nuSym = [bel.sample_symbol() for bel in self.beliefs]
+                # nuSym = [bel.sample_fresh() for bel in self.beliefs]
+                print( f"Symbols: {nuSym}" )
+
+                for sym in nuSym:
+                    Q, _ = row_vec_to_pb_posn_ornt( sym.pose )
+                    d = closest_dist_Q_to_segment_AB( Q, posnBgn, posnEnd )
+                    if d < 2.0*_BLOCK_SCALE:
+                        return False
+                return True
+            
+            return test_func
+            
 
     # def get_free_motion_planner( self ):
     #     """ Return a function that checks if the path is free """
@@ -562,49 +634,9 @@ class ReactiveExecutive:
 
     #         print( args )
 
-    #         (bgn, end) = args
-    #         if bgn != end:
+    
 
-    #             # FIXME: USE ACTUAL COLLISION DETECTION @ KDL
-
-    #             # posnBgn, _ = row_vec_to_pb_posn_ornt( bgn )
-    #             # posnEnd, _ = row_vec_to_pb_posn_ornt( end )
-
-    #             # objs = self.world.full_scan_true()
-    #             # okay = True
-    #             # for sym in objs:
-    #             #     Q, _ = row_vec_to_pb_posn_ornt( sym.pose )
-    #             #     d = closest_dist_Q_to_segment_AB( Q, posnBgn, posnEnd )
-    #             #     if d < 2.0*_BLOCK_SCALE:
-    #             #         okay = False
-    #             #         break
-    #             # if okay:
-    #             yield (BodyPath( self.world.robotName, [bgn, end] ),) 
-
-    #     return stream_func
-
-    # def get_IK_solver( self ):
-    #     """ Return a function that computes Inverse Kinematics for a pose """
-
-    #     def stream_func( *args ):
-    #         """ A function that computes Inverse Kinematics for a pose """
-
-    #         (trgt, pose, grasp) = args
-
-    #         posn, ornt = row_vec_to_pb_posn_ornt( grasp.approach_pose )
-    #         apprcQ = self.world.robot.calculate_ik_quat( posn, ornt )
-    #         posn, ornt = row_vec_to_pb_posn_ornt( grasp.grasp_pose )
-    #         graspQ = self.world.robot.calculate_ik_quat( posn, ornt )
-
-    #         #     ( <IK Sol'n>, <Trajectory> )
-    #         yield ( BodyConf( self.world.robotName, graspQ ), 
-    #                 BodyPath( self.world.robotName, [
-    #                     BodyConf( self.world.robotName, apprcQ ),
-    #                     BodyConf( self.world.robotName, graspQ ),
-    #                 ] ) )
-    #         # FIXME: DO NOT YIELD OF THE POSE CANNOT BE REACHED!
-            
-    #     return stream_func
+    
 
     # def get_safe_pose_test( self ):
     #     """ Return a function that returns True if two objects are a safe distance apart """

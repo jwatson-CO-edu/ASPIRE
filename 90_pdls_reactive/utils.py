@@ -47,7 +47,6 @@ def row_vec_to_pb_posn_ornt( V ):
     ornt[-1] = V[3]
     return posn, ornt
 
-
 def homog_to_row_vec( homog ):
     """ Express a homogeneous coord as a Position and Orientation --> [Px,Py,Pz,Ow,Ox,Oy,Oz] """
     P = homog[0:3,3]

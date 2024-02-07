@@ -1,4 +1,4 @@
-import math
+import math, os
 from collections import namedtuple
 from datetime import datetime
 from random import random
@@ -7,13 +7,40 @@ from attrdict import AttrDict
 import pybullet as pb
 import numpy as np
 
+from roboticstoolbox.robot.ERobot import ERobot
+
+from utils import homog_to_pb_posn_ornt
+
 from env_config import ROBOT_URDF_PATH, _ROT_VEL_SMALL, _Q_HOME, _MIN_X_OFFSET, _BLOCK_SCALE
+
+class UR5e_RBT( ERobot ):
+    """ PyRBT for UR5e IK """
+
+    def __init__( self ):
+        """ Load URDF from local files """
+        
+        links, name, urdf, path = self.URDF_read( 
+            os.path.join( os.getcwd(), ROBOT_URDF_PATH[2:] )
+        )
+        super().__init__(
+            links,
+            name         = name.upper(),
+            manufacturer = 'Universal Robots',
+        )
+        
+        self.urdfDesc = urdf
+        self.srcPath  = path
+
+    def fk_posn_ornt( self, joint_angles ):
+        """ Get forward kinematics in [Px,Py,Pz],[Ox,Oy,Oz,Ow] """
+        return homog_to_pb_posn_ornt( np.array( self.fkine( joint_angles, end = "tool0" ) ) )
+
 
 class UR5Sim:
     """ Original Author: Josep Daniel, https://github.com/josepdaniel/ur5-bullet/tree/master/UR5 """
 
     def load_robot( self ):
-        """ Load UR5 from description """
+        """ Load UR5e from description """
         flags = 0 #pb.URDF_USE_SELF_COLLISION
         robot = pb.loadURDF( ROBOT_URDF_PATH, [0, 0, 0], [0, 0, 0, 1], flags=flags )
         return robot
@@ -24,6 +51,7 @@ class UR5Sim:
         self.end_effector_index = 7 # 5 # 6 # 7
         self.jntIndices = [1,2,3,4,5,6]
         self.ur5 = self.load_robot()
+        self.kinMdl = UR5e_RBT()
         self.num_joints = pb.getNumJoints( self.ur5 )
         
         self.control_joints = ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]
@@ -50,6 +78,10 @@ class UR5Sim:
         self.Nlimit =  3
         self.lastT  = self.get_current_pose()
         self.name   = "UR5e"
+
+    def fk_posn_ornt( self, joint_angles ):
+        """ Get forward kinematics in [Px,Py,Pz],[Ox,Oy,Oz,Ow] """
+        return self.kinMdl.fk_posn_ornt( joint_angles )
 
     def get_name( self ):
         """ Return name """
@@ -171,3 +203,7 @@ class UR5Sim:
         if self.Nfails >= self.Nlimit:
             self.Nfails = 0
             self.anger( posn, ornt )
+
+if __name__ == "__main__":
+    foo = UR5e_RBT()
+    print( foo.fk_posn_ornt( [0.0 for _ in range(6)] ) )

@@ -16,6 +16,28 @@
     :certified (Grasp ?pose ?effPose)
   )
 
+  ;; IK Solver ;;
+  (:stream inverse-kinematics
+    :inputs (?effPose)
+    :domain (Grasp ?pose ?effPose)
+    :outputs (?config)
+    :certified (IKSoln ?effPose ?config) 
+  )
+
+  ;; Free Placement Test ;;
+  (:stream test-free-placment
+    :inputs (?label ?pose)
+    :domain (and (Object ?label ?objPose) (Grasp ?pose ?effPose))
+    :certified (FreePlacement ?label ?pose)
+  )
+
+  ;; Safe Transit Test ;;
+  (:stream test-safe-transit
+    :inputs (?label ?bgnPose ?endPose)
+    :domain (and (Object ?label ?objPose) (Grasp ?pose ?effPose))
+    :certified (FreePlacement ?label ?pose)
+  )
+
   ; (:stream sample-arch
   ;   :inputs (?objUp ?objDn1 ?objDn2)
   ;   :domain (and (Stackable ?objUp ?objDn1) (Stackable ?objUp ?objDn2))
@@ -33,14 +55,7 @@
   ;   :certified (FreeMotion ?q1 ?t ?q2)
   ; )
 
-  ; ;; IK Solver ;;
-  ; (:stream inverse-kinematics
-  ;   :inputs (?o ?p ?g)
-  ;   :domain (and (Pose ?o ?p) (Grasp ?o ?g))
-  ;   :outputs (?q ?t)
-  ;   :certified (and (Conf ?q) (Traj ?t) (Kin ?o ?p ?g ?q ?t) 
-  ;                   (CFreeTrajPose ?t ?o ?p) ) ; WARNING: This one is NEW
-  ; )
+  
 
   ; ;; Pose Collision Test ;;
   ; (:stream test-cfree-pose-pose
