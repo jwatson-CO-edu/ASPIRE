@@ -21,7 +21,7 @@
     :inputs (?effPose)
     :domain (Grasp ?pose ?effPose)
     :outputs (?config)
-    :certified (IKSoln ?effPose ?config) 
+    :certified (and (IKSoln ?effPose ?config) (Conf ?config) )
   )
 
   ;; Free Placement Test ;;
@@ -35,6 +35,13 @@
   (:stream test-safe-transit
     :inputs (?label ?bgnPose ?endPose)
     :domain (and (Object ?label ?objPose) (Grasp ?pose ?effPose))
+    :certified (FreePlacement ?label ?pose)
+  )
+
+  ;; Safe Motion Test ;;
+  (:stream test-safe-motion
+    :inputs (?config1 ?config2)
+    :domain (and (Conf ?config1) (Conf ?config2))
     :certified (FreePlacement ?label ?pose)
   )
 

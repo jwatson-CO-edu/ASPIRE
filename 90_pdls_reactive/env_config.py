@@ -31,6 +31,7 @@ _GRASP_VERT_OFFSET = _BLOCK_SCALE * 2.0
 _GRASP_ORNT_XYZW   = np.array( [0, 0.7070727, 0, 0.7071408,] )
 _Q_HOME            = [0, -math.pi/2, math.pi/2, -math.pi/2, -math.pi/2, 0]
 _ROT_VEL_SMALL     = 0.005
+_CLOSEST_TO_BASE   = 0.300
 
 
 

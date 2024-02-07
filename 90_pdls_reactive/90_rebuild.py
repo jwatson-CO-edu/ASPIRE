@@ -13,9 +13,9 @@
         [Y] Stream spec, 2024-02-06: Seems correct!
     [Y] SafeTransit, Checked by world, 2024-02-06: Seems correct!
         [Y] Stream spec, 2024-02-06: Seems correct!
-    [>] SafeMotion, Checked by world
-        [>] Stream spec
-[ ] Instantiate a PDLS world
+    [Y] SafeMotion, Checked by world, 2024-02-07: Seems correct!
+        [Y] Stream spec, 2024-02-07: Seems correct!
+[>] Instantiate a PDLS world
 [ ] Successful Planning
     [ ] Q: Can I ask the solver to be VERBOSE?
 
@@ -40,8 +40,8 @@
 import sys, time, datetime, pickle, math
 now = time.time
 from random import random
-from collections import Counter
-from itertools import count
+# from collections import Counter
+# from itertools import count
 
 ### Special ###
 import numpy as np
@@ -61,13 +61,13 @@ from pddlstream.language.constants import print_solution, PDDLProblem
 
 ## MAGPIE ##
 sys.path.append( "../" )
-from magpie.poses import translation_diff
+# from magpie.poses import translation_diff
 
 from utils import ( row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec, diff_norm, closest_dist_Q_to_segment_AB, )
 
-from env_config import ( _ACCEPT_POSN_ERR, _GRASP_VERT_OFFSET, _Z_SAFE, _GRASP_ORNT_XYZW, _NULL_NAME, 
-                         _NULL_THRESH, _SUPPORT_NAME, _BLOCK_SCALE, _ACTUAL_NAMES, _MIN_X_OFFSET, )
-from pb_BT import Pick_at_Pose, Place_at_Pose, connect_BT_to_robot_world
+from env_config import ( _GRASP_VERT_OFFSET, _GRASP_ORNT_XYZW, _NULL_NAME, 
+                         _NULL_THRESH, _BLOCK_SCALE, _CLOSEST_TO_BASE )
+from pb_BT import connect_BT_to_robot_world
 from PB_BlocksWorld import PB_BlocksWorld
 from symbols import Pose, Config
 
@@ -626,33 +626,24 @@ class ReactiveExecutive:
             return test_func
             
 
-    # def get_free_motion_planner( self ):
-    #     """ Return a function that checks if the path is free """
+    def get_safe_motion_test( self ):
+        """ Return a function that checks if the path is free from obstruction """
 
-    #     def stream_func( *args ):
-    #         """ A function that checks if the path is free """
-
-    #         print( args )
-
-    
-
-    
-
-    # def get_safe_pose_test( self ):
-    #     """ Return a function that returns True if two objects are a safe distance apart """
-
-    #     def test( *args ):
-    #         # """ Do not pass if it is too close to other blocks """
-    #         # label1, pose1, label2, pose2 = args
-    #         # if diff_norm( pose1.pose[:3], pose2.pose[:3] ) <= 2.0*_BLOCK_SCALE:
-    #         #     return False
-    #         # else:
-    #         #     return True
-    #         """ WARNING: TEST ALWAYS PASSES """
-    #         print( "\nPose Test Args:", args, '\n' )
-    #         return True
+        def test_func( *args ):
             
-    #     return test
+            print( f"\nEvaluate MOTION test with args: {args}\n" )
+
+            config1, config2 = args
+            posn1  , _       = self.world.robot.fk_posn_ornt( config1.value )
+            posn2  , _       = self.world.robot.fk_posn_ornt( config2.value )
+            d = closest_dist_Q_to_segment_AB( [0.0,0.0,0.0], posn1, posn2 )
+            if d < _CLOSEST_TO_BASE:
+                return False
+            else:
+                return True
+            
+        return test_func
+
     
 
     ##### PDLS Solver #####################################################

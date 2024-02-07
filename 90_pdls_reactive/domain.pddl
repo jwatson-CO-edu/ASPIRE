@@ -12,7 +12,8 @@
     (Grasp ?pose ?effPose) ; Sample from pose
 
     ;;; Domains ;;;
-    (Graspable ?label)
+    (Graspable ?label) ; Used by "stream.pddl"
+    (Conf ?config) ; Used by "stream.pddl"
   
     ;;; States ;;;
     (Holding ?label) ; From Pick
