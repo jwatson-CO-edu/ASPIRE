@@ -68,20 +68,19 @@ class ObjectBelief:
         except np.linalg.LinAlgError:
             self.reset_covar()
             poseSample = np.random.multivariate_normal( self.pose, self.covar ) 
-        support = self.object_supporting_pose( poseSample )
-        return Pose( 
-            self,
+        # support = self.object_supporting_pose( poseSample )
+        return Object( 
             label, 
             poseSample,
-            support
+            self
         )
     
     def sample_null( self ):
         """ Empty Pose """
-        return Pose( 
-            self,
+        return Object( 
             _NULL_NAME, 
             [0,0,0,1,0,0,0],
+            self
         )
     
     def sample_fresh( self ):

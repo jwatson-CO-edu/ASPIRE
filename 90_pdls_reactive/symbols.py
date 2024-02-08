@@ -1,7 +1,10 @@
 ########## INIT ####################################################################################
 from itertools import count
 
+import numpy as np
+
 from utils import row_vec_to_pb_posn_ornt
+from env_config import _ROUND_PLACES
 
 
 ########## SYMBOLS #################################################################################
@@ -11,7 +14,7 @@ class Pose:
     num = count()
 
     def __init__( self, val ):
-        self.value = val
+        self.value = np.around( val, _ROUND_PLACES )
         self.index = next( self.num )
 
     def posn_ornt( self ):
@@ -26,7 +29,7 @@ class Config:
     num = count()
 
     def __init__( self, val ):
-        self.value = val
+        self.value = np.around( val, _ROUND_PLACES )
         self.index = next( self.num )
 
     def __repr__( self ):
@@ -39,7 +42,7 @@ class Object:
     def __init__( self, label, pose, ref = None  ):
         self.ref    = ref # - Belief from which this symbols was sampled
         self.label  = label # Sampled object label
-        self.pose   = pose #- Sampled object pose
+        self.pose   = np.around( pose, _ROUND_PLACES ) #- Sampled object pose
         self.action = None #- Action to which this symbol was assigned
         self.index  = next( self.num )
 

@@ -40,6 +40,7 @@
 import sys, time, datetime, pickle, math
 now = time.time
 from random import random
+from traceback import print_exc
 # from collections import Counter
 # from itertools import count
 
@@ -523,12 +524,18 @@ class ReactiveExecutive:
             self.belief_update()
             nuSym = [bel.sample_symbol() for bel in self.beliefs]
             # nuSym = [bel.sample_fresh() for bel in self.beliefs]
-            print( f"Symbols: {nuSym}" )
+            foundSome = False
             for sym in nuSym:
-                if objName == sym.label:
-                    yield (sym,) 
+                if sym.label != _NULL_NAME:
+                    foundSome = True
+                    print( f"OBJECT stream SUCCESS: {nuSym}\n" )
+                    yield ( Pose( sym.pose ), ) 
+                # if objName == sym.label:
+                #     print( f"OBJECT stream SUCCESS\n" )
+                #     yield ( Pose( sym.pose ), ) 
                 # else yield nothing if we cannot certify the object!
-
+            if not foundSome:
+                print( f"OBJECT stream FAILURE\n" )
         return stream_func
     
 
@@ -540,16 +547,16 @@ class ReactiveExecutive:
             
             print( f"\nEvaluate GRASP stream with args: {args}\n" )
 
-            targetPose = args[0].value
-
-            if targetPose is not None:
-                grasp_pose = targetPose[:]
-                grasp_pose[2] += _GRASP_VERT_OFFSET
-                posn, _ = row_vec_to_pb_posn_ornt( grasp_pose )
-                ornt = _GRASP_ORNT_XYZW.copy()
-                grasp_pose = pb_posn_ornt_to_row_vec( posn, ornt )
-                # yield (Grasp(  Pose( targetPose ), Pose( grasp_pose ) ),)
-                yield (Pose( grasp_pose ),) # FIXME: CHECK THAT THIS GETS CERTIFIED
+            # targetPose = args[0].value
+            label, pose = args
+            grasp_pose = pose.value
+            grasp_pose[2] += _GRASP_VERT_OFFSET
+            posn, _ = row_vec_to_pb_posn_ornt( grasp_pose )
+            ornt = _GRASP_ORNT_XYZW.copy()
+            grasp_pose = Pose( pb_posn_ornt_to_row_vec( posn, ornt ) )
+            # yield (Grasp(  Pose( targetPose ), Pose( grasp_pose ) ),)
+            print( f"GRASP stream SUCCESS: {grasp_pose.value}\n" )
+            yield (grasp_pose,) # FIXME: CHECK THAT THIS GETS CERTIFIED
              # else yield nothing if we cannot certify the object!
 
         return stream_func
@@ -568,7 +575,10 @@ class ReactiveExecutive:
             grspPosn, grspOrnt = row_vec_to_pb_posn_ornt( effPose )
             if diff_norm( currPosn, grspPosn ) < 2.0:
                 graspQ = self.world.robot.calculate_ik_quat( grspPosn, grspOrnt )
+                print( f"IK stream SUCCESS: {graspQ}\n" )
                 yield ( Config( graspQ ), )
+            else:
+                print( f"IK stream FAILURE\n" )
 
         return stream_func
     
@@ -580,7 +590,7 @@ class ReactiveExecutive:
             print( f"\nEvaluate PLACEMENT test with args: {args}\n" )
 
             label, pose = args
-            posn , _    = row_vec_to_pb_posn_ornt( pose )
+            posn , _    = row_vec_to_pb_posn_ornt( pose.value )
 
             ## Sample Symbols ##
             self.belief_update()
@@ -591,7 +601,9 @@ class ReactiveExecutive:
                 if label != sym.label:
                     symPosn, _ = row_vec_to_pb_posn_ornt( sym.pose )
                     if diff_norm( posn, symPosn ) < (2.0*_BLOCK_SCALE):
+                        print( f"PLACEMENT test FAILURE\n" )
                         return False
+            print( f"PLACEMENT test SUCCESS\n" )
             return True
         
         return test_func
@@ -604,8 +616,9 @@ class ReactiveExecutive:
             
             print( f"\nEvaluate TRANSIT test with args: {args}\n" )
 
-            (bgn, end) = args
-            if bgn.value != end.value:
+            # (bgn, end) = args
+            label, bgn, end, effPose = args
+            if diff_norm( bgn.value, end.value ) > 0.0: # FIXME, START HERE: USE THE VECTOR WAY!
 
                 posnBgn, _ = row_vec_to_pb_posn_ornt( bgn.value )
                 posnEnd, _ = row_vec_to_pb_posn_ornt( end.value )
@@ -617,13 +630,19 @@ class ReactiveExecutive:
                 print( f"Symbols: {nuSym}" )
 
                 for sym in nuSym:
-                    Q, _ = row_vec_to_pb_posn_ornt( sym.pose )
-                    d = closest_dist_Q_to_segment_AB( Q, posnBgn, posnEnd )
-                    if d < 2.0*_BLOCK_SCALE:
-                        return False
+                    if sym.label != label:
+                        Q, _ = row_vec_to_pb_posn_ornt( sym.pose )
+                        d = closest_dist_Q_to_segment_AB( Q, posnBgn, posnEnd )
+                        if d < 2.0*_BLOCK_SCALE:
+                            print( f"TRANSIT test FAILURE: {posnBgn}, {posnEnd}\n" )
+                            return False
+                print( f"TRANSIT test SUCCESS\n" )
+                return True
+            else:
+                print( f"TRANSIT test SUCCESS\n" )
                 return True
             
-            return test_func
+        return test_func
             
 
     def get_safe_motion_test( self ):
@@ -636,10 +655,18 @@ class ReactiveExecutive:
             config1, config2 = args
             posn1  , _       = self.world.robot.fk_posn_ornt( config1.value )
             posn2  , _       = self.world.robot.fk_posn_ornt( config2.value )
-            d = closest_dist_Q_to_segment_AB( [0.0,0.0,0.0], posn1, posn2 )
+            d = closest_dist_Q_to_segment_AB( [0.0,0.0,0.0], posn1, posn2, False )
+            if math.isnan( d ):
+                print( f"MOTION test SUCCESS: Non-intersection\n" )
+                return True
+            if diff_norm( posn1, posn2 ) <= 0.0:
+                print( f"MOTION test SUCCESS\n" )
+                return True
             if d < _CLOSEST_TO_BASE:
+                print( f"MOTION test FAILURE: {d}\n" )
                 return False
             else:
+                print( f"MOTION test SUCCESS\n" )
                 return True
             
         return test_func
@@ -658,16 +685,41 @@ class ReactiveExecutive:
 
         print( 'Robot:', self.world.robot.get_name() )
         conf = Config( self.world.robot.get_joint_angles() )
-        init = [('CanMove',),
-                ('Conf', conf),
-                ('AtConf', conf),
-                ('HandEmpty',)]
+        pose = Pose( pb_posn_ornt_to_row_vec( *self.world.robot.get_current_pose() ) )
+        
+        trgt = Pose( [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
+        # trgt = Pose( [ 0.492, 0.134, 0.600, 0.707, 0.0, 0.707, 0.0 ] )
+        
+        tCnf = Config( [0 for _ in range(6)] )
+        
+        init = [
+            ## Init Predicates ##
+            ('Conf', conf),
+            ('AtConf', conf),
+            ('EffPose', pose),
+            ('AtPose', pose),
+            ('Conf', tCnf),
+            ('HandEmpty',),
+            ## Goal Predicates ##
+            ('Pose', trgt)
+        ] # WARNING: UNBOUND POSE?
+        
+        print( f"### Initial Symbols ###" )
+        for sym in init:
+            print( f"\t{sym}" )
+
         print( "Robot grounded!" )
 
         for body in _ACTUAL_NAMES:
             init.append( ('Graspable', body) )
 
-        goal = ('AtPose', 'redBlock', [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ])  
+        goal = ('and',
+                ('WObject', 'redBlock', trgt),
+                ('HandEmpty',)
+        )
+        # goal = ('Holding', 'redBlock')  
+        # goal = ('AtConf', tCnf)  
+        # goal = ('AtPose', trgt)  
 
         """ # SAVE THIS FOR THE FINAL DEMO
         goal = ( 'and',
@@ -710,16 +762,30 @@ if __name__ == "__main__":
     world.spin_for( 500 )
 
     planner = ReactiveExecutive( world )
+
     print( '\n\n\n##### PDLS INIT #####' )
     problem = planner.pddlstream_from_problem()
     print( 'Created!\n\n\n' )
 
-    # solution = solve( problem, 
-    #                   algorithm = "incremental", #"adaptive", 
-    #                   unit_costs=True, success_cost=1 )
-    # print( "Solver has completed!" )
-    # print_solution( solution )
-    # plan, cost, evaluations = solution
+    print( '##### PDLS SOLVE #####' )
+    try:
+        solution = solve( problem, 
+                          algorithm = "incremental", #"focused", #"binding", #"incremental", #"adaptive", 
+                          unit_costs = True, success_cost = 1,
+                          visualize = True,
+                          initial_complexity=4  )
+        print( "Solver has completed!\n\n\n" )
+    except Exception as ex:
+        print( "SOLVER FAULT\n" )
+        print_exc()
+        solution = (None, None, None)
+        print( "\n\n\n" )
+
+    
+
+
+    print_solution( solution )
+    plan, cost, evaluations = solution
 
 #     def exec_plans_noisy( self, N = 1200,  Npause = 200 ):
 #         """ Execute partially observable plans """
