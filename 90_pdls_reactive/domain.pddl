@@ -7,14 +7,14 @@
 
     ;;; Symbols ;;;
     (WObject ?label ?pose); Sample from world -or- Produced by actions
-    (IKSoln ?pose ?config) ; Sample from pose
-    (Grasp ?pose ?effPose) ; Sample from pose
+    (IKSoln ?pose ?config) ; Sample from hand pose
+    (Grasp ?pose ?effPose) ; Sample from object pose
 
     ;;; Domains ;;;
     (Graspable ?label) ; Used by "stream.pddl"
     (Conf ?config) ; Used by "stream.pddl"
-    (Pose ?pose)
-    (EffPose ?pose)
+    (Pose ?pose) ; Used by "stream.pddl"
+    (EffPose ?pose) ; Used by "stream.pddl"
   
     ;;; States ;;;
     (Holding ?label) ; From Pick
@@ -23,17 +23,20 @@
     (AtPose ?effPose) ; From Move Holding
 
     ;;; Checks ;;;
-    (FreePlacement ?label ?pose) ; Checked by world
-    (SafeTransit ?label ?bgnPose ?endPose ) ; Checked by world
-    (SafeMotion ?config1 ?config2) ; Checked by world
+    (FreePlacement ?label ?pose) ; Is there an open spot for placement?: Checked by world
+    (SafeTransit ?label ?bgnPose ?endPose ) ; Is there a safe path from A to B?: Checked by world
+    (SafeMotion ?config1 ?config2) ; Is there a safe path from config A to config B?: Checked by world
   )
 
   ;;;;;;;;;; ACTIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
   (:action move_q
     :parameters (?config1 ?config2)
-    :precondition (and (SafeMotion ?config1 ?config2)
-                       (AtConf ?config1) 
+    :precondition (and 
+                    ;; Knowns ;;
+                    (AtConf ?config1) 
+                    ;; Requirements ;;
+                    (SafeMotion ?config1 ?config2)
                   )
     :effect (and (AtConf ?config2)
                  (not (AtConf ?config1)) ) 
@@ -41,10 +44,14 @@
 
   (:action move_free
     :parameters (?effPose1 ?effPose2 ?config1 ?config2)
-    :precondition (and (AtPose ?effPose1)
-                       (HandEmpty)
-                       (IKSoln ?effPose2 ?config2) 
-                       (IKSoln ?effPose1 ?config1)
+    :precondition (and 
+                    ;; Knowns ;;
+                    (AtPose ?effPose1)
+                    (HandEmpty)
+                    ;; Requirements ;;
+                    (IKSoln ?effPose2 ?config2) 
+                    (IKSoln ?effPose1 ?config1)
+                    (SafeMotion ?config1 ?config2)
                   )
     :effect (and (AtPose ?effPose2)
                  (not (AtPose ?effPose1))
@@ -55,10 +62,13 @@
 
   (:action pick
     :parameters (?label ?pose ?effPose)
-    :precondition (and (WObject ?label ?pose)
-                       (Grasp ?pose ?effPose)
-                       (AtPose ?effPose)
-                       (HandEmpty)
+    :precondition (and 
+                    ;; Knowns ;;
+                    (WObject ?label ?pose)
+                    (AtPose ?effPose)
+                    (HandEmpty)
+                    ;; Requirements ;;
+                    (Grasp ?pose ?effPose)   
                   )
     :effect (and (Holding ?label) 
                  (not (HandEmpty)))
@@ -66,12 +76,17 @@
 
   (:action move_holding
     :parameters (?label ?bgnPose ?endPose ?effPose1 ?effPose2 ?config1 ?config2)
-    :precondition (and (Grasp ?bgnPose ?effPose1)
-                       (Grasp ?endPose ?effPose2)
-                       (Holding ?label)
-                       (IKSoln ?effPose2 ?config2) 
-                       (IKSoln ?effPose1 ?config1)
-                       (AtPose ?effPose1)
+    :precondition (and 
+                    ;; Knowns ;;
+                    (Holding ?label)
+                    (AtPose ?effPose1)
+                    ;; Requirements ;;
+                    (Grasp ?bgnPose ?effPose1)
+                    (IKSoln ?effPose1 ?config1)
+                    (Grasp ?endPose ?effPose2)
+                    (IKSoln ?effPose2 ?config2) 
+                    (SafeMotion ?config1 ?config2)
+                    (SafeTransit ?label ?bgnPose ?endPose)
                   )
     :effect (and (WObject ?label ?endPose) 
                  (not (WObject ?label ?bgnPose))
@@ -84,10 +99,13 @@
 
   (:action place
     :parameters (?label ?pose ?effPose)
-    :precondition (and (FreePlacement ?label ?pose)
-                       (Holding ?label)
-                       (Grasp ?pose ?effPose)
-                       (AtPose ?effPose)
+    :precondition (and 
+                    ;; Knowns ;;
+                    (AtPose ?effPose)
+                    (Holding ?label)
+                    ;; Requirements ;;
+                    (FreePlacement ?label ?pose)
+                    (Grasp ?pose ?effPose)
                   )
     :effect (and (HandEmpty) 
                  (not (Holding ?label)))

@@ -33,9 +33,9 @@
 
   ;; Safe Transit Test ;;
   (:stream test-safe-transit
-    :inputs (?label ?objPose ?endPose ?effPose)
-    :domain (and (Graspable ?label) (Pose ?objPose) (Pose ?endPose) (EffPose ?effPose))
-    :certified (FreePlacement ?label ?endPose)
+    :inputs (?label ?bgnPose ?endPose)
+    :domain (and (Graspable ?label) (Pose ?bgnPose) (Pose ?endPose))
+    :certified (SafeTransit ?label ?bgnPose ?endPose)
   )
 
   ;; Safe Motion Test ;;

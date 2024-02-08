@@ -617,7 +617,7 @@ class ReactiveExecutive:
             print( f"\nEvaluate TRANSIT test with args: {args}\n" )
 
             # (bgn, end) = args
-            label, bgn, end, effPose = args
+            label, bgn, end = args
             if diff_norm( bgn.value, end.value ) > 0.0: # FIXME, START HERE: USE THE VECTOR WAY!
 
                 posnBgn, _ = row_vec_to_pb_posn_ornt( bgn.value )
@@ -632,7 +632,7 @@ class ReactiveExecutive:
                 for sym in nuSym:
                     if sym.label != label:
                         Q, _ = row_vec_to_pb_posn_ornt( sym.pose )
-                        d = closest_dist_Q_to_segment_AB( Q, posnBgn, posnEnd )
+                        d = closest_dist_Q_to_segment_AB( Q, posnBgn, posnEnd, True )    
                         if d < 2.0*_BLOCK_SCALE:
                             print( f"TRANSIT test FAILURE: {posnBgn}, {posnEnd}\n" )
                             return False
@@ -690,7 +690,7 @@ class ReactiveExecutive:
         trgt = Pose( [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
         # trgt = Pose( [ 0.492, 0.134, 0.600, 0.707, 0.0, 0.707, 0.0 ] )
         
-        tCnf = Config( [0 for _ in range(6)] )
+        # tCnf = Config( [0 for _ in range(6)] )
         
         init = [
             ## Init Predicates ##
@@ -698,7 +698,6 @@ class ReactiveExecutive:
             ('AtConf', conf),
             ('EffPose', pose),
             ('AtPose', pose),
-            ('Conf', tCnf),
             ('HandEmpty',),
             ## Goal Predicates ##
             ('Pose', trgt)
