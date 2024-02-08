@@ -67,7 +67,7 @@ sys.path.append( "../" )
 from utils import ( row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec, diff_norm, closest_dist_Q_to_segment_AB, )
 
 from env_config import ( _GRASP_VERT_OFFSET, _GRASP_ORNT_XYZW, _NULL_NAME, _ACTUAL_NAMES, _MIN_X_OFFSET,
-                         _NULL_THRESH, _BLOCK_SCALE, _CLOSEST_TO_BASE )
+                         _NULL_THRESH, _BLOCK_SCALE, _CLOSEST_TO_BASE, _ACCEPT_POSN_ERR )
 from pb_BT import connect_BT_to_robot_world
 from PB_BlocksWorld import PB_BlocksWorld
 from symbols import Pose, Config
@@ -167,60 +167,66 @@ class DataLogger:
 
 ########## ACTIONS #################################################################################
 
-    
-# class GroundedAction( Sequence ):
-#     """ This is the parent class for all actions available to the planner """
+class GroundedAction( Sequence ):
+    """ This is the parent class for all actions available to the planner """
 
-#     def __init__( self, objName, goal, world = None, robot = None, name = "Grounded Sequence" ):
-#         super().__init__( name = name )
-#         self.objName = objName # Type of object required
-#         self.goal    = goal # -- Destination pose
-#         self.symbol  = None # -- Symbol on which this behavior relies
-#         self.msg     = "" # ---- Message: Reason this action failed -or- OTHER
-#         self.ctrl    = robot # - Agent that executes
-#         self.world   = world  #- Simulation ref
+    def __init__( self, goal = None, world = None, robot = None, name = "Grounded Sequence" ):
+        super().__init__( name = name )
+        self.goal   = goal if (goal is not None) else list() # Predicates satisfied by this action
+        self.symbol = None # -- Symbol on which this behavior relies
+        self.msg    = "" # ---- Message: Reason this action failed -or- OTHER
+        self.ctrl   = robot # - Agent that executes
+        self.world  = world  #- Simulation ref
 
-#     def get_grounded( self, symbol ):
-#         """ Copy action with a symbol attached """
-#         rtnAct = self.__class__( self.objName, self.goal, self.world, self.ctrl, self.name )
-#         rtnAct.symbol = symbol
-#         symbol.action = rtnAct
-#         return rtnAct
+    def get_grounded( self, symbol ):
+        """ Copy action with a symbol attached """
+        rtnAct = self.__class__( self.goal, self.world, self.ctrl, self.name )
+        rtnAct.symbol = symbol
+        symbol.action = rtnAct
+        return rtnAct
     
-#     def copy( self ):
-#         """ Deep copy """
-#         rtnObj = self.__class__( self.objName, self.goal, self.world, self.ctrl, self.name )
-#         rtnObj.status = self.status
-#         rtnObj.symbol = self.symbol
-#         return rtnObj
+    def copy( self ):
+        """ Deep copy """
+        rtnObj = self.__class__( self.goal, self.world, self.ctrl, self.name )
+        rtnObj.status = self.status
+        rtnObj.symbol = self.symbol
+        return rtnObj
     
-#     def p_grounded( self ):
-#         """ Return true if a symbol was assigned to this action """
-#         return (self.symbol is not None)
+    def p_grounded( self ):
+        """ Return true if a symbol was assigned to this action """
+        return (self.symbol is not None)
     
-#     def set_ground( self, symbol ):
-#         """ Attach symbol """
-#         self.symbol   = symbol
-#         symbol.action = self
+    def set_ground( self, symbol ):
+        """ Attach symbol """
+        self.symbol   = symbol
+        symbol.action = self
 
-#     def cost( self ):
-#         raise NotImplementedError( f"{self.name} REQUIRES a `cost` implementation!" )
+    def cost( self ):
+        raise NotImplementedError( f"{self.name} REQUIRES a `cost` implementation!" )
 
-#     def prep( self ):
-#         raise NotImplementedError( f"{self.name} REQUIRES a `prep` implementation!" )
+    def prep( self ):
+        raise NotImplementedError( f"{self.name} REQUIRES a `prep` implementation!" )
     
-#     def validate_in_world( self ):
-#         """ Check if the goal is already met """
-#         return self.world.check_predicate( self.goal, _ACCEPT_POSN_ERR )
+    def validate_in_world( self ):
+        """ Check if the goal is already met """
+        for prdct in self.goal:
+            if not self.world.check_predicate( prdct, _ACCEPT_POSN_ERR ):
+                return False
+        return True
+
+class MoveFree( GroundedAction ):
+    """ Move the unburdened effector to the given location """
+    def __init__( self, goal = None, world = None, robot = None, name = None ):
+        if name is None:
+            name = f"MoveFree"
+        super().__init__( goal, world, robot, name )
+    # FIXME: START HERE
 
 
 # class Pick( GroundedAction ):
 #     """ BT that produces <OBJ@HAND> """
 
-#     def __init__( self, objName, goal = None, world = None, robot = None, name = None ):
-#         if name is None:
-#             name = f"Pick: {objName} --> HAND"
-#         super().__init__( objName, "HAND", world, robot, name )
+#     
     
 #     def __repr__( self ):
 #         """ String representation of the action """
