@@ -2,7 +2,7 @@
 """
 ##### Planning #####
 [Y] Rewrite `Object`, 2024-02-05: Seems correct!
-[>] Rewrite Functions and Stream specs
+[Y] Rewrite Functions and Stream specs, 2024-02-07: Consistent!
     [Y] Object poses, 2024-02-05: Seems correct!
         [Y] Stream spec, 2024-02-05: Seems correct!
     [Y] Grasp effector pose from object pose, 2024-02-05: Seems correct!
@@ -16,17 +16,20 @@
     [Y] SafeMotion, Checked by world, 2024-02-07: Seems correct!
         [Y] Stream spec, 2024-02-07: Seems correct!
 [Y] Instantiate a PDLS world, 2024-02-07: No errors
-[ ] Successful Planning
-    [ ] Q: Can I ask the solver to be VERBOSE?
+[Y] Successful Planning, 2024-02-07: Pick && Place!
+    [Y] Q: Can I ask the solver to be VERBOSE?, 2024-02-07: Vebose was already the default
 
 ##### Execution #####
-[ ] Rewrite Action drafts
-    [ ] Place
-    [ ] Move_Holding
-    [ ] Pick
-    [ ] Move_Free
-[ ] Successful Plan Execution
-    [ ] Test reactivity
+[Y] Rewrite Action drafts
+    [Y] Inspect plan output, 2024-02-08: Seems to make sense, but need to parse goals!
+    [Y] Move_Free, 2024-02-08: Easy!
+    [Y] Pick, 2024-02-08: Easy!
+    [Y] Move_Holding, 2024-02-08: Easy!
+    [Y] Place, 2024-02-08: Easy!
+[>] Successful Plan Execution
+    [>] Open Loop
+    [ ] Stepwise
+    [ ] Reactive
 [ ] Non-Reactive Version
 """
 
@@ -68,7 +71,7 @@ from utils import ( row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec, diff_norm,
 
 from env_config import ( _GRASP_VERT_OFFSET, _GRASP_ORNT_XYZW, _NULL_NAME, _ACTUAL_NAMES, _MIN_X_OFFSET,
                          _NULL_THRESH, _BLOCK_SCALE, _CLOSEST_TO_BASE, _ACCEPT_POSN_ERR )
-from pb_BT import connect_BT_to_robot_world
+from pb_BT import connect_BT_to_robot_world, Move_Arm, Grasp, Ungrasp
 from PB_BlocksWorld import PB_BlocksWorld
 from symbols import Pose, Config
 
@@ -94,15 +97,19 @@ class BT_Runner:
 
     def display_BT( self ):
         """ Draw the BT along with the status of all the nodes """
-        py_trees.display.unicode_tree( root = self.root, show_status = True )
+        print( py_trees.display.unicode_tree( root = self.root, show_status = True ) )
+
+    def p_ended( self ):
+        """ Has the BT ended? """
+        return self.status in ( Status.FAILURE, Status.SUCCESS )
 
     def tick_once( self ):
         """ Run one simulation step """
         self.world.spin_for( self.Nstep )
-        if self.status not in ( Status.FAILURE, Status.SUCCESS ):
+        if not self.p_ended():
             self.root.tick_once()
         self.status = self.root.status
-        if self.status in ( Status.FAILURE, Status.SUCCESS ):
+        if self.p_ended():
             self.display_BT()    
 
     
@@ -170,8 +177,9 @@ class DataLogger:
 class GroundedAction( Sequence ):
     """ This is the parent class for all actions available to the planner """
 
-    def __init__( self, goal = None, world = None, robot = None, name = "Grounded Sequence" ):
+    def __init__( self, args = None, goal = None, world = None, robot = None, name = "Grounded Sequence" ):
         super().__init__( name = name )
+        self.args   = args if (args is not None) else list() # Prerequisites required by this action
         self.goal   = goal if (goal is not None) else list() # Predicates satisfied by this action
         self.symbol = None # -- Symbol on which this behavior relies
         self.msg    = "" # ---- Message: Reason this action failed -or- OTHER
@@ -213,136 +221,78 @@ class GroundedAction( Sequence ):
             if not self.world.check_predicate( prdct, _ACCEPT_POSN_ERR ):
                 return False
         return True
+    
+    def __repr__( self ):
+        """ Get the name, Assume child classes made it sufficiently descriptive """
+        return str( self.name )
+    
+# 2024-02-08: Ignore goal parsing & checking until all necessary actions execute in PB
+# FIXME: ADD GOAL PARSING
+# FIXME: ADD GOAL CHECKING
+
 
 class MoveFree( GroundedAction ):
     """ Move the unburdened effector to the given location """
-    def __init__( self, goal = None, world = None, robot = None, name = None ):
+    def __init__( self, args, goal = None, world = None, robot = None, name = None ):
+
+        effPose1, effPose2, config1, config2 = args
+
         if name is None:
-            name = f"MoveFree"
-        super().__init__( goal, world, robot, name )
-    # FIXME: START HERE
-
-
-# class Pick( GroundedAction ):
-#     """ BT that produces <OBJ@HAND> """
-
-#     
+            name = f"Move Free to {effPose2}"
+        super().__init__( args, goal, world, robot, name )
     
-#     def __repr__( self ):
-#         """ String representation of the action """
-#         return f"Pick: {self.objName} --> HAND"
+        posn, ornt = row_vec_to_pb_posn_ornt( effPose2.value )
 
-#     def cost( self ):
-#         """ Get the linear distance between the symbol pose and the destination """
-#         robtPosn, robtOrnt = self.ctrl.get_current_pose()
-#         return translation_diff( pb_posn_ornt_to_homog( robtPosn, robtOrnt ), row_vec_to_homog( self.symbol.pose ) )
+        self.add_child( 
+            Move_Arm( posn, ornt, name = name, ctrl = robot, world = world )
+        )
 
-#     def prep( self ):
-#         """ Use the symbol grounding to parameterize the BT """
 
-#         # 0. Check if the goal has already been met, PDLS FIXME
-#         if self.validate_in_world():
-#             print( f"{self.name} ALREADY DONE" )
-#             self.status = Status.SUCCESS
-#             return
+class Pick( GroundedAction ):
+    """ Move the unburdened effector to the given location """
+    def __init__( self, args, goal = None, world = None, robot = None, name = None ):
 
-#         # 1. Fetch ref to the object nearest the pose, if any
-#         graspPose = self.symbol.pose
-#         handle    = self.world.get_handle_at_pose( graspPose )
-
-#         if handle is not None:
-#             goalNam = self.world.get_handle_name( handle )
-
-#             posnTgt, orntTgt = row_vec_to_pb_posn_ornt( graspPose )
-            
-#             posnTgt[2] += _GRASP_VERT_OFFSET
-#             orntTgt = _GRASP_ORNT_XYZW.copy()
-
-#             self.add_child( Pick_at_Pose( posnTgt, orntTgt, goalNam, zSAFE = _Z_SAFE, name = f"Pick_at_Pose: {graspPose}", 
-#                                           ctrl = self.ctrl, world = self.world ) )
-#         else:
-#             self.status = Status.FAILURE
-#             self.msg    = "Object miss"
-
+        label, pose, effPose = args
         
-# class Place( GroundedAction ):
-#     """ BT that produces <OBJ@HAND> """
+        if name is None:
+            name = f"Pick object {label} at {pose}"
+        super().__init__( args, goal, world, robot, name )
 
-#     def __init__( self, objName, goal, world = None, robot = None, name = None ):
-#         if name is None:
-#             name = f"Place: {objName} --> {goal}"
-#         super().__init__( objName, goal, world, robot, name )
+        self.add_child( 
+            Grasp( label, name = name, ctrl = robot, world = world )
+        )
+
+
+class MoveHolding( GroundedAction ):
+    """ Move the unburdened effector to the given location """
+    def __init__( self, args, goal = None, world = None, robot = None, name = None ):
+
+        label, bgnPose, endPose, effPose1, effPose2, config1, config2 = args
+
+        if name is None:
+            name = f"Move Holding {label} to {endPose}"
+        super().__init__( args, goal, world, robot, name )
     
-#     def __repr__( self ):
-#         """ String representation of the action """
-#         return f"Place: {self.objName} --> {self.goal}"
+        posn, ornt = row_vec_to_pb_posn_ornt( effPose2.value )
 
-#     def cost( self ):
-#         """ Get the linear distance between the symbol pose and the destination """
-#         robtPosn, robtOrnt = self.ctrl.get_current_pose()
-#         return translation_diff( pb_posn_ornt_to_homog( robtPosn, robtOrnt ), row_vec_to_homog( self.goal ) )
-    
-#     def prep( self ):
-#         """ Use the symbol grounding to parameterize the BT """
-
-#         # 0. Check if the goal has already been met, PDLS FIXME
-#         if self.validate_in_world():
-#             print( f"{self.name} ALREADY DONE" )
-#             self.status = Status.SUCCESS
-#             return
-
-#         # 1. Fetch ref to the object nearest the pose, if any
-#         posnEnd, orntEnd = row_vec_to_pb_posn_ornt( self.goal )
-
-#         if self.symbol is not None:
-            
-#             posnEnd[2] += _GRASP_VERT_OFFSET
-#             orntEnd = _GRASP_ORNT_XYZW.copy()
-#             self.add_child( Place_at_Pose( posnEnd, orntEnd, zSAFE = _Z_SAFE, name = "Place_at_Pose", 
-#                                            ctrl = self.ctrl, world = self.world ) )
-#         else:
-#             self.status = Status.FAILURE
-#             self.msg    = "Object miss"
+        self.add_child( 
+            Move_Arm( posn, ornt, name = name, ctrl = robot, world = world )
+        )
 
 
-# class Stack( GroundedAction ):
-#     """ BT that produces <OBJ@HAND> """
+class Place( GroundedAction ):
+    """ Move the unburdened effector to the given location """
+    def __init__( self, args, goal = None, world = None, robot = None, name = None ):
 
-#     def __init__( self, objName, goal, world = None, robot = None, name = None ):
-#         if name is None:
-#             name = f"Place: {objName} --> {goal}"
-#         super().__init__( objName, goal, world, robot, name )
-    
-#     def __repr__( self ):
-#         """ String representation of the action """
-#         return f"Stack: {self.objName} --> {self.goal}"
+        label, pose, effPose = args
+        
+        if name is None:
+            name = f"Place object {label} at {pose}"
+        super().__init__( args, goal, world, robot, name )
 
-#     def cost( self ):
-#         """ Get the linear distance between the symbol pose and the destination """
-#         robtPosn, robtOrnt = self.ctrl.get_current_pose()
-#         return translation_diff( pb_posn_ornt_to_homog( robtPosn, robtOrnt ), row_vec_to_homog( self.goal ) )
-    
-#     def prep( self ):
-#         """ Use the symbol grounding to parameterize the BT """
-
-#         # 0. Check if the goal has already been met, PDLS FIXME
-#         if self.validate_in_world():
-#             print( f"{self.name} ALREADY DONE" )
-#             self.status = Status.SUCCESS
-#             return
-
-#         # 1. Fetch ref to the object nearest the pose, if any
-#         posnEnd, orntEnd = row_vec_to_pb_posn_ornt( self.goal )
-
-#         if self.symbol is not None:
-            
-#             posnEnd[2] += _GRASP_VERT_OFFSET
-#             orntEnd = _GRASP_ORNT_XYZW.copy()
-#             self.add_child( Place_at_Pose( posnEnd, orntEnd, zSAFE = _Z_SAFE, name = "Place_at_Pose", 
-#                                            ctrl = self.ctrl, world = self.world ) )
-#         else:
-#             self.status = Status.FAILURE
-#             self.msg    = "Object miss"
+        self.add_child( 
+            Ungrasp( name = name, ctrl = robot, world = world )
+        )
 
 ########## PLANNER HELPERS #########################################################################
 
@@ -381,16 +331,17 @@ def release_plan_symbols( plan ):
             action.symbol = None
 
 
+########## PDDL PARSING ############################################################################
+
 
 ########## PLANS ###################################################################################
-
 
 class Plan( Sequence ):
     """ Special BT `Sequence` with assigned priority, cost, and confidence """
 
     def __init__( self ):
         """ Set default priority """
-        super().__init__()
+        super().__init__( name = "PDDLStream Plan" )
         self.rank   = 0.0 # -------------- Priority of this plan
         self.rand   = random() * 10000.0 # Tie-breaker for sorting
         self.goal   = -1 # --------------- Goal that this plan satisfies if completed
@@ -429,6 +380,30 @@ class Plan( Sequence ):
         # for action in self:
         #     rtnGoal.append( Pose( None, action.objName, action.goal, _SUPPORT_NAME ) )
         # return rtnGoal
+
+def get_BT_plan_from_PDLS_plan( pdlsPlan, world ):
+    """ Translate the PDLS plan to one that can be executed by the robot """
+    rtnBTlst = []
+    if pdlsPlan is not None:
+        for i, pdlsAction in enumerate( pdlsPlan ):
+            actName  = pdlsAction.name
+            actArgs  = pdlsAction.args
+            btAction = None
+            if actName == "move_free":
+                btAction = MoveFree( actArgs, goal=None, world = world, robot=world.robot )
+            elif actName == "pick":
+                btAction = Pick( actArgs, goal=None, world = world, robot=world.robot )
+            elif actName == "move_holding":
+                btAction = MoveHolding( actArgs, goal=None, world = world, robot=world.robot )
+            elif actName == "place":
+                btAction = Place( actArgs, goal=None, world = world, robot=world.robot )
+            else:
+                raise NotImplementedError( f"There is no BT procedure defined for a PDDL action named {actName}!" )
+            print( f"Action {i+1}, {actName} --> {btAction.name}, planned!" )
+            rtnBTlst.append( btAction )
+    rtnPlan = Plan()
+    rtnPlan.add_children( rtnBTlst )
+    return rtnPlan
     
 
 
@@ -527,19 +502,14 @@ class ReactiveExecutive:
             objName = args[0]
 
             ## Sample Symbols ##
-            self.belief_update()
-            nuSym = [bel.sample_symbol() for bel in self.beliefs]
-            # nuSym = [bel.sample_fresh() for bel in self.beliefs]
+            # self.belief_update()
+            nuSym     = [bel.sample_symbol() for bel in self.beliefs]
             foundSome = False
             for sym in nuSym:
                 if sym.label != _NULL_NAME:
                     foundSome = True
                     print( f"OBJECT stream SUCCESS: {nuSym}\n" )
                     yield ( Pose( sym.pose ), ) 
-                # if objName == sym.label:
-                #     print( f"OBJECT stream SUCCESS\n" )
-                #     yield ( Pose( sym.pose ), ) 
-                # else yield nothing if we cannot certify the object!
             if not foundSome:
                 print( f"OBJECT stream FAILURE\n" )
         return stream_func
@@ -553,20 +523,19 @@ class ReactiveExecutive:
             
             print( f"\nEvaluate GRASP stream with args: {args}\n" )
 
-            # targetPose = args[0].value
             label, pose = args
             grasp_pose = pose.value
             grasp_pose[2] += _GRASP_VERT_OFFSET
             posn, _ = row_vec_to_pb_posn_ornt( grasp_pose )
             ornt = _GRASP_ORNT_XYZW.copy()
             grasp_pose = Pose( pb_posn_ornt_to_row_vec( posn, ornt ) )
-            # yield (Grasp(  Pose( targetPose ), Pose( grasp_pose ) ),)
             print( f"GRASP stream SUCCESS: {grasp_pose.value}\n" )
             yield (grasp_pose,) # FIXME: CHECK THAT THIS GETS CERTIFIED
-             # else yield nothing if we cannot certify the object!
+            # else yield nothing if we cannot certify the object!
 
         return stream_func
     
+
     def get_IK_solver( self ):
         """ Return a function that computes Inverse Kinematics for a pose """
 
@@ -588,6 +557,7 @@ class ReactiveExecutive:
 
         return stream_func
     
+
     def get_free_placement_test( self ):
         """ Return a function that checks if the pose is free from obstruction """
 
@@ -599,9 +569,8 @@ class ReactiveExecutive:
             posn , _    = row_vec_to_pb_posn_ornt( pose.value )
 
             ## Sample Symbols ##
-            self.belief_update()
+            # self.belief_update()
             nuSym = [bel.sample_symbol() for bel in self.beliefs]
-            # nuSym = [bel.sample_fresh() for bel in self.beliefs]
             print( f"Symbols: {nuSym}" )
             for sym in nuSym:
                 if label != sym.label:
@@ -622,15 +591,14 @@ class ReactiveExecutive:
             
             print( f"\nEvaluate TRANSIT test with args: {args}\n" )
 
-            # (bgn, end) = args
             label, bgn, end = args
-            if diff_norm( bgn.value, end.value ) > 0.0: # FIXME, START HERE: USE THE VECTOR WAY!
+            if diff_norm( bgn.value, end.value ) > 0.0: 
 
                 posnBgn, _ = row_vec_to_pb_posn_ornt( bgn.value )
                 posnEnd, _ = row_vec_to_pb_posn_ornt( end.value )
 
                 ## Sample Symbols ##
-                self.belief_update()
+                # self.belief_update()
                 nuSym = [bel.sample_symbol() for bel in self.beliefs]
                 # nuSym = [bel.sample_fresh() for bel in self.beliefs]
                 print( f"Symbols: {nuSym}" )
@@ -707,7 +675,7 @@ class ReactiveExecutive:
             ('HandEmpty',),
             ## Goal Predicates ##
             ('Pose', trgt)
-        ] # WARNING: UNBOUND POSE?
+        ] 
         
         print( f"### Initial Symbols ###" )
         for sym in init:
@@ -768,6 +736,8 @@ if __name__ == "__main__":
 
     planner = ReactiveExecutive( world )
 
+    planner.belief_update() # We need at least an initial set of beliefs in order to plan
+
     print( '\n\n\n##### PDLS INIT #####' )
     problem = planner.pddlstream_from_problem()
     print( 'Created!\n\n\n' )
@@ -786,11 +756,58 @@ if __name__ == "__main__":
         solution = (None, None, None)
         print( "\n\n\n" )
 
-    
-
-
     print_solution( solution )
     plan, cost, evaluations = solution
+    print( f"\n\n\nPlan output from PDDLStream:" )
+    if plan is not None:
+        for i, action in enumerate( plan ):
+            print( f"\t{i+1}: { action.__class__.__name__ }, {action.name}" )
+            for j, arg in enumerate( action.args ):
+                print( f"\t\tArg {j}:\t{type( arg )}, {arg}" )
+    else:
+        print( plan )
+    # print( dir( plan[0] ) )
+    print( "\n\n\n" )
+
+    """
+    Plan has type: <class 'list'>
+	1:	<class 'pddlstream.language.constants.Action'>, move_free
+		1:	<class 'symbols.Pose'>, <Pose 0: [ 0.492  0.134  0.488  0.707 -0.     0.707 -0.   ]>
+		2:	<class 'symbols.Pose'>, <Pose 4: [0.671 0.265 0.098 0.707 0.    0.707 0.   ]>
+		3:	<class 'symbols.Config'>, <Config 1: [ 0.    -1.571  1.571 -1.571 -1.571  0.   ]>
+		4:	<class 'symbols.Config'>, <Config 3: [ 0.188 -0.757  1.472 -2.286 -1.571  0.188]>
+	2:	<class 'pddlstream.language.constants.Action'>, pick
+		1:	<class 'str'>, redBlock
+		2:	<class 'symbols.Pose'>, <Pose 2: [ 0.671  0.265  0.098  1.003 -0.008  0.011 -0.002]>
+		3:	<class 'symbols.Pose'>, <Pose 4: [0.671 0.265 0.098 0.707 0.    0.707 0.   ]>
+	3:	<class 'pddlstream.language.constants.Action'>, move_holding
+		1:	<class 'str'>, redBlock
+		2:	<class 'symbols.Pose'>, <Pose 2: [ 0.671  0.265  0.098  1.003 -0.008  0.011 -0.002]>
+		3:	<class 'symbols.Pose'>, <Pose 1: [0.476 0.    0.114 1.    0.    0.    0.   ]>
+		4:	<class 'symbols.Pose'>, <Pose 4: [0.671 0.265 0.098 0.707 0.    0.707 0.   ]>
+		5:	<class 'symbols.Pose'>, <Pose 3: [0.476 0.    0.114 0.707 0.    0.707 0.   ]>
+		6:	<class 'symbols.Config'>, <Config 3: [ 0.188 -0.757  1.472 -2.286 -1.571  0.188]>
+		7:	<class 'symbols.Config'>, <Config 2: [-0.282 -1.182  2.223 -2.611 -1.571 -0.282]>
+	4:	<class 'pddlstream.language.constants.Action'>, place
+		1:	<class 'str'>, redBlock
+		2:	<class 'symbols.Pose'>, <Pose 1: [0.476 0.    0.114 1.    0.    0.    0.   ]>
+		3:	<class 'symbols.Pose'>, <Pose 3: [0.476 0.    0.114 0.707 0.    0.707 0.   ]>
+
+    """
+
+    btPlan = get_BT_plan_from_PDLS_plan( plan, world )
+    print( "\n\n\n" )
+
+    btr = BT_Runner( btPlan, world, 20.0 )
+    btr.setup_BT_for_running()
+
+    while not btr.p_ended():
+        btr.tick_once()
+
+    # btr.display_BT()
+
+    robot.goto_home()
+    world.spin_for( 500 )
 
 #     def exec_plans_noisy( self, N = 1200,  Npause = 200 ):
 #         """ Execute partially observable plans """
