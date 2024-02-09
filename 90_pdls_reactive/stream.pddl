@@ -2,20 +2,36 @@
 
 ;;;;;;;;;; SYMBOL STREAMS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+  ;; Stack Location Search ;;
+  (:stream find-stack-place
+    :inputs (?labelUp ?tgtDn1 ?tgtDn2)
+    :domain (and (Graspable ?labelUp) (Tgt ?tgtDn1) (Tgt ?tgtDn2))
+    :outputs (?poseUp)
+    :certified (and (Pose ?poseUp) (StackPlace ?labelDn1 ?labelDn2 ?poseUp ?poseDn1 ?poseDn2))
+  )
+
+  ;; Free Placement Search ;;
+  (:stream find-free-placment
+    :inputs (?label ?pose)
+    :domain (and (Graspable ?label) (Pose ?pose))
+    :outputs (?tgt)
+    :certified (and (Tgt ?tgt) (FreePlacement ?tgt))
+  )
+
   ;; Object Pose Stream ;;
   (:stream sample-object
     :inputs (?label)
     :domain (Graspable ?label)
-    :outputs (?pose)
-    :certified (and (WObject ?label ?pose) (Pose ?pose))
+    :outputs (?obj)
+    :certified (Obj ?obj)
   )
 
   ;; Object Grasp Stream ;;
   (:stream sample-grasp
-    :inputs (?label ?pose)
-    :domain (and (Graspable ?label) (Pose ?pose)) ; ; We have to have a pose for this object before we can grasp it!
+    :inputs (?effPose)
+    :domain (and (Obj ?obj)) ; ; We have to have a pose for this object before we can grasp it!
     :outputs (?effPose)
-    :certified (and (EffPose ?effPose) (Grasp ?pose ?effPose))
+    :certified (and (Grasp ?label ?pose ?effPose))
   )
 
   ;; IK Solver ;;
@@ -34,19 +50,7 @@
     :certified (Path ?label ?bgnPose ?endPose ?traj)
   )
 
-  ;; Stack Location Search ;;
-  ; (:stream find-stack-place
-  ;   :inputs (?labelDn1 ?labelDn2)
-  ;   :domain (and (Graspable ?labelDn1) (Graspable ?labelDn2))
-  ;   :outputs (?poseUp)
-  ;   :certified (and (StackPlace ?poseUp ?labelDn1 ?labelDn2) (Pose ?poseUp))
-  ; )
-  (:stream find-stack-place
-    :inputs (?labelDn1 ?labelDn2 ?poseDn1 ?poseDn2)
-    :domain (and (Graspable ?labelDn1) (Graspable ?labelDn2) (Pose ?poseDn1) (Pose ?poseDn2))
-    :outputs (?poseUp)
-    :certified (and (Pose ?poseUp) (StackPlace ?labelDn1 ?labelDn2 ?poseUp ?poseDn1 ?poseDn2))
-  )
+  
 
   ;; Alternative Route Search ;;
   ; (:stream high-waypoint-sprinkler
@@ -58,17 +62,7 @@
 
 ;;;;;;;;;; TESTS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-  ;; Free Placement Test ;;
-  ; (:stream test-free-placment
-  ;   :inputs (?label ?pose)
-  ;   :domain (and (Graspable ?label) (Pose ?pose))
-  ;   :certified (FreePlacement ?label ?pose)
-  ; )
-  (:stream test-free-placment
-    :inputs (?pose)
-    :domain (and (Pose ?pose))
-    :certified (FreePlacement ?pose)
-  )
+  
 
   ;; Safe Motion Test ;;
   (:stream test-safe-motion

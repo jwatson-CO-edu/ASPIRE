@@ -6,24 +6,23 @@
   (:predicates
 
     ;;;;; DEV PLAN ;;;;;
-    ; [ ] Obj as a compact symbol type 
-    ; [ ] Grasp as particular to Obj
+    ; [Y] Obj as a compact symbol type, 2024-02-09: I think it's done
+    ; [Y] Grasp as particular to Obj, 2024-02-09: Seems correct
     ; [ ] Obj erased/created by moves
     ; [ ] Obj predicates validated by onboard poses, not "loose" poses
 
     ;;; Symbols ;;;
-    (WObject ?label ?pose); Sample from world -or- Produced by actions
-    (IKSoln ?pose ?config) ; Sample from hand pose
+    (Grasp ?tgt ?effPose) ; A grasp has to have a target
+    (IKSoln ?effPose ?config) ; Sample from hand pose
     (Path ?label ?bgnPose ?endPose ?traj) ; Is there a safe path from A to B?: Checked by world
-    (Grasp ?pose ?effPose) ; Sample from object pose
-    ; (StackPlace ?pose ?labelDn1 ?labelDn2) ; Sample from world
-    ; (StackPlace ?poseUp ?labelDn1 ?labelDn2)
-    (StackPlace ?labelDn1 ?labelDn2 ?poseUp ?poseDn1 ?poseDn2)
+    (StackPlace ?poseUp ?tgtDn1 ?tgtDn2)
 
     ;;; Domains ;;;
+    (Obj ?obj) ; An object where it presently is in the world
+    (Tgt ?tgt) ; An object where we wish it to be in the world
     (Graspable ?label) ; Used by "stream.pddl"
     (Conf ?config) ; Used by "stream.pddl"
-    (Pose ?pose) ; Used by "stream.pddl"
+    (Pose ?pose) ; Used by "stream.pddl", Do NOT pollute this space!
     (EffPose ?pose) ; Used by "stream.pddl"
   
     ;;; States ;;;
@@ -35,7 +34,7 @@
 
     ;;; Checks ;;;
     ; (FreePlacement ?label ?pose) ; Is there an open spot for placement?: Checked by world
-    (FreePlacement ?pose) ; Is there an open spot for placement?: Checked by world
+    (FreePlacement ?tgtDn1) ; Is there an open spot for placement?: Checked by world
     ; (SafeTransit ?label ?bgnPose ?endPose ) 
     (SafeMotion ?config1 ?config2) ; Is there a safe path from config A to config B?: Checked by world
   )
