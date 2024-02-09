@@ -5,6 +5,12 @@
 
   (:predicates
 
+    ;;;;; DEV PLAN ;;;;;
+    ; [ ] Obj as a compact symbol type 
+    ; [ ] Grasp as particular to Obj
+    ; [ ] Obj erased/created by moves
+    ; [ ] Obj predicates validated by onboard poses, not "loose" poses
+
     ;;; Symbols ;;;
     (WObject ?label ?pose); Sample from world -or- Produced by actions
     (IKSoln ?pose ?config) ; Sample from hand pose
