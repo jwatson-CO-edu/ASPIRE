@@ -34,6 +34,29 @@ class Config:
 
     def __repr__( self ):
         return f"<Config {self.index}: {self.value}>"
+    
+
+class Path:
+    """ Trajectory """
+    num = count()
+
+    def __init__( self, label, bgn, end, X = None, Q = None ):
+        """ Set init waypoints """
+        self.label = label
+        self.bgn   = bgn
+        self.end   = end
+        self.index = next( self.num )
+        self.x     = X if (X is not None) else list()
+        self.q     = Q if (Q is not None) else list()
+
+    def add_wp( self, x_, q_ ):
+        """ Add a waypoint """
+        self.x.append( x_ )
+        self.q.append( q_ )
+
+    def __repr__( self ):
+        """ Summary of path in terms of indices """
+        return f"<Path {self.index}, {self.label}: x_{[x_i.index for x_i in self.x]}, q_{[q_i.index for q_i in self.q]}>"
 
 
 class Object: 

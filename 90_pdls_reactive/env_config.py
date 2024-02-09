@@ -16,7 +16,8 @@ TABLE_URDF_PATH = os.path.join( pybullet_data.getDataPath(), "table/table.urdf" 
 
 _NULL_NAME    = "NOTHING"
 # _BLOCK_NAMES  = ['redBlock', 'ylwBlock', 'bluBlock', 'grnBlock', 'ornBlock', 'vioBlock', _NULL_NAME]
-_BLOCK_NAMES  = ['redBlock', _NULL_NAME]
+# _BLOCK_NAMES  = ['redBlock', _NULL_NAME]
+_BLOCK_NAMES  = ['redBlock', 'ylwBlock', 'bluBlock', _NULL_NAME]
 _POSE_DIM     = 7
 _ACTUAL_NAMES = _BLOCK_NAMES[:-1]
 _SUPPORT_NAME = 'table'
@@ -52,3 +53,4 @@ _PLAN_THRESH     =  0.02
 _ACCEPT_POSN_ERR =  0.5*_BLOCK_SCALE 
 _PROB_TICK_FAIL = 0.01 # 0.20
 _Z_SAFE         = 8.0*_BLOCK_SCALE
+_MIN_SEP        = 0.125*_BLOCK_SCALE

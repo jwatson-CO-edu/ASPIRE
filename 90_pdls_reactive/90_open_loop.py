@@ -70,10 +70,10 @@ sys.path.append( "../" )
 from utils import ( row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec, diff_norm, closest_dist_Q_to_segment_AB, )
 
 from env_config import ( _GRASP_VERT_OFFSET, _GRASP_ORNT_XYZW, _NULL_NAME, _ACTUAL_NAMES, _MIN_X_OFFSET,
-                         _NULL_THRESH, _BLOCK_SCALE, _CLOSEST_TO_BASE, _ACCEPT_POSN_ERR )
+                         _NULL_THRESH, _BLOCK_SCALE, _CLOSEST_TO_BASE, _ACCEPT_POSN_ERR, _MIN_SEP, _Z_SAFE )
 from pb_BT import connect_BT_to_robot_world, Move_Arm, Grasp, Ungrasp
-from PB_BlocksWorld import PB_BlocksWorld
-from symbols import Pose, Config
+from PB_BlocksWorld import PB_BlocksWorld, rand_table_pose
+from symbols import Pose, Config, Path
 
 
 
@@ -491,6 +491,8 @@ class ReactiveExecutive:
     ##### Stream Creators #################################################
     # I hate this problem formulation so very much, We need a geometric grammar
 
+    
+
     def get_object_stream( self ):
         """ Return a function that returns poses """
 
@@ -536,6 +538,17 @@ class ReactiveExecutive:
         return stream_func
     
 
+    def calc_ik( self, effPose ):
+        """ Helper function for IK and Path planners """
+        currPosn, _        = self.world.robot.get_current_pose()
+        grspPosn, grspOrnt = row_vec_to_pb_posn_ornt( effPose.value )
+        if diff_norm( currPosn, grspPosn ) < 2.0:
+            graspQ = self.world.robot.calculate_ik_quat( grspPosn, grspOrnt )
+            return Config( graspQ )
+        else:
+            return None
+
+
     def get_IK_solver( self ):
         """ Return a function that computes Inverse Kinematics for a pose """
 
@@ -544,19 +557,119 @@ class ReactiveExecutive:
 
             print( f"\nEvaluate IK stream with args: {args}\n" )
 
-            effPose = args[0].value
-
-            currPosn, _ = self.world.robot.get_current_pose()
-            grspPosn, grspOrnt = row_vec_to_pb_posn_ornt( effPose )
-            if diff_norm( currPosn, grspPosn ) < 2.0:
-                graspQ = self.world.robot.calculate_ik_quat( grspPosn, grspOrnt )
+            effPose = args[0]
+            graspQ  = self.calc_ik( effPose )
+            if graspQ is not None:
                 print( f"IK stream SUCCESS: {graspQ}\n" )
-                yield ( Config( graspQ ), )
+                yield (graspQ,)
             else:
-                print( f"IK stream FAILURE\n" )
+                print( f"IK stream FAILURE: Excessive distance\n" )
 
         return stream_func
     
+    
+    def path_segment_checker( self, label, bgn, end ):
+        """ Helper function for the path planner stream """
+        if diff_norm( bgn.value, end.value ) > 0.0: 
+
+            posnBgn, _ = row_vec_to_pb_posn_ornt( bgn.value )
+            posnEnd, _ = row_vec_to_pb_posn_ornt( end.value )
+
+            ## Sample Symbols ##
+            nuSym = [bel.sample_symbol() for bel in self.beliefs]
+            print( f"Symbols: {nuSym}" )
+            for sym in nuSym:
+                if sym.label != label:
+                    Q, _ = row_vec_to_pb_posn_ornt( sym.pose )
+                    d = closest_dist_Q_to_segment_AB( Q, posnBgn, posnEnd, True )    
+                    if d < _MIN_SEP:
+                        return False
+            return True
+        else:
+            return True
+
+    def get_path_planner( self ):
+        """ Return a function that checks if the path is free from obstruction """
+
+        def stream_func( *args ):
+            
+            print( f"\nEvaluate PATH stream with args: {args}\n" )
+
+            label, bgn, end = args
+            qBgn = self.calc_ik( bgn )
+            qEnd = self.calc_ik( end )
+            if self.path_segment_checker( label, bgn, end ):
+                yield (Path( label, bgn, end, X = [bgn, end,], Q = [qBgn, qEnd] ),)
+            else:
+                posnBgn, orntEnd = row_vec_to_pb_posn_ornt( bgn.value )
+                posnEnd, _       = row_vec_to_pb_posn_ornt( end.value )
+                posnMid = np.add( posnBgn, posnEnd ) / 2.0
+                posnMid[2] = _Z_SAFE
+                orntMid = orntEnd[:]
+                mid      = Pose( pb_posn_ornt_to_row_vec( posnMid, orntMid ) )
+                qMid    = self.calc_ik( mid )
+                if self.path_segment_checker( label, bgn, mid ) and self.path_segment_checker( label, mid, end ):
+                    yield (Path( label, bgn, end, X = [bgn, mid, end,], Q = [qBgn, qMid, qEnd] ),)
+        return stream_func
+    
+
+    def get_stacker( self ):
+        """ Return a function that computes Inverse Kinematics for a pose """
+
+        def stream_func( *args ):
+            """ A function that computes a stacking pose across 2 poses """
+
+            print( f"\nEvaluate STACK PLACE stream with args: {args}\n" )
+
+            labelDn1, labelDn2, poseDn1, poseDn2 = args
+
+            posnDn1, orntDn1 = row_vec_to_pb_posn_ornt( poseDn1.value )
+            posnDn2, _       = row_vec_to_pb_posn_ornt( poseDn2.value )
+            dist   = diff_norm( posnDn1, posnDn2 )
+            sepMax = 2.1*_BLOCK_SCALE
+            if dist <= sepMax:
+                posnUp = np.add( posnDn1, posnDn2 ) / 2.0
+                posnUp[2] = 2.0*_BLOCK_SCALE
+                orntUp = orntDn1[:]
+                poseUp = Pose( pb_posn_ornt_to_row_vec( posnUp, orntUp ) )
+                print( f"STACK PLACE stream SUCCESS: {poseUp.value}\n" )
+                yield (poseUp,)
+            else:
+                print( f"STACK PLACE stream FAILURE: {dist} > {sepMax}\n" )
+
+            # labelDn1, labelDn2 = args
+
+            # nuSym = [bel.sample_symbol() for bel in self.beliefs]
+            # print( f"Symbols: {nuSym}" )
+            # poseDn1 = None
+            # poseDn2 = None
+
+            # for sym in nuSym:
+            #     if sym.label == labelDn1:
+            #         poseDn1 = Pose( sym.pose )
+            #     if sym.label == labelDn2:
+            #         poseDn2 = Pose( sym.pose )
+
+            # if (poseDn1 is not None) and (poseDn2 is not None):
+            
+            
+            # else:
+            #     print( f"STACK PLACE stream FAILURE: Missing name in {args}\n" )
+        return stream_func
+    
+
+    def get_waypoint_populator( self ):
+        def stream_func( *args ):
+
+            print( f"\nEvaluate WAYPOINT stream with args: {args}\n" )
+
+            posn, ornt = rand_table_pose()
+            posn[2]    = 6.0*_BLOCK_SCALE
+            ornt       = [0,0,0,1]
+            wp         = Pose( pb_posn_ornt_to_row_vec( posn, ornt ) )
+            yield (wp,)
+
+        return stream_func
 
     def get_free_placement_test( self ):
         """ Return a function that checks if the pose is free from obstruction """
@@ -565,7 +678,8 @@ class ReactiveExecutive:
             
             print( f"\nEvaluate PLACEMENT test with args: {args}\n" )
 
-            label, pose = args
+            # label, pose = args
+            pose = args[0]
             posn , _    = row_vec_to_pb_posn_ornt( pose.value )
 
             ## Sample Symbols ##
@@ -573,49 +687,14 @@ class ReactiveExecutive:
             nuSym = [bel.sample_symbol() for bel in self.beliefs]
             print( f"Symbols: {nuSym}" )
             for sym in nuSym:
-                if label != sym.label:
-                    symPosn, _ = row_vec_to_pb_posn_ornt( sym.pose )
-                    if diff_norm( posn, symPosn ) < (2.0*_BLOCK_SCALE):
-                        print( f"PLACEMENT test FAILURE\n" )
-                        return False
+                # if label != sym.label:
+                symPosn, _ = row_vec_to_pb_posn_ornt( sym.pose )
+                if diff_norm( posn, symPosn ) < ( _MIN_SEP ):
+                    print( f"PLACEMENT test FAILURE\n" )
+                    return False
             print( f"PLACEMENT test SUCCESS\n" )
             return True
         
-        return test_func
-
-
-    def get_safe_transit_test( self ):
-        """ Return a function that checks if the path is free from obstruction """
-
-        def test_func( *args ):
-            
-            print( f"\nEvaluate TRANSIT test with args: {args}\n" )
-
-            label, bgn, end = args
-            if diff_norm( bgn.value, end.value ) > 0.0: 
-
-                posnBgn, _ = row_vec_to_pb_posn_ornt( bgn.value )
-                posnEnd, _ = row_vec_to_pb_posn_ornt( end.value )
-
-                ## Sample Symbols ##
-                # self.belief_update()
-                nuSym = [bel.sample_symbol() for bel in self.beliefs]
-                # nuSym = [bel.sample_fresh() for bel in self.beliefs]
-                print( f"Symbols: {nuSym}" )
-
-                for sym in nuSym:
-                    if sym.label != label:
-                        Q, _ = row_vec_to_pb_posn_ornt( sym.pose )
-                        d = closest_dist_Q_to_segment_AB( Q, posnBgn, posnEnd, True )    
-                        if d < 2.0*_BLOCK_SCALE:
-                            print( f"TRANSIT test FAILURE: {posnBgn}, {posnEnd}\n" )
-                            return False
-                print( f"TRANSIT test SUCCESS\n" )
-                return True
-            else:
-                print( f"TRANSIT test SUCCESS\n" )
-                return True
-            
         return test_func
             
 
@@ -661,7 +740,9 @@ class ReactiveExecutive:
         conf = Config( self.world.robot.get_joint_angles() )
         pose = Pose( pb_posn_ornt_to_row_vec( *self.world.robot.get_current_pose() ) )
         
-        trgt = Pose( [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
+        trgtRed = Pose( [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
+        trgtYlw = Pose( [ _MIN_X_OFFSET+4.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
+        trgtBlu = Pose( [ _MIN_X_OFFSET+6.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
         # trgt = Pose( [ 0.492, 0.134, 0.600, 0.707, 0.0, 0.707, 0.0 ] )
         
         # tCnf = Config( [0 for _ in range(6)] )
@@ -674,42 +755,47 @@ class ReactiveExecutive:
             ('AtPose', pose),
             ('HandEmpty',),
             ## Goal Predicates ##
-            ('Pose', trgt)
+            ('Pose', trgtRed),
+            ('Pose', trgtYlw),
+            ('Pose', trgtBlu),
         ] 
         
+        for body in _ACTUAL_NAMES:
+            init.append( ('Graspable', body) )
+
         print( f"### Initial Symbols ###" )
         for sym in init:
             print( f"\t{sym}" )
 
         print( "Robot grounded!" )
 
-        for body in _ACTUAL_NAMES:
-            init.append( ('Graspable', body) )
-
-        goal = ('and',
-                ('WObject', 'redBlock', trgt),
-                ('HandEmpty',)
-        )
+        # goal = ('and',
+        #         ('WObject', 'redBlock', trgt),
+        #         ('HandEmpty',)
+        # )
         # goal = ('Holding', 'redBlock')  
         # goal = ('AtConf', tCnf)  
         # goal = ('AtPose', trgt)  
 
-        """ # SAVE THIS FOR THE FINAL DEMO
         goal = ( 'and',
-            ('AtPose', 'redBlock', Pose(None, 'redBlock', [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ])),
-            ('AtPose', 'ylwBlock', Pose(None, 'ylwBlock', [ _MIN_X_OFFSET+4.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ])),
-            ('Arched', 'bluBlock', 'redBlock', 'ylwBlock'),
+            ('HandEmpty',),
+            # ('WObject', 'redBlock', trgtRed),
+            # ('WObject', 'ylwBlock', trgtYlw),
+            # ('WObject', 'bluBlock', trgtBlu),
+            ('Supported', 'bluBlock', 'redBlock'),
+            ('Supported', 'bluBlock', 'ylwBlock'),
         ) 
-        """
 
         stream_map = {
             ### Symbol Streams ###
             'sample-object':      from_gen_fn( self.get_object_stream() ), 
             'sample-grasp':       from_gen_fn( self.get_grasp_stream()  ),
             'inverse-kinematics': from_gen_fn( self.get_IK_solver()     ),
+            'path-planner':       from_gen_fn( self.get_path_planner()  ),
+            'find-stack-place':   from_gen_fn( self.get_stacker()       ),
+            # 'high-waypoint-sprinkler': from_gen_fn( self.get_waypoint_populator() ),
             ### Symbol Tests ###
             'test-free-placment': from_test( self.get_free_placement_test() ),
-            'test-safe-transit' : from_test( self.get_safe_transit_test()   ),
             'test-safe-motion':   from_test( self.get_safe_motion_test()    ),
         }
 
@@ -742,32 +828,44 @@ if __name__ == "__main__":
     problem = planner.pddlstream_from_problem()
     print( 'Created!\n\n\n' )
 
-    print( '##### PDLS SOLVE #####' )
-    try:
-        solution = solve( problem, 
-                          algorithm = "incremental", #"focused", #"binding", #"incremental", #"adaptive", 
-                          unit_costs = True, success_cost = 1,
-                          visualize = True,
-                          initial_complexity=4  )
-        print( "Solver has completed!\n\n\n" )
-    except Exception as ex:
-        print( "SOLVER FAULT\n" )
-        print_exc()
-        solution = (None, None, None)
+    if 1:
+        print( '##### PDLS SOLVE #####' )
+        try:
+            solution = solve( problem, 
+                            algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
+                            unit_costs = True, success_cost = 1,
+                            visualize = True,
+                            initial_complexity=4  )
+            print( "Solver has completed!\n\n\n" )
+        except Exception as ex:
+            print( "SOLVER FAULT\n" )
+            print_exc()
+            solution = (None, None, None)
+            print( "\n\n\n" )
+
+        print_solution( solution )
+        plan, cost, evaluations = solution
+        print( f"\n\n\nPlan output from PDDLStream:" )
+        if plan is not None:
+            for i, action in enumerate( plan ):
+                print( f"\t{i+1}: { action.__class__.__name__ }, {action.name}" )
+                for j, arg in enumerate( action.args ):
+                    print( f"\t\tArg {j}:\t{type( arg )}, {arg}" )
+        else:
+            print( plan )
+        # print( dir( plan[0] ) )
         print( "\n\n\n" )
 
-    print_solution( solution )
-    plan, cost, evaluations = solution
-    print( f"\n\n\nPlan output from PDDLStream:" )
-    if plan is not None:
-        for i, action in enumerate( plan ):
-            print( f"\t{i+1}: { action.__class__.__name__ }, {action.name}" )
-            for j, arg in enumerate( action.args ):
-                print( f"\t\tArg {j}:\t{type( arg )}, {arg}" )
-    else:
-        print( plan )
-    # print( dir( plan[0] ) )
-    print( "\n\n\n" )
+    if 0:
+        btPlan = get_BT_plan_from_PDLS_plan( plan, world )
+        print( "\n\n\n" )
+
+        btr = BT_Runner( btPlan, world, 20.0 )
+        btr.setup_BT_for_running()
+
+        while not btr.p_ended():
+            btr.tick_once()
+
 
     """
     Plan has type: <class 'list'>
@@ -795,16 +893,7 @@ if __name__ == "__main__":
 
     """
 
-    btPlan = get_BT_plan_from_PDLS_plan( plan, world )
-    print( "\n\n\n" )
-
-    btr = BT_Runner( btPlan, world, 20.0 )
-    btr.setup_BT_for_running()
-
-    while not btr.p_ended():
-        btr.tick_once()
-
-    # btr.display_BT()
+    
 
     robot.goto_home()
     world.spin_for( 500 )

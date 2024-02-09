@@ -16,7 +16,8 @@ from env_config import ( _MIN_X_OFFSET, _BLOCK_SCALE, TABLE_URDF_PATH, _BLOCK_NA
 
 
 ########## ENVIRONMENT #############################################################################
-_ONLY_RED = True
+_ONLY_RED     = False
+_ONLY_PRIMARY = True
 
 class DummyBelief:
     """ Stand-in for an actual `ObjectBelief` """
@@ -31,8 +32,8 @@ def make_table():
 def rand_table_pose():
     """ Return a random pose in the direct viscinity if the robot """
     return [ 
-        _MIN_X_OFFSET + random()*8.0*_BLOCK_SCALE, 
-        random()*16.0*_BLOCK_SCALE-8.0*_BLOCK_SCALE, 
+        _MIN_X_OFFSET + random()*10.0*_BLOCK_SCALE, 
+        random()*20.0*_BLOCK_SCALE-10.0*_BLOCK_SCALE, 
         _BLOCK_SCALE 
     ], [0, 0, 0, 1]
 
@@ -94,9 +95,13 @@ class PB_BlocksWorld:
             if blockHandl is not None:
                 posn, ornt = rand_table_pose()
                 pb.resetBasePositionAndOrientation( blockHandl, posn, ornt )
-                if _ONLY_RED and (blockHandl != self.get_handle( 'redBlock' )):
+                if _ONLY_PRIMARY and blockHandl not in [self.get_handle( nam ) for nam in ['redBlock','ylwBlock','bluBlock']]:
                     posn, ornt = banished_pose()
                     pb.resetBasePositionAndOrientation( blockHandl, posn, ornt )
+                elif _ONLY_RED and (blockHandl != self.get_handle( 'redBlock' )):
+                    posn, ornt = banished_pose()
+                    pb.resetBasePositionAndOrientation( blockHandl, posn, ornt )
+                
 
     def get_handle( self, name ):
         """ Get the ID of the requested object by `name` """
