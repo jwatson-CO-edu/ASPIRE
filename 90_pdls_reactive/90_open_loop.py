@@ -73,7 +73,7 @@ from env_config import ( _GRASP_VERT_OFFSET, _GRASP_ORNT_XYZW, _NULL_NAME, _ACTU
                          _NULL_THRESH, _BLOCK_SCALE, _CLOSEST_TO_BASE, _ACCEPT_POSN_ERR, _MIN_SEP, _Z_SAFE )
 from pb_BT import connect_BT_to_robot_world, Move_Arm, Grasp, Ungrasp
 from PB_BlocksWorld import PB_BlocksWorld, rand_table_pose
-from symbols import Pose, Config, Path
+from symbols import Pose, Config, Path, Object
 
 
 
@@ -419,6 +419,7 @@ class ReactiveExecutive:
         self.beliefs = [] # Distributions over objects
         self.symbols = []
         self.plans   = [] # PriorityQueue()
+        self.last    = {}
 
     def __init__( self, world ):
         """ Create a pre-determined collection of poses and plan skeletons """
@@ -489,9 +490,17 @@ class ReactiveExecutive:
         return False
     
     ##### Stream Creators #################################################
-    # I hate this problem formulation so very much, We need a geometric grammar
 
-    
+    def sample_fresh( self, label ):
+        """ Maintain a pose dict and only update it when needed """
+        nuSym = [bel.sample_fresh() for bel in self.beliefs]
+        for sym in nuSym:
+            if (sym.label != _NULL_NAME):
+                self.last[ sym.label ] = Pose( sym.pose )
+        if label in self.last:
+            return self.last[ label ]
+        else:
+            return None
 
     def get_object_stream( self ):
         """ Return a function that returns poses """
@@ -505,15 +514,14 @@ class ReactiveExecutive:
 
             ## Sample Symbols ##
             # self.belief_update()
-            nuSym     = [bel.sample_symbol() for bel in self.beliefs]
-            foundSome = False
-            for sym in nuSym:
-                if sym.label != _NULL_NAME:
-                    foundSome = True
-                    print( f"OBJECT stream SUCCESS: {nuSym}\n" )
-                    yield ( Pose( sym.pose ), ) 
-            if not foundSome:
-                print( f"OBJECT stream FAILURE\n" )
+            # nuSym     = [bel.sample_symbol() for bel in self.beliefs]
+            rtnPose = self.sample_fresh( objName )
+            if rtnPose is not None:
+                print( f"OBJECT stream SUCCESS: {rtnPose.value}\n" )
+                yield ( rtnPose, ) 
+            else:
+                print( f"OBJECT stream FAILURE: No {objName}\n" )
+
         return stream_func
     
 
@@ -621,7 +629,7 @@ class ReactiveExecutive:
 
             print( f"\nEvaluate STACK PLACE stream with args: {args}\n" )
 
-            labelDn1, labelDn2, poseDn1, poseDn2 = args
+            labelUp, poseDn1, poseDn2 = args
 
             posnDn1, orntDn1 = row_vec_to_pb_posn_ornt( poseDn1.value )
             posnDn2, _       = row_vec_to_pb_posn_ornt( poseDn2.value )
@@ -679,7 +687,7 @@ class ReactiveExecutive:
             print( f"\nEvaluate PLACEMENT test with args: {args}\n" )
 
             # label, pose = args
-            pose = args[0]
+            label, pose = args
             posn , _    = row_vec_to_pb_posn_ornt( pose.value )
 
             ## Sample Symbols ##
@@ -687,11 +695,11 @@ class ReactiveExecutive:
             nuSym = [bel.sample_symbol() for bel in self.beliefs]
             print( f"Symbols: {nuSym}" )
             for sym in nuSym:
-                # if label != sym.label:
-                symPosn, _ = row_vec_to_pb_posn_ornt( sym.pose )
-                if diff_norm( posn, symPosn ) < ( _MIN_SEP ):
-                    print( f"PLACEMENT test FAILURE\n" )
-                    return False
+                if label != sym.label:
+                    symPosn, _ = row_vec_to_pb_posn_ornt( sym.pose )
+                    if diff_norm( posn, symPosn ) < ( _MIN_SEP ):
+                        print( f"PLACEMENT test FAILURE\n" )
+                        return False
             print( f"PLACEMENT test SUCCESS\n" )
             return True
         
@@ -743,9 +751,9 @@ class ReactiveExecutive:
         trgtRed = Pose( [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
         trgtYlw = Pose( [ _MIN_X_OFFSET+4.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
         trgtBlu = Pose( [ _MIN_X_OFFSET+6.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
-        # trgt = Pose( [ 0.492, 0.134, 0.600, 0.707, 0.0, 0.707, 0.0 ] )
         
-        # tCnf = Config( [0 for _ in range(6)] )
+        tCnf = Config( [0 for _ in range(6)] )
+        trgt = Pose( [ 0.492, 0.134, 0.600, 0.707, 0.0, 0.707, 0.0 ] )
         
         init = [
             ## Init Predicates ##
@@ -755,9 +763,11 @@ class ReactiveExecutive:
             ('AtPose', pose),
             ('HandEmpty',),
             ## Goal Predicates ##
+            # ('Conf', tCnf),
+            # ('EffPose', trgt),
             ('Pose', trgtRed),
             ('Pose', trgtYlw),
-            ('Pose', trgtBlu),
+            # ('Pose', trgtBlu),
         ] 
         
         for body in _ACTUAL_NAMES:
@@ -769,19 +779,21 @@ class ReactiveExecutive:
 
         print( "Robot grounded!" )
 
-        # goal = ('and',
-        #         ('WObject', 'redBlock', trgt),
-        #         ('HandEmpty',)
-        # )
-        # goal = ('Holding', 'redBlock')  
         # goal = ('AtConf', tCnf)  
         # goal = ('AtPose', trgt)  
+        # goal = ('Holding', 'redBlock')  
 
+        # goal = ('and',
+        #         ('Obj', 'redBlock', trgtRed),
+        #         # # ('Obj', 'ylwBlock', trgtYlw),
+        #         # # ('Obj', 'bluBlock', trgtBlu),
+        #         # ('HandEmpty',)
+        # )
+        
         goal = ( 'and',
             ('HandEmpty',),
-            # ('WObject', 'redBlock', trgtRed),
-            # ('WObject', 'ylwBlock', trgtYlw),
-            # ('WObject', 'bluBlock', trgtBlu),
+            ('Obj', 'redBlock', trgtRed),
+            ('Obj', 'ylwBlock', trgtYlw),
             ('Supported', 'bluBlock', 'redBlock'),
             ('Supported', 'bluBlock', 'ylwBlock'),
         ) 
@@ -793,7 +805,6 @@ class ReactiveExecutive:
             'inverse-kinematics': from_gen_fn( self.get_IK_solver()     ),
             'path-planner':       from_gen_fn( self.get_path_planner()  ),
             'find-stack-place':   from_gen_fn( self.get_stacker()       ),
-            # 'high-waypoint-sprinkler': from_gen_fn( self.get_waypoint_populator() ),
             ### Symbol Tests ###
             'test-free-placment': from_test( self.get_free_placement_test() ),
             'test-safe-motion':   from_test( self.get_safe_motion_test()    ),
@@ -822,7 +833,8 @@ if __name__ == "__main__":
 
     planner = ReactiveExecutive( world )
 
-    planner.belief_update() # We need at least an initial set of beliefs in order to plan
+    for i in range( 10 ):
+        planner.belief_update() # We need at least an initial set of beliefs in order to plan
 
     print( '\n\n\n##### PDLS INIT #####' )
     problem = planner.pddlstream_from_problem()

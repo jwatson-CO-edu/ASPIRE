@@ -2,36 +2,28 @@
 
 ;;;;;;;;;; SYMBOL STREAMS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-  ;; Stack Location Search ;;
+  ; ;; Stack Location Search ;;
   (:stream find-stack-place
-    :inputs (?labelUp ?tgtDn1 ?tgtDn2)
-    :domain (and (Graspable ?labelUp) (Tgt ?tgtDn1) (Tgt ?tgtDn2))
+    :inputs (?labelUp ?poseDn1 ?poseDn2)
+    :domain (and (Graspable ?labelUp) (Pose ?poseDn1) (Pose ?poseDn2))
     :outputs (?poseUp)
-    :certified (and (Pose ?poseUp) (StackPlace ?labelDn1 ?labelDn2 ?poseUp ?poseDn1 ?poseDn2))
+    :certified (and (StackPlace ?labelUp ?poseUp ?poseDn1 ?poseDn2))
   )
 
-  ;; Free Placement Search ;;
-  (:stream find-free-placment
+    ;; Object Grasp Stream ;;
+  (:stream sample-grasp
     :inputs (?label ?pose)
-    :domain (and (Graspable ?label) (Pose ?pose))
-    :outputs (?tgt)
-    :certified (and (Tgt ?tgt) (FreePlacement ?tgt))
+    :domain (and (Graspable ?label) (Pose ?pose)) ; We have to have a pose for this object before we can grasp it!
+    :outputs (?effPose)
+    :certified (and (EffPose ?effPose) (Grasp ?label ?pose ?effPose))
   )
 
-  ;; Object Pose Stream ;;
+  ; Object Pose Stream ;;
   (:stream sample-object
     :inputs (?label)
     :domain (Graspable ?label)
-    :outputs (?obj)
-    :certified (Obj ?obj)
-  )
-
-  ;; Object Grasp Stream ;;
-  (:stream sample-grasp
-    :inputs (?effPose)
-    :domain (and (Obj ?obj)) ; ; We have to have a pose for this object before we can grasp it!
-    :outputs (?effPose)
-    :certified (and (Grasp ?label ?pose ?effPose))
+    :outputs (?pose)
+    :certified (and (Obj ?label ?pose) (Pose ?pose))
   )
 
   ;; IK Solver ;;
@@ -50,24 +42,20 @@
     :certified (Path ?label ?bgnPose ?endPose ?traj)
   )
 
-  
-
-  ;; Alternative Route Search ;;
-  ; (:stream high-waypoint-sprinkler
-  ;   :inputs (?poseDn)
-  ;   :domain (Pose ?poseDn)
-  ;   :outputs (?poseUp)
-  ;   :certified (Pose ?poseUp)
-  ; )
 
 ;;;;;;;;;; TESTS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-  
 
   ;; Safe Motion Test ;;
   (:stream test-safe-motion
     :inputs (?config1 ?config2)
     :domain (and (Conf ?config1) (Conf ?config2))
     :certified (SafeMotion ?config1 ?config2)
+  )
+
+  ; Free Placement Search ;;
+  (:stream test-free-placment
+    :inputs (?label ?pose)
+    :domain (and (Graspable ?label) (Pose ?pose))
+    :certified (and (FreePlacement ?label ?pose))
   )
 )
