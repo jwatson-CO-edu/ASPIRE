@@ -7,7 +7,7 @@
     :inputs (?labelUp ?poseDn1 ?poseDn2)
     :domain (and (Graspable ?labelUp) (Pose ?poseDn1) (Pose ?poseDn2))
     :outputs (?poseUp)
-    :certified (and (StackPlace ?labelUp ?poseUp ?poseDn1 ?poseDn2))
+    :certified (and (StackPlace ?labelUp ?poseUp ?poseDn1 ?poseDn2) (Pose ?poseUp))
   )
 
     ;; Object Grasp Stream ;;

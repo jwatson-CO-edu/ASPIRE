@@ -235,6 +235,7 @@ class MoveFree( GroundedAction ):
     """ Move the unburdened effector to the given location """
     def __init__( self, args, goal = None, world = None, robot = None, name = None ):
 
+        # ?effPose1 ?effPose2 ?config1 ?config2
         effPose1, effPose2, config1, config2 = args
 
         if name is None:
@@ -249,10 +250,11 @@ class MoveFree( GroundedAction ):
 
 
 class Pick( GroundedAction ):
-    """ Move the unburdened effector to the given location """
+    """ Add object to the gripper payload """
     def __init__( self, args, goal = None, world = None, robot = None, name = None ):
 
-        label, pose, effPose = args
+        # ?label ?pose ?effPose ?config
+        label, pose, effPose, config = args
         
         if name is None:
             name = f"Pick object {label} at {pose}"
@@ -264,30 +266,50 @@ class Pick( GroundedAction ):
 
 
 class MoveHolding( GroundedAction ):
-    """ Move the unburdened effector to the given location """
+    """ Move the burdened effector to the given location """
     def __init__( self, args, goal = None, world = None, robot = None, name = None ):
 
-        label, bgnPose, endPose, effPose1, effPose2, config1, config2 = args
+        # ?label ?poseBgn ?poseEnd ?effPose1 ?effPose2 ?config1 ?config2 ?traj
+        label, bgnPose, endPose, effPose1, effPose2, config1, config2, traj = args
 
         if name is None:
             name = f"Move Holding {label} to {endPose}"
         super().__init__( args, goal, world, robot, name )
-    
-        posn, ornt = row_vec_to_pb_posn_ornt( effPose2.value )
 
-        self.add_child( 
-            Move_Arm( posn, ornt, name = name, ctrl = robot, world = world )
-        )
+        # Compute a grasp for every waypoint in the trajectory
+        for x_i in traj.x[1:]:
+            grasp_pose = x_i.value
+            grasp_pose[2] += _GRASP_VERT_OFFSET
+            posn, _ = row_vec_to_pb_posn_ornt( grasp_pose )
+            ornt = _GRASP_ORNT_XYZW.copy()
+
+            self.add_child( 
+                Move_Arm( posn, ornt, name = name, ctrl = robot, world = world )
+            )
 
 
 class Place( GroundedAction ):
-    """ Move the unburdened effector to the given location """
+    """ Let go of gripper payload """
     def __init__( self, args, goal = None, world = None, robot = None, name = None ):
 
         label, pose, effPose = args
         
         if name is None:
             name = f"Place object {label} at {pose}"
+        super().__init__( args, goal, world, robot, name )
+
+        self.add_child( 
+            Ungrasp( name = name, ctrl = robot, world = world )
+        )
+
+class Stack( GroundedAction ):
+    """ Let go of gripper payload """
+    def __init__( self, args, goal = None, world = None, robot = None, name = None ):
+
+        labelUp, labelDn1, labelDn2, poseDn1, poseDn2, poseUp, effPose = args
+        
+        if name is None:
+            name = f"Place object {labelUp} on top of {labelDn1} and {labelDn2} at {poseUp}"
         super().__init__( args, goal, world, robot, name )
 
         self.add_child( 
@@ -397,6 +419,8 @@ def get_BT_plan_from_PDLS_plan( pdlsPlan, world ):
                 btAction = MoveHolding( actArgs, goal=None, world = world, robot=world.robot )
             elif actName == "place":
                 btAction = Place( actArgs, goal=None, world = world, robot=world.robot )
+            elif actName == "stack":
+                btAction = Stack( actArgs, goal=None, world = world, robot=world.robot )
             else:
                 raise NotImplementedError( f"There is no BT procedure defined for a PDDL action named {actName}!" )
             print( f"Action {i+1}, {actName} --> {btAction.name}, planned!" )
@@ -844,10 +868,10 @@ if __name__ == "__main__":
         print( '##### PDLS SOLVE #####' )
         try:
             solution = solve( problem, 
-                            algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
-                            unit_costs = True, success_cost = 1,
-                            visualize = True,
-                            initial_complexity=4  )
+                              algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
+                              unit_costs = True, success_cost = 1,
+                              visualize = True,
+                              initial_complexity=4  )
             print( "Solver has completed!\n\n\n" )
         except Exception as ex:
             print( "SOLVER FAULT\n" )
@@ -868,7 +892,7 @@ if __name__ == "__main__":
         # print( dir( plan[0] ) )
         print( "\n\n\n" )
 
-    if 0:
+    if 1:
         btPlan = get_BT_plan_from_PDLS_plan( plan, world )
         print( "\n\n\n" )
 

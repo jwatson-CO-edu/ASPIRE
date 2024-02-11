@@ -123,7 +123,7 @@
   )  
 
   (:action stack
-    :parameters (?labelUp ?labelDn1 ?labelDn2 ?poseUp ?poseDn1 ?poseDn2 ?effPose)
+    :parameters (?labelUp ?labelDn1 ?labelDn2 ?poseDn1 ?poseDn2 ?poseUp ?effPose)
     :precondition (and 
                     ;; Knowns ;;
                     (AtPose ?effPose)
@@ -132,14 +132,13 @@
                     (Obj ?labelDn1 ?poseDn1)
                     (Obj ?labelDn2 ?poseDn2)
                     (StackPlace ?labelUp ?poseUp ?poseDn1 ?poseDn2)
-                    ; (FreePlacement ?labelUp ?poseUp)
                     (Grasp ?labelUp ?poseUp ?effPose)
                   )
     :effect (and (HandEmpty) 
                  (not (Holding ?labelUp))
                  (Supported ?labelUp ?labelDn1)
                  (Supported ?labelUp ?labelDn2)
-                 (not (FreePlacement ?labelUp ?poseUp))
+                ;  (not (FreePlacement ?labelUp ?poseUp))
             )
   )  
 )
