@@ -1,23 +1,5 @@
 ########## DEV PLAN ################################################################################
 """
-##### Planning #####
-[Y] Rewrite `Object`, 2024-02-05: Seems correct!
-[Y] Rewrite Functions and Stream specs, 2024-02-07: Consistent!
-    [Y] Object poses, 2024-02-05: Seems correct!
-        [Y] Stream spec, 2024-02-05: Seems correct!
-    [Y] Grasp effector pose from object pose, 2024-02-05: Seems correct!
-        [Y] Stream spec, 2024-02-05: Unsure if the certification will create the correct object
-    [Y] IK Soln from effector pose, 2024-02-06: Seems correct!
-        [Y] Stream spec, 2024-02-06: Seems correct!
-    [Y] FreePlacement, Checked by world, 2024-02-06: Seems correct!
-        [Y] Stream spec, 2024-02-06: Seems correct!
-    [Y] SafeTransit, Checked by world, 2024-02-06: Seems correct!
-        [Y] Stream spec, 2024-02-06: Seems correct!
-    [Y] SafeMotion, Checked by world, 2024-02-07: Seems correct!
-        [Y] Stream spec, 2024-02-07: Seems correct!
-[Y] Instantiate a PDLS world, 2024-02-07: No errors
-[Y] Successful Planning, 2024-02-07: Pick && Place!
-    [Y] Q: Can I ask the solver to be VERBOSE?, 2024-02-07: Vebose was already the default
 
 ##### Execution #####
 [Y] Rewrite Action drafts
@@ -26,11 +8,18 @@
     [Y] Pick, 2024-02-08: Easy!
     [Y] Move_Holding, 2024-02-08: Easy!
     [Y] Place, 2024-02-08: Easy!
-[>] Successful Plan Execution
-    [>] Open Loop
+[>] Non-Reactive Version: Open Loop
+    [>] Check that the predicates are met
+        [ ] (Obj ?label ?pose)
+        [ ] (Holding ?label) ; From Pick
+        [ ] (HandEmpty) ; From Place
+        [ ] (AtConf ?config) ; From moves
+        [ ] (AtPose ?effPose) ; From Move Holding
+        [ ] (Supported ?labelUp ?labelDn) ; Is the up object on top of the down object?
+[ ] Successful Plan Execution
     [ ] Stepwise
     [ ] Reactive
-[ ] Non-Reactive Version
+
 """
 
 
@@ -764,7 +753,12 @@ class ReactiveExecutive:
         """ Set up a PDDLStream problem with the UR5 """
 
         domain_pddl = read(get_file_path(__file__, 'domain.pddl'))
+        # print( dir( domain_pddl ) )
+
         stream_pddl = read(get_file_path(__file__, 'stream.pddl'))
+
+        # exit(0)
+
         constant_map = {}
         print( "Read files!" )
 
@@ -884,6 +878,7 @@ if __name__ == "__main__":
         print( f"\n\n\nPlan output from PDDLStream:" )
         if plan is not None:
             for i, action in enumerate( plan ):
+                print( dir( action ) )
                 print( f"\t{i+1}: { action.__class__.__name__ }, {action.name}" )
                 for j, arg in enumerate( action.args ):
                     print( f"\t\tArg {j}:\t{type( arg )}, {arg}" )

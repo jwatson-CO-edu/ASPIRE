@@ -5,12 +5,6 @@
 
   (:predicates
 
-    ;;;;; DEV PLAN ;;;;;
-    ; [Y] Obj as a compact symbol type, 2024-02-09: I think it's done
-    ; [Y] Grasp as particular to Obj, 2024-02-09: Seems correct
-    ; [ ] Obj erased/created by moves
-    ; [ ] Obj predicates validated by onboard poses, not "loose" poses
-
     ;;; Symbols ;;;
     (Obj ?label ?pose)
     (Grasp ?label ?pose ?effPose) ; A grasp has to have a target
