@@ -1,29 +1,3 @@
-########## DEV PLAN ################################################################################
-"""
-
-##### Execution #####
-[Y] Rewrite Action drafts
-    [Y] Inspect plan output, 2024-02-08: Seems to make sense, but need to parse goals!
-    [Y] Move_Free, 2024-02-08: Easy!
-    [Y] Pick, 2024-02-08: Easy!
-    [Y] Move_Holding, 2024-02-08: Easy!
-    [Y] Place, 2024-02-08: Easy!
-[>] Non-Reactive Version: Open Loop
-    [>] Check that the predicates are met
-        [ ] (Obj ?label ?pose)
-        [ ] (Holding ?label) ; From Pick
-        [ ] (HandEmpty) ; From Place
-        [ ] (AtConf ?config) ; From moves
-        [ ] (AtPose ?effPose) ; From Move Holding
-        [ ] (Supported ?labelUp ?labelDn) ; Is the up object on top of the down object?
-[ ] Successful Plan Execution
-    [ ] Stepwise
-    [ ] Reactive
-
-"""
-
-
-
 ########## INIT ####################################################################################
 
 ##### Imports #####
@@ -342,8 +316,6 @@ def release_plan_symbols( plan ):
             action.symbol = None
 
 
-########## PDDL PARSING ############################################################################
-
 
 ########## PLANS ###################################################################################
 
@@ -387,10 +359,7 @@ class Plan( Sequence ):
     def get_goal_spec( self ):
         """ Get a fully specified goal for this plan """
         raise NotImplementedError( "get_goal_spec" )
-        # rtnGoal = []
-        # for action in self:
-        #     rtnGoal.append( Pose( None, action.objName, action.goal, _SUPPORT_NAME ) )
-        # return rtnGoal
+
 
 def get_BT_plan_from_PDLS_plan( pdlsPlan, world ):
     """ Translate the PDLS plan to one that can be executed by the robot """
@@ -526,8 +495,6 @@ class ReactiveExecutive:
             objName = args[0]
 
             ## Sample Symbols ##
-            # self.belief_update()
-            # nuSym     = [bel.sample_symbol() for bel in self.beliefs]
             rtnPose = self.sample_fresh( objName )
             if rtnPose is not None:
                 print( f"OBJECT stream SUCCESS: {rtnPose.value}\n" )
@@ -553,8 +520,7 @@ class ReactiveExecutive:
             ornt = _GRASP_ORNT_XYZW.copy()
             grasp_pose = Pose( pb_posn_ornt_to_row_vec( posn, ornt ) )
             print( f"GRASP stream SUCCESS: {grasp_pose.value}\n" )
-            yield (grasp_pose,) # FIXME: CHECK THAT THIS GETS CERTIFIED
-            # else yield nothing if we cannot certify the object!
+            yield (grasp_pose,) 
 
         return stream_func
     
@@ -658,39 +624,8 @@ class ReactiveExecutive:
             else:
                 print( f"STACK PLACE stream FAILURE: {dist} > {sepMax}\n" )
 
-            # labelDn1, labelDn2 = args
-
-            # nuSym = [bel.sample_symbol() for bel in self.beliefs]
-            # print( f"Symbols: {nuSym}" )
-            # poseDn1 = None
-            # poseDn2 = None
-
-            # for sym in nuSym:
-            #     if sym.label == labelDn1:
-            #         poseDn1 = Pose( sym.pose )
-            #     if sym.label == labelDn2:
-            #         poseDn2 = Pose( sym.pose )
-
-            # if (poseDn1 is not None) and (poseDn2 is not None):
-            
-            
-            # else:
-            #     print( f"STACK PLACE stream FAILURE: Missing name in {args}\n" )
         return stream_func
     
-
-    def get_waypoint_populator( self ):
-        def stream_func( *args ):
-
-            print( f"\nEvaluate WAYPOINT stream with args: {args}\n" )
-
-            posn, ornt = rand_table_pose()
-            posn[2]    = 6.0*_BLOCK_SCALE
-            ornt       = [0,0,0,1]
-            wp         = Pose( pb_posn_ornt_to_row_vec( posn, ornt ) )
-            yield (wp,)
-
-        return stream_func
 
     def get_free_placement_test( self ):
         """ Return a function that checks if the pose is free from obstruction """
@@ -897,259 +832,6 @@ if __name__ == "__main__":
         while not btr.p_ended():
             btr.tick_once()
 
-
-    """
-    Plan has type: <class 'list'>
-	1:	<class 'pddlstream.language.constants.Action'>, move_free
-		1:	<class 'symbols.Pose'>, <Pose 0: [ 0.492  0.134  0.488  0.707 -0.     0.707 -0.   ]>
-		2:	<class 'symbols.Pose'>, <Pose 4: [0.671 0.265 0.098 0.707 0.    0.707 0.   ]>
-		3:	<class 'symbols.Config'>, <Config 1: [ 0.    -1.571  1.571 -1.571 -1.571  0.   ]>
-		4:	<class 'symbols.Config'>, <Config 3: [ 0.188 -0.757  1.472 -2.286 -1.571  0.188]>
-	2:	<class 'pddlstream.language.constants.Action'>, pick
-		1:	<class 'str'>, redBlock
-		2:	<class 'symbols.Pose'>, <Pose 2: [ 0.671  0.265  0.098  1.003 -0.008  0.011 -0.002]>
-		3:	<class 'symbols.Pose'>, <Pose 4: [0.671 0.265 0.098 0.707 0.    0.707 0.   ]>
-	3:	<class 'pddlstream.language.constants.Action'>, move_holding
-		1:	<class 'str'>, redBlock
-		2:	<class 'symbols.Pose'>, <Pose 2: [ 0.671  0.265  0.098  1.003 -0.008  0.011 -0.002]>
-		3:	<class 'symbols.Pose'>, <Pose 1: [0.476 0.    0.114 1.    0.    0.    0.   ]>
-		4:	<class 'symbols.Pose'>, <Pose 4: [0.671 0.265 0.098 0.707 0.    0.707 0.   ]>
-		5:	<class 'symbols.Pose'>, <Pose 3: [0.476 0.    0.114 0.707 0.    0.707 0.   ]>
-		6:	<class 'symbols.Config'>, <Config 3: [ 0.188 -0.757  1.472 -2.286 -1.571  0.188]>
-		7:	<class 'symbols.Config'>, <Config 2: [-0.282 -1.182  2.223 -2.611 -1.571 -0.282]>
-	4:	<class 'pddlstream.language.constants.Action'>, place
-		1:	<class 'str'>, redBlock
-		2:	<class 'symbols.Pose'>, <Pose 1: [0.476 0.    0.114 1.    0.    0.    0.   ]>
-		3:	<class 'symbols.Pose'>, <Pose 3: [0.476 0.    0.114 0.707 0.    0.707 0.   ]>
-
-    """
-
-    
-
     robot.goto_home()
     world.spin_for( 500 )
 
-#     def exec_plans_noisy( self, N = 1200,  Npause = 200 ):
-#         """ Execute partially observable plans """
-
-#         self.world.reset_blocks()
-#         self.world.spin_for( Npause )
-
-#          # Number of iterations for this test
-#         K =    5 # Number of top plans to maintain
-#         ### Main Planner Loop ###  
-#         currPlan     = None
-#         achieved     = []
-#         trialMetrics = Counter()
-#         pPass        = False
-#         pBork        = False
-#         begin_trial()
-#         # 2023-12-11: For now, loop a limited number of times
-#         for i in range(N):
-
-#             
-            
-#             ## Retain only fresh beliefs ##
-#             belObj = []
-#             for belief in self.beliefs:
-#                 if belief.visited:
-#                     belObj.append( belief )
-#                 else:
-#                     belief.integrate_belief( belief.sample_nothing() )
-#                     
-#             self.beliefs = belObj
-
-#             
-
-#             ## Ground Plans ##
-#             svSym     = [] # Only retain symbols that were assigned to plans!
-#             skeletons = [self.get_skeleton( j ) for j in range( len( self.skltns ) )]
-#             for sym in nuSym:
-#                 assigned = False
-#                 for l, skel in enumerate( skeletons ):
-#                     for j, action in enumerate( skel ):
-#                         if not p_grounded( action ):
-#                             if (action.objName == sym.label) and (not sym.p_attached()):
-#                                 set_action_ground( action, sym )
-#                                 assigned = True
-#                         if assigned:
-#                             break
-#                     if assigned:
-#                         break
-#                 if sym.p_attached():
-#                     svSym.append( sym )
-                
-#             for k, skel in enumerate( skeletons ):
-#                 if p_plan_grounded( skel ):
-#                     self.plans.append( skel )
-#             self.symbols.extend( svSym )
-#             print( f"There are {len(self.plans)} plans!" )
-
-#             ## Grade Plans ##
-#             savPln = []
-#             for m, plan in enumerate( self.plans ):
-#                 cost  = plan_cost( plan )
-#                 prob  = plan_confidence( plan )
-#                 score = cost - _LOG_PROB_FACTOR * log( prob, _LOG_BASE )
-#                 plan.rank = score
-#                 # Destroy (Degraded Plans || Plans with NaN Priority) #
-#                 if (prob > _PLAN_THRESH) and (not isnan( score )):
-#                     savPln.append( plan )
-#                 else:
-#                     release_plan_symbols( plan )
-#                     print( f"\tReleased {len(plan)} symbols!" )
-
-#             ## Enqueue Plans ##    
-#             savPln.sort()
-#             self.plans = savPln[:K]
-#             for badPlan in savPln[K:]:
-#                 release_plan_symbols( badPlan )
-#             for m, plan in enumerate( self.plans ):
-#                 print( f"\tPlan {m+1} --> Cost: {cost}, P = {prob}, {'Retain' if (prob > _PLAN_THRESH) else 'DELETE'}, Priority = {plan.rank}" )
-
-#             ## Destroy Unlikely Symbols ##
-#             savSym = [] # Only save likely symbols attached to plans
-#             cDel   = 0
-#             for sym in self.symbols:
-#                 if (sym.prob() > _PLAN_THRESH) and sym.p_attached():
-#                     savSym.append( sym )
-#                 else:
-#                     cDel += 1
-#             self.symbols = savSym
-#             print( f"Retained {len(self.symbols)} symbols, and deleted {cDel}!" )
-
-#             ## Execute Current Plan ##
-#             # Pop top plan
-#             if (currPlan is None) and len( self.plans ):
-#                 try:
-
-#                     currPlan = self.plans[0]
-#                     prep_plan( currPlan, self.world, self.world.robot )
-#                     setup_plan_for_running( currPlan, self.world, self.world.robot )
-#                     self.plans.pop(0)
-
-#                     while currPlan.goal in achieved:
-#                         if currPlan is not None:
-#                             release_plan_symbols( currPlan )
-
-#                         currPlan = self.plans[0]
-#                         prep_plan( currPlan, self.world, self.world.robot )
-#                         setup_plan_for_running( currPlan, self.world, self.world.robot )
-#                         self.plans.pop(0)
-
-#                 except (IndexError, AttributeError):
-#                     if currPlan is not None:
-#                         release_plan_symbols( currPlan )
-#                     currPlan = None
-#             if currPlan is not None:
-#                 if currPlan.status == Status.SUCCESS:
-#                     achieved.append( currPlan.goal )
-#                     release_plan_symbols( currPlan )
-#                     currPlan = None
-
-#                 elif currPlan.status == Status.FAILURE:
-#                     print( f"TRASHING failed plan: {currPlan}" )
-#                     trialMetrics[ currPlan.msg ] += 1
-#                     release_plan_symbols( currPlan )
-#                     world.robot_release_all()
-#                     currPlan = None
-
-#                 elif plan_confidence( currPlan ) >= _PLAN_THRESH:
-#                     # currPlan.tick( self.world, _ACCEPT_POSN_ERR )
-#                     # print( currPlan.ctrl, currPlan.world )
-                    
-#                     ## Step ##
-#                     self.world.spin_for( 10 )
-#                     currPlan.tick_once()
-#                     # currPlan.tick()
-
-#                     if random() < _PROB_TICK_FAIL:
-#                         currPlan.status = Status.FAILURE
-#                         currPlan.msg    = "Action Fault"
-
-#                 else:
-#                     print( f"TRASHING unlikely plan: {currPlan}" )
-#                     trialMetrics[ "Unlikely Symbol" ] += 1
-#                     release_plan_symbols( currPlan )
-#                     currPlan = None
-
-#             ## Check Win Condition ##
-#             nuChieved = []
-#             for goalNum in achieved:
-#                 skeleton = self.skltns[ goalNum ]
-#                 goal     = skeleton.get_goal_spec()
-#                 solved   = self.world.validate_goal_spec( goal, _ACCEPT_POSN_ERR )
-#                 if solved:
-#                     print( f"Goal {goalNum} is SOLVED!" )
-#                     nuChieved.append( goalNum )
-#                 else:
-#                     trialMetrics[ "Goal NOT Met" ] += 1
-#             achieved = nuChieved
-
-#             if len( achieved ) >= len( self.skltns ):
-#                 break
-
-            
-#             print()
-            
-#         pPass = (len( achieved ) >= len( self.skltns ))
-
-#         if pPass:
-#             print( "\n### GOALS MET ###\n" )
-#         elif pBork:
-#             print( "\n!!! SIM BORKED !!!\n" )
-#         else:
-#             print( "\n### TIMEOUT ###\n" )
-
-#         for k, v in trialMetrics.items():
-#             print( f"Failure: {k}, Occurrences: {v}" )
-
-#         end_trial( pPass, trialMetrics )
-        
-
-
-
-#     planner = MockPlanner( world )
-#     Nruns   = 250
-    
-#     ### Trials ###
-#     for i in range( Nruns ):
-#         print(f'\n##### Trial {i+1} of {Nruns} #####')
-#         planner.exec_plans_noisy( 1200 )
-#         world.spin_for( 200 )
-#         print('\n')
-
-#     ### Analyze ###
-#     import matplotlib.pyplot as plt
-
-#     print( f"Success Rate __ : {metrics['pass']/metrics['N']}" )
-#     spans = [ dct['makespan'] for dct in metrics["trials"] ]
-#     avgMs = sum( spans ) / metrics['N']
-#     print( f"Average Makespan: {avgMs}" )
-
-#     Nbins = 10
-
-#     msPass = []
-#     msFail = []
-
-#     for trial in metrics["trials"]:
-#         if trial['result']:
-#             msPass.append( trial['makespan'] )
-#         else:
-#             msFail.append( trial['makespan'] )
-
-#     with open( 'robotDemo250_2024-01-31.pkl', 'wb' ) as handle:
-#         pickle.dump( metrics, handle )
-
-#     with open( 'robotDemo250_2024-01-31_msPass.pkl', 'wb' ) as handle:
-#         pickle.dump( msPass, handle )       
-
-#     with open( 'robotDemo250_2024-01-31_msFail.pkl', 'wb' ) as handle:
-#         pickle.dump( msFail, handle )    
-
-#     plt.hist( [msPass, msFail], Nbins, histtype='bar', label=["Success", "Failure"] )
-
-#     plt.legend(); plt.xlabel('Episode Makespan'); plt.ylabel('Count')
-#     plt.savefig( 'robotDemo_Makespan.pdf' )
-
-#     plt.show()

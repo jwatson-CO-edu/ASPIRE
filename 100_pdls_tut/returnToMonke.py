@@ -46,7 +46,6 @@ def solve_PDDL_problem():
     subprocess.run( 
         cmd, 
         shell  = True, 
-        # stdout = subprocess.DEVNULL 
     )
 
 
