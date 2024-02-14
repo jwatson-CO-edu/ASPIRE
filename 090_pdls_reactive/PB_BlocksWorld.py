@@ -17,7 +17,7 @@ from env_config import ( _MIN_X_OFFSET, _BLOCK_SCALE, TABLE_URDF_PATH, _BLOCK_NA
 
 ########## ENVIRONMENT #############################################################################
 _ONLY_RED     = False
-_ONLY_PRIMARY = True
+_ONLY_PRIMARY = False
 
 class DummyBelief:
     """ Stand-in for an actual `ObjectBelief` """

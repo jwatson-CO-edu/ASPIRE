@@ -9,16 +9,25 @@
     [Y] Move_Holding, 2024-02-08: Easy!
     [Y] Place, 2024-02-08: Easy!
 [>] Non-Reactive Version: Open Loop
-    [>] Check that the predicates are met
-        [ ] (Obj ?label ?pose)
-        [ ] (Holding ?label) ; From Pick
-        [ ] (HandEmpty) ; From Place
-        [ ] (AtConf ?config) ; From moves
-        [ ] (AtPose ?effPose) ; From Move Holding
-        [ ] (Supported ?labelUp ?labelDn) ; Is the up object on top of the down object?
-[ ] Successful Plan Execution
-    [ ] Stepwise
-    [ ] Reactive
+    [>] Check that the goal predicates are met
+        [Y] (Obj ?label ?pose), 2024-02-13: Easy!
+        [Y] (Holding ?label) ; From Pick, 2024-02-13: Easy!
+        [Y] (HandEmpty) ; From Place, 2024-02-13: Easy!
+        {P} ALL predicates?, 2024-02-13: Not at this time!
+    [>] Try two arches
+    [>] Collect failure statistics
+        * No Sankey Graph for the open loop version
+        [>] What do I need to create a Sankey Graph? Is there a prettier one than PLT?
+[ ] Replanning Version
+    [ ] Working Demo @ PyBullet
+        [ ] Plan open loop
+        [ ] Execute one action
+        [ ] Replan
+        [ ] Loop until done or timeout
+    [ ] Experimental Data
+        [ ] Sankey Graph of sequence incidents during each episode
+            [ ] Makespan on X-axis?
+[ ] Responsive Version
 
 """
 
@@ -414,7 +423,16 @@ def get_BT_plan_from_PDLS_plan( pdlsPlan, world ):
     rtnPlan.add_children( rtnBTlst )
     return rtnPlan
     
-
+def display_PDLS_plan( plan ):
+    print( f"\nPlan output from PDDLStream:" )
+    if plan is not None:
+        for i, action in enumerate( plan ):
+            # print( dir( action ) )
+            print( f"\t{i+1}: { action.__class__.__name__ }, {action.name}" )
+            for j, arg in enumerate( action.args ):
+                print( f"\t\tArg {j}:\t{type( arg )}, {arg}" )
+    else:
+        print( plan )
 
 ########## EXECUTIVE (THE METHOD) ##################################################################
 
@@ -430,9 +448,9 @@ class ReactiveExecutive:
         self.plans   = [] # PriorityQueue()
         self.last    = {}
 
-    def __init__( self, world ):
+    def __init__( self, world = None ):
         """ Create a pre-determined collection of poses and plan skeletons """
-        self.world = world
+        self.world = world if (world is not None) else PB_BlocksWorld()
         self.reset_beliefs()
 
     ##### Belief Updates ##################################################
@@ -771,6 +789,10 @@ class ReactiveExecutive:
         trgtRed = Pose( [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
         trgtYlw = Pose( [ _MIN_X_OFFSET+4.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
         trgtBlu = Pose( [ _MIN_X_OFFSET+6.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
+
+        trgtGrn = Pose( [ _MIN_X_OFFSET+6.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
+        trgtOrn = Pose( [ _MIN_X_OFFSET+8.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
+        trgtVio = Pose( [ _MIN_X_OFFSET+7.0*_BLOCK_SCALE, 0.000, 2.0*_BLOCK_SCALE,  1,0,0,0 ] )
         
         tCnf = Config( [0 for _ in range(6)] )
         trgt = Pose( [ 0.492, 0.134, 0.600, 0.707, 0.0, 0.707, 0.0 ] )
@@ -783,11 +805,10 @@ class ReactiveExecutive:
             ('AtPose', pose),
             ('HandEmpty',),
             ## Goal Predicates ##
-            # ('Conf', tCnf),
-            # ('EffPose', trgt),
             ('Pose', trgtRed),
             ('Pose', trgtYlw),
-            # ('Pose', trgtBlu),
+            ('Pose', trgtGrn),
+            ('Pose', trgtOrn),
         ] 
         
         for body in _ACTUAL_NAMES:
@@ -816,6 +837,10 @@ class ReactiveExecutive:
             ('Obj', 'ylwBlock', trgtYlw),
             ('Supported', 'bluBlock', 'redBlock'),
             ('Supported', 'bluBlock', 'ylwBlock'),
+            ('Obj', 'grnBlock', trgtGrn),
+            ('Obj', 'ornBlock', trgtOrn),
+            ('Supported', 'vioBlock', 'grnBlock'),
+            ('Supported', 'vioBlock', 'ornBlock'),
         ) 
 
         stream_map = {
@@ -833,6 +858,73 @@ class ReactiveExecutive:
         print( "About to create problem ... " )
     
         return PDDLProblem( domain_pddl, constant_map, stream_pddl, stream_map, init, goal )
+    
+
+    def run_one_episode( self, logger = None ):
+        """ Run a single experiment and collect data """
+        
+
+        btPlan = get_BT_plan_from_PDLS_plan( plan, world )
+        print( "\n\n\n" )
+
+        btr = BT_Runner( btPlan, world, 20.0 )
+        btr.setup_BT_for_running()
+
+        while not btr.p_ended():
+            btr.tick_once()
+
+    def run_N_episodes( self, N ):
+        """ Run N experiments and collect statistics """
+        
+        logger = DataLogger()
+
+        self.world.reset_blocks()
+        robot = self.world.robot
+        robot.goto_home()
+        self.world.spin_for( 500 )
+
+        for _ in range( _N_POSE_UPDT+1 ):
+            planner.belief_update() # We need at least an initial set of beliefs in order to plan
+
+        for i in range( N ):
+            print( f"\n\n########## Experiment {i+1} of {N} ##########" )
+
+            print( f"\n##### Solving Problem {i+1} #####" )
+
+            logger.begin_trial()
+            logger.log_event( "Begin Solver" )
+
+            problem = planner.pddlstream_from_problem()
+            try:
+                solution = solve( problem, 
+                                  algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
+                                  unit_costs = True, success_cost = 1,
+                                  visualize = True,
+                                  initial_complexity=4  )
+                print( "Solver has completed!\n\n\n" )
+                logger.log_event( "Solver SUCCESS" )
+            except Exception as ex:
+                logger.log_event( "Solver FAILURE" )
+                print( "SOLVER FAULT\n" )
+                print_exc()
+                solution = (None, None, None)
+                print( "\n" )
+
+            logger.log_event( "End Solver" )
+
+            print_solution( solution )
+            plan, cost, evaluations = solution
+            display_PDLS_plan( plan )
+            
+            # print( dir( plan[0] ) )
+            print( "\n\n\n" )
+
+            self.run_one_episode( logger )
+            
+            logger.end_trial()
+        
+
+
 
 ########## MAIN ####################################################################################
 # from pddl.parser.domain import DomainParser
