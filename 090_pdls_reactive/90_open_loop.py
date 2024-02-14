@@ -60,7 +60,8 @@ sys.path.append( "../" )
 from utils import ( row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec, diff_norm, closest_dist_Q_to_segment_AB, )
 
 from env_config import ( _GRASP_VERT_OFFSET, _GRASP_ORNT_XYZW, _NULL_NAME, _ACTUAL_NAMES, _MIN_X_OFFSET,
-                         _NULL_THRESH, _BLOCK_SCALE, _CLOSEST_TO_BASE, _ACCEPT_POSN_ERR, _MIN_SEP, _Z_SAFE )
+                         _NULL_THRESH, _BLOCK_SCALE, _CLOSEST_TO_BASE, _ACCEPT_POSN_ERR, _MIN_SEP, _Z_SAFE,
+                         _N_POSE_UPDT )
 from pb_BT import connect_BT_to_robot_world, Move_Arm, Grasp, Ungrasp
 from PB_BlocksWorld import PB_BlocksWorld, rand_table_pose
 from symbols import Pose, Config, Path, Object
@@ -206,13 +207,6 @@ class GroundedAction( Sequence ):
     def prep( self ):
         raise NotImplementedError( f"{self.name} REQUIRES a `prep` implementation!" )
     
-    def validate_in_world( self ):
-        """ Check if the goal is already met """
-        for prdct in self.goal:
-            if not self.world.check_predicate( prdct, _ACCEPT_POSN_ERR ):
-                return False
-        return True
-    
     def __repr__( self ):
         """ Get the name, Assume child classes made it sufficiently descriptive """
         return str( self.name )
@@ -269,7 +263,7 @@ class MoveHolding( GroundedAction ):
 
         # Compute a grasp for every waypoint in the trajectory
         for x_i in traj.x[1:]:
-            grasp_pose = x_i.value
+            grasp_pose = list(x_i.value)
             grasp_pose[2] += _GRASP_VERT_OFFSET
             posn, _ = row_vec_to_pb_posn_ornt( grasp_pose )
             ornt = _GRASP_ORNT_XYZW.copy()
@@ -511,7 +505,7 @@ class ReactiveExecutive:
         nuSym = [bel.sample_fresh() for bel in self.beliefs]
         for sym in nuSym:
             if (sym.label != _NULL_NAME):
-                self.last[ sym.label ] = Pose( sym.pose )
+                self.last[ sym.label ] = Pose( list( sym.pose ) )
         if label in self.last:
             return self.last[ label ]
         else:
@@ -549,7 +543,7 @@ class ReactiveExecutive:
             print( f"\nEvaluate GRASP stream with args: {args}\n" )
 
             label, pose = args
-            grasp_pose = pose.value
+            grasp_pose = list( pose.value )
             grasp_pose[2] += _GRASP_VERT_OFFSET
             posn, _ = row_vec_to_pb_posn_ornt( grasp_pose )
             ornt = _GRASP_ORNT_XYZW.copy()
@@ -660,39 +654,8 @@ class ReactiveExecutive:
             else:
                 print( f"STACK PLACE stream FAILURE: {dist} > {sepMax}\n" )
 
-            # labelDn1, labelDn2 = args
-
-            # nuSym = [bel.sample_symbol() for bel in self.beliefs]
-            # print( f"Symbols: {nuSym}" )
-            # poseDn1 = None
-            # poseDn2 = None
-
-            # for sym in nuSym:
-            #     if sym.label == labelDn1:
-            #         poseDn1 = Pose( sym.pose )
-            #     if sym.label == labelDn2:
-            #         poseDn2 = Pose( sym.pose )
-
-            # if (poseDn1 is not None) and (poseDn2 is not None):
-            
-            
-            # else:
-            #     print( f"STACK PLACE stream FAILURE: Missing name in {args}\n" )
         return stream_func
     
-
-    def get_waypoint_populator( self ):
-        def stream_func( *args ):
-
-            print( f"\nEvaluate WAYPOINT stream with args: {args}\n" )
-
-            posn, ornt = rand_table_pose()
-            posn[2]    = 6.0*_BLOCK_SCALE
-            ornt       = [0,0,0,1]
-            wp         = Pose( pb_posn_ornt_to_row_vec( posn, ornt ) )
-            yield (wp,)
-
-        return stream_func
 
     def get_free_placement_test( self ):
         """ Return a function that checks if the pose is free from obstruction """
@@ -747,7 +710,44 @@ class ReactiveExecutive:
             
         return test_func
 
+
+    def validate_predicate( self, pred ):
+        """ Check if the predicate is true """
+        pTyp = pred[0]
+        if pTyp == 'HandEmpty':
+            print( f"HandEmpty: {self.world.grasp}" )
+            return (len( self.world.grasp ) == 0)
+        elif pTyp == 'Obj':
+            pLbl = pred[1]
+            pPos = pred[2]
+            tObj = self.world.get_block_true( pLbl )
+            print( pred )
+            print( "Obj:", pPos.value[:3], tObj.pose[:3] )
+            print( f"Obj: {diff_norm( pPos.value[:3], tObj.pose[:3] )} <= {_ACCEPT_POSN_ERR}" )
+            return (diff_norm( pPos.value[:3], tObj.pose[:3] ) <= _ACCEPT_POSN_ERR)
+        elif pTyp == 'Supported':
+            lblUp = pred[1]
+            lblDn = pred[2]
+            objUp = self.world.get_block_true( lblUp )
+            objDn = self.world.get_block_true( lblDn )
+            xySep = diff_norm( objUp.value[:2], objDn.pose[:2] )
+            zSep  = objUp.value[2] - objDn.pose[2] # Signed value
+            print( f"Supported, X-Y Sep: {xySep} <= {2.0*_BLOCK_SCALE}, Z Sep: {zSep} >= {1.75*_BLOCK_SCALE}" )
+            return ((xySep <= 2.0*_BLOCK_SCALE) and (zSep >= 1.75*_BLOCK_SCALE))
+        else:
+            print( f"UNSUPPORTED predicate check!: {pTyp}" )
+            return False
     
+
+    def validate_goal( self, goal ):
+        """ Check if the goal is met """
+        if goal[0] == 'and':
+            for g in goal[1:]:
+                if not self.validate_predicate( g ):
+                    return False
+            return True
+        else:
+            raise ValueError( f"Unexpected goal format!: {goal}" )
 
     ##### PDLS Solver #####################################################
 
@@ -860,26 +860,27 @@ if __name__ == "__main__":
 
     planner = ReactiveExecutive( world )
 
-    for i in range( 10 ):
+    for i in range( _N_POSE_UPDT+1 ):
         planner.belief_update() # We need at least an initial set of beliefs in order to plan
 
     print( '\n\n\n##### PDLS INIT #####' )
     problem = planner.pddlstream_from_problem()
-    print( type(problem.domain_pddl) )
     
     # dom = domain_from_path( get_file_path(__file__, 'domain.pddl') )
     
 
-    dom = pddl_as_list( get_file_path(__file__, 'domain.pddl') )
-    pprint( dom )
-    print( "\n\n" )
-    pprint( get_action_defn( dom, 'place' ) )
+    # dom = pddl_as_list( get_file_path(__file__, 'domain.pddl') )
+    # pprint( dom )
+    # print( "\n\n" )
+    # pprint( get_action_defn( dom, 'place' ) )
     # print( type( reader ) )
     # print( dir( reader ) )
     
     # print( dir(problem) )
+    print( type( problem.goal ) )
+    pprint( problem.goal )
     print( 'Created!\n\n\n' )
-    exit(0)
+    # exit(0)
 
     if 1:
         print( '##### PDLS SOLVE #####' )
@@ -947,10 +948,16 @@ if __name__ == "__main__":
 
     """
 
+    for i in range( 10 ):
+        planner.belief_update() # We need at least an initial set of beliefs in order to plan
+
+    print( f"Were the goals met?: {planner.validate_goal( problem.goal )}" )
     
 
     robot.goto_home()
     world.spin_for( 500 )
+
+
 
 #     def exec_plans_noisy( self, N = 1200,  Npause = 200 ):
 #         """ Execute partially observable plans """
