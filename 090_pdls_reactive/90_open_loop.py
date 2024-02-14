@@ -33,6 +33,7 @@ import sys, time, datetime, pickle, math
 now = time.time
 from random import random
 from traceback import print_exc
+from pprint import pprint
 # from collections import Counter
 # from itertools import count
 
@@ -64,6 +65,7 @@ from pb_BT import connect_BT_to_robot_world, Move_Arm, Grasp, Ungrasp
 from PB_BlocksWorld import PB_BlocksWorld, rand_table_pose
 from symbols import Pose, Config, Path, Object
 
+from Cheap_PDDL_Parser import pddl_as_list, get_action_defn
 
 
 ########## BT-PLANNER INTERFACE ####################################################################
@@ -753,7 +755,7 @@ class ReactiveExecutive:
         """ Set up a PDDLStream problem with the UR5 """
 
         domain_pddl = read(get_file_path(__file__, 'domain.pddl'))
-        # print( dir( domain_pddl ) )
+        # print( type( domain_pddl ) )
 
         stream_pddl = read(get_file_path(__file__, 'stream.pddl'))
 
@@ -833,6 +835,13 @@ class ReactiveExecutive:
         return PDDLProblem( domain_pddl, constant_map, stream_pddl, stream_map, init, goal )
 
 ########## MAIN ####################################################################################
+# from pddl.parser.domain import DomainParser
+from tarski.io import PDDLReader
+
+ 
+# def domain_from_path( path ):
+#     parser = DomainParser()
+#     return parser( read( path ) )
 
 ##### Env. Settings #####
 np.set_printoptions( precision = 3, linewidth = 145 )
@@ -856,7 +865,21 @@ if __name__ == "__main__":
 
     print( '\n\n\n##### PDLS INIT #####' )
     problem = planner.pddlstream_from_problem()
+    print( type(problem.domain_pddl) )
+    
+    # dom = domain_from_path( get_file_path(__file__, 'domain.pddl') )
+    
+
+    dom = pddl_as_list( get_file_path(__file__, 'domain.pddl') )
+    pprint( dom )
+    print( "\n\n" )
+    pprint( get_action_defn( dom, 'place' ) )
+    # print( type( reader ) )
+    # print( dir( reader ) )
+    
+    # print( dir(problem) )
     print( 'Created!\n\n\n' )
+    exit(0)
 
     if 1:
         print( '##### PDLS SOLVE #####' )
