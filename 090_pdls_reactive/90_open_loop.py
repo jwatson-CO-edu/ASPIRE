@@ -304,10 +304,11 @@ class Stack( GroundedAction ):
     """ Let go of gripper payload """
     def __init__( self, args, goal = None, world = None, robot = None, name = None ):
 
-        labelUp, labelDn1, labelDn2, poseDn1, poseDn2, poseUp, effPose = args
+        # ?labelUp ?labelDn1 ?labelDn2 ?objUp ?objDn1 ?objDn2
+        labelUp, labelDn1, labelDn2, objUp, objDn1, objDn2 = args
         
         if name is None:
-            name = f"Place object {labelUp} on top of {labelDn1} and {labelDn2} at {poseUp}"
+            name = f"Place object {labelUp} on top of {labelDn1} and {labelDn2} at {objUp.pose}"
         super().__init__( args, goal, world, robot, name )
 
         self.add_child( 
@@ -631,9 +632,10 @@ class ReactiveExecutive:
     def get_path_planner( self ):
         """ Return a function that checks if the path is free from obstruction """
 
-        def stream_func( *args ):
+        def stream_func( *args, fluents=[] ):
             
             print( f"\nEvaluate PATH stream with args: {args}\n" )
+            print( f"\nEvaluate PATH stream with fluents: {fluents}\n" )
 
             obj1, obj2 = args
 
@@ -644,7 +646,7 @@ class ReactiveExecutive:
                 posnEnd, _       = row_vec_to_pb_posn_ornt( obj2.pose )
                 posnMid    = np.add( posnBgn, posnEnd ) / 2.0
                 posnMid[2] = _Z_SAFE
-                orntMid    = orntEnd[:]
+                orntMid    = list( orntEnd )
                 objcPose = pb_posn_ornt_to_row_vec( posnMid, orntMid )
                 mid      = self.object_from_label_pose( obj1.label, objcPose )
                 if self.path_segment_checker( obj1, mid ) and self.path_segment_checker( mid, obj2 ):
@@ -652,29 +654,57 @@ class ReactiveExecutive:
         return stream_func
     
 
+    def get_carry_planner( self ):
+        """ Return a function that checks if the path is free from obstruction """
+
+        def stream_func( *args, fluents=[] ):
+            
+            print( f"\nEvaluate CARRY stream with args: {args}\n" )
+            print( f"\nEvaluate CARRY stream with fluents: {fluents}\n" )
+
+            label, obj1, obj2 = args
+
+            # if self.path_segment_checker( obj1, obj2 ):
+            #     yield ( Path( [obj1, obj2],), )
+            # else:
+            posnBgn, orntEnd = row_vec_to_pb_posn_ornt( obj1.pose )
+            posnEnd, _       = row_vec_to_pb_posn_ornt( obj2.pose )
+            posnMid    = np.add( posnBgn, posnEnd ) / 2.0
+            posnMid[2] = _Z_SAFE
+            orntMid    = orntEnd[:]
+            objcPose = pb_posn_ornt_to_row_vec( posnMid, orntMid )
+            mid      = self.object_from_label_pose( obj1.label, objcPose )
+            if self.path_segment_checker( obj1, mid ) and self.path_segment_checker( mid, obj2 ):
+                yield ( Path( [obj1, mid, obj2,],), )
+        return stream_func
+    
+    
+
     def get_stacker( self ):
         """ Return a function that computes Inverse Kinematics for a pose """
 
-        def stream_func( *args ):
+        def stream_func( *args, fluents=[] ):
             """ A function that computes a stacking pose across 2 poses """
 
             print( f"\nEvaluate STACK PLACE stream with args: {args}\n" )
+            print( f"\nEvaluate STACK PLACE stream with fluents: {fluents}\n" )
 
-            labelUp, objDn1, objDn2 = args
+            objDn1, objDn2 = args
 
             posnDn1, orntDn1 = row_vec_to_pb_posn_ornt( objDn1.pose )
             posnDn2, _       = row_vec_to_pb_posn_ornt( objDn2.pose )
             dist   = diff_norm( posnDn1, posnDn2 )
             sepMax = 2.1*_BLOCK_SCALE
-            if dist <= sepMax:
+            zMax   = max( posnDn1[2], posnDn2[2] )
+            if (dist <= sepMax) and (zMax < 1.25*_BLOCK_SCALE) and (objDn1.label != objDn2.label):
                 posnUp    = np.add( posnDn1, posnDn2 ) / 2.0
                 posnUp[2] = 2.0*_BLOCK_SCALE
                 orntUp    = orntDn1[:]
-                objUp     = self.object_from_label_pose( labelUp, pb_posn_ornt_to_row_vec( posnUp, orntUp ) )
+                objUp     = self.object_from_label_pose( _WP_NAME, pb_posn_ornt_to_row_vec( posnUp, orntUp ) )
                 print( f"STACK PLACE stream SUCCESS: {objUp.pose}\n" )
                 yield (objUp,)
             else:
-                print( f"STACK PLACE stream FAILURE: {dist} > {sepMax}\n" )
+                print( f"STACK PLACE stream FAILURE: {dist} > {sepMax}, {zMax} > {1.1*_BLOCK_SCALE}, {objDn1.label} == {objDn2.label} \n" )
 
         return stream_func
     
@@ -713,13 +743,13 @@ class ReactiveExecutive:
         if pTyp == 'HandEmpty':
             print( f"HandEmpty: {self.world.grasp}" )
             return (len( self.world.grasp ) == 0)
-        elif pTyp == 'Obj':
+        elif pTyp == 'GraspObj':
             pLbl = pred[1]
             pPos = pred[2]
             tObj = self.world.get_block_true( pLbl )
             print( pred )
-            print( "Obj:", pPos.pose[:3], tObj.pose[:3] )
-            print( f"Obj: {diff_norm( pPos.pose[:3], tObj.pose[:3] )} <= {_ACCEPT_POSN_ERR}" )
+            print( "GraspObj:", pPos.pose[:3], tObj.pose[:3] )
+            print( f"GraspObj: {diff_norm( pPos.pose[:3], tObj.pose[:3] )} <= {_ACCEPT_POSN_ERR}" )
             return (diff_norm( pPos.pose[:3], tObj.pose[:3] ) <= _ACCEPT_POSN_ERR)
         elif pTyp == 'Supported':
             lblUp = pred[1]
@@ -728,8 +758,8 @@ class ReactiveExecutive:
             objDn = self.world.get_block_true( lblDn )
             xySep = diff_norm( objUp.pose[:2], objDn.pose[:2] )
             zSep  = objUp.pose[2] - objDn.pose[2] # Signed value
-            print( f"Supported, X-Y Sep: {xySep} <= {2.0*_BLOCK_SCALE}, Z Sep: {zSep} >= {1.75*_BLOCK_SCALE}" )
-            return ((xySep <= 2.0*_BLOCK_SCALE) and (zSep >= 1.75*_BLOCK_SCALE))
+            print( f"Supported, X-Y Sep: {xySep} <= {2.0*_BLOCK_SCALE}, Z Sep: {zSep} >= {1.35*_BLOCK_SCALE}" )
+            return ((xySep <= 2.0*_BLOCK_SCALE) and (zSep >= 1.35*_BLOCK_SCALE))
         else:
             print( f"UNSUPPORTED predicate check!: {pTyp}" )
             return False
@@ -782,8 +812,9 @@ class ReactiveExecutive:
             ## Goal Predicates ##
             ('Waypoint', trgtRed),
             ('Waypoint', trgtYlw),
-            # ('Waypoint', trgtGrn),
-            # ('Waypoint', trgtOrn),
+            # ('Waypoint', trgtBlu),
+            ('Waypoint', trgtGrn),
+            ('Waypoint', trgtOrn),
         ] 
         
         for body in _ACTUAL_NAMES:
@@ -798,31 +829,32 @@ class ReactiveExecutive:
         # goal = ('and', ('AtObj', trgtRed ), )
         # goal = ('and', ('Holding', 'redBlock'),  )
 
-        goal = ('and',
-                ('Obj', 'redBlock', trgtRed),
-                ('Obj', 'ylwBlock', trgtYlw),
-                # # ('Obj', 'bluBlock', trgtBlu),
-                # ('HandEmpty',)
-        )
+        # goal = ('and',
+        #         ('GraspObj', 'ylwBlock', trgtYlw),
+        #         ('GraspObj', 'redBlock', trgtRed),
+        #         ('GraspObj', 'bluBlock', trgtBlu),
+        #         ('HandEmpty',)
+        # )
         
-        # goal = ( 'and',
-        #     ('HandEmpty',),
+        goal = ( 'and',
+            ('HandEmpty',),
             
-        #     ('Obj', 'redBlock', trgtRed),
-        #     ('Obj', 'ylwBlock', trgtYlw),
-        #     ('Supported', 'bluBlock', 'redBlock'),
-        #     ('Supported', 'bluBlock', 'ylwBlock'),
+            ('GraspObj', 'redBlock', trgtRed),
+            ('GraspObj', 'ylwBlock', trgtYlw),
+            ('Supported', 'bluBlock', 'redBlock'),
+            ('Supported', 'bluBlock', 'ylwBlock'),
 
-        #     # ('Obj', 'grnBlock', trgtGrn),
-        #     # ('Obj', 'ornBlock', trgtOrn),
-        #     # ('Supported', 'vioBlock', 'grnBlock'),
-        #     # ('Supported', 'vioBlock', 'ornBlock'),
-        # ) 
+            # ('GraspObj', 'grnBlock', trgtGrn),
+            # ('GraspObj', 'ornBlock', trgtOrn),
+            # ('Supported', 'vioBlock', 'grnBlock'),
+            # ('Supported', 'vioBlock', 'ornBlock'),
+        ) 
 
         stream_map = {
             ### Symbol Streams ###
             'sample-object':    from_gen_fn( self.get_object_stream() ), 
             'find-safe-motion': from_gen_fn( self.get_path_planner()  ),
+            'find-safe-carry':  from_gen_fn( self.get_carry_planner() ),
             'find-stack-place': from_gen_fn( self.get_stacker()       ),
             ### Symbol Tests ###
             'test-free-placment': from_test( self.get_free_placement_test() ),
@@ -873,7 +905,7 @@ class ReactiveExecutive:
                                   algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
                                   unit_costs = True, success_cost = 1,
                                   visualize = True,
-                                  initial_complexity=4  )
+                                  initial_complexity=2  )
                 print( "Solver has completed!\n\n\n" )
                 logger.log_event( "Solver SUCCESS" )
             except Exception as ex:
@@ -925,7 +957,7 @@ if __name__ == "__main__":
 
     planner = ReactiveExecutive( world )
 
-    for i in range( _N_POSE_UPDT+1 ):
+    for i in range( 2*_N_POSE_UPDT+1 ):
         planner.belief_update() # We need at least an initial set of beliefs in order to plan
 
     print( '\n\n\n##### PDLS INIT #####' )
@@ -950,11 +982,17 @@ if __name__ == "__main__":
     if 1:
         print( '##### PDLS SOLVE #####' )
         try:
-            solution = solve( problem, 
-                              algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
-                              unit_costs = True, success_cost = 1,
-                              visualize = True,
-                              initial_complexity=4  )
+            solution = solve( 
+                problem, 
+                algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
+                max_skeletons = 15,
+                unit_costs = True, 
+                unit_efforts = True,
+                success_cost = 40,
+                initial_complexity=2,
+                complexity_step = 3,
+                search_sample_ratio = 1/25
+            )
             print( "Solver has completed!\n\n\n" )
             print_solution( solution )
         except Exception as ex:

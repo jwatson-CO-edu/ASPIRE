@@ -9,7 +9,7 @@ import numpy as np
 
 from roboticstoolbox.robot.ERobot import ERobot
 
-from utils import homog_to_pb_posn_ornt
+from utils import homog_to_pb_posn_ornt, p_lst_has_nan
 
 from env_config import ROBOT_URDF_PATH, _ROT_VEL_SMALL, _Q_HOME, _MIN_X_OFFSET, _BLOCK_SCALE
 
@@ -97,7 +97,7 @@ class UR5Sim:
             joint = self.joints[name]
             poses.append(joint_angles[i])
             indexes.append(joint.id)
-            forces.append(joint.maxForce)
+            forces.append( joint.maxForce ) #*0.85 )
 
         pb.setJointMotorControlArray(
             self.ur5, indexes,
@@ -121,7 +121,12 @@ class UR5Sim:
     def p_moving( self ):
         """ Return True if any of the joint velocities are above some small number """
         vel = self.get_joint_vel()
-        print( f"Joint Vel: {vel}" )
+        if p_lst_has_nan( vel ):
+            vel = [0.0 for _ in range(6)]
+        # while p_lst_has_nan( vel ):
+        #     pb.stepSimulation()
+        #     vel = self.get_joint_vel()
+        # print( f"Joint Vel: {vel}" )
         for v in vel:
             if abs( v ) > _ROT_VEL_SMALL:
                 return True

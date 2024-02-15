@@ -18,6 +18,13 @@ from spatialmath.base import r2q
 
 ########## HELPER FUNCTIONS ########################################################################
 
+def p_lst_has_nan( lst ):
+    """ Does the list contain NaN? """
+    for elem in lst:
+        if math.isnan( elem ):
+            return True
+    return False
+
 def origin_row_vec():
     """ Return a row vector representing the origin pose as a Position and Orientation --> [Px,Py,Pz,Ow,Ox,Oy,Oz] """
     return [0,0,0,1,0,0,0]

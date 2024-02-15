@@ -6,15 +6,16 @@
   (:predicates
 
     ;;; Symbols ;;;
-    (Obj ?label ?obj)
-    ; (Grasp ?label ?pose ?effPose) ; A grasp has to have a target
-    ; (IKSoln ?effPose ?config) ; Sample from hand pose
-    ; (Path ?label ?objBgn ?objEnd ?traj) ; Is there a safe path from A to B?: Checked by world
-    (StackPlace ?labelUp ?objUp ?objDn1 ?objDn2)
+    (GraspObj ?label ?obj)
+    (SafeMotion ?obj1 ?obj2 ?traj) ; Is there a safe path from config A to config B?: Checked by world
+    (SafeCarry ?label ?obj1 ?obj2 ?traj)
+    (StackPlace ?objUp ?objDn1 ?objDn2)
 
     ;;; Domains ;;;
     (Graspable ?label); Name of a real object we can grasp
     (Waypoint ?obj) ; Model of any object we can go to in the world, real or not
+    ; (Block ?obj) ; Model of a real object we can grasp
+    
     ; (Conf ?config) ; Used by "stream.pddl"
     ; (Pose ?pose) ; Used by "stream.pddl", Do NOT pollute this space!
     ; (EffPose ?pose) ; Used by "stream.pddl"
@@ -27,7 +28,7 @@
 
     ;;; Checks ;;;
     (FreePlacement ?label ?obj) ; Is there an open spot for placement?: Checked by world
-    (SafeMotion ?obj1 ?obj2 ?traj) ; Is there a safe path from config A to config B?: Checked by world
+    
   )
 
   ;;;;;;;;;; ACTIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -50,12 +51,15 @@
     :parameters (?label ?obj)
     :precondition (and 
                     ;; Knowns ;;
-                    (Obj ?label ?obj)
+                    (GraspObj ?label ?obj)
                     (AtObj ?obj)
                     (HandEmpty)
+                    ; (Block ?obj)
                   )
     :effect (and (Holding ?label) 
-                 (not (HandEmpty)))
+                 (not (HandEmpty))
+                ;  (not (Block ?obj))
+            )
   )
 
   (:action move_holding
@@ -65,12 +69,13 @@
                     (Holding ?label)
                     (AtObj ?obj1)
                     ;; Requirements ;;
-                    (Obj ?label ?obj1)
+                    (GraspObj ?label ?obj1)
                     ; (FreePlacement ?label ?obj2)
-                    (SafeMotion ?obj1 ?obj2 ?traj)
+                    ; (SafeMotion ?obj1 ?obj2 ?traj)
+                    (SafeCarry ?label ?obj1 ?obj2 ?traj)
                   )
-    :effect (and (Obj ?label ?obj2)
-                 (not (Obj ?label ?obj1))
+    :effect (and (GraspObj ?label ?obj2)
+                 (not (GraspObj ?label ?obj1))
                  (AtObj ?obj2)
                  (not (AtObj ?obj1))
             )
@@ -87,7 +92,9 @@
                   )
     :effect (and (HandEmpty) 
                  (not (Holding ?label)) 
-                 (not (FreePlacement ?label ?obj)))
+                 (not (FreePlacement ?label ?obj))
+                ;  (Block ?obj)
+            )
   )  
 
   (:action stack
@@ -97,9 +104,12 @@
                     (AtObj ?objUp)
                     (Holding ?labelUp)
                     ;; Requirements ;;
-                    (Obj ?labelDn1 ?objDn1)
-                    (Obj ?labelDn2 ?objDn2)
-                    (StackPlace ?labelUp ?objUp ?objDn1 ?objDn2)
+                    (FreePlacement ?labelUp ?objUp)
+                    ; ; (Block ?objDn1)
+                    ; ; (Block ?objDn2)
+                    (GraspObj ?labelDn1 ?objDn1)
+                    (GraspObj ?labelDn2 ?objDn2)
+                    (StackPlace ?objUp ?objDn1 ?objDn2)
                   )
     :effect (and (HandEmpty) 
                  (not (Holding ?labelUp))

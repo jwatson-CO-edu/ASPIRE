@@ -3,9 +3,9 @@
 import numpy as np
 from scipy.stats import chi2
 
-from utils import ( roll_outcome, get_confusion_matx, multiclass_Bayesian_belief_update  )
+from utils import ( roll_outcome, get_confusion_matx, multiclass_Bayesian_belief_update, p_lst_has_nan )
 
-from env_config import ( _SUPPORT_NAME, _POSN_STDDEV, _BLOCK_NAMES, _NULL_NAME, _N_POSE_UPDT, _POSE_DIM )
+from env_config import ( _SUPPORT_NAME, _POSN_STDDEV, _BLOCK_NAMES, _NULL_NAME, _N_POSE_UPDT, _POSE_DIM, _CONFUSE_PROB )
 
 from symbols import Object
 
@@ -68,7 +68,11 @@ class ObjectBelief:
         except (np.linalg.LinAlgError, RuntimeWarning,):
             self.reset_covar()
             poseSample = np.random.multivariate_normal( self.pose, self.covar ) 
-        # support = self.object_supporting_pose( poseSample )
+        
+        while p_lst_has_nan( poseSample ):
+            self.reset_covar()
+            poseSample = np.random.multivariate_normal( self.pose, self.covar ) 
+
         return Object( 
             label, 
             poseSample,
@@ -120,7 +124,6 @@ class ObjectBelief:
             ),
             np.subtract( nuPose, self.pose )
         )
-        # print( self.covar )
         try:
             nuSum = np.add( 
                 np.reciprocal( self.covar, where = self.covar != 0.0 ), 
@@ -136,7 +139,7 @@ class ObjectBelief:
         # NOTE: THIS WILL NOT BE AS CLEAN IF THE CLASSIFIER DOES NO PROVIDE A DIST ACROSS ALL CLASSES
         if self.p_pose_relevant( objBelief ):
             Nclass = len( _BLOCK_NAMES )
-            cnfMtx = get_confusion_matx( Nclass )
+            cnfMtx = get_confusion_matx( Nclass, _CONFUSE_PROB )
             priorB = [ self.labels[ label ] for label in _BLOCK_NAMES ] 
             evidnc = [ objBelief.labels[ label ] for label in _BLOCK_NAMES ]
             updatB = multiclass_Bayesian_belief_update( cnfMtx, priorB, evidnc )

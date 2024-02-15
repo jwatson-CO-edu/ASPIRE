@@ -10,14 +10,12 @@ from utils import row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec
 from symbols import Object
 from beliefs import ObjectBelief
 from env_config import ( _MIN_X_OFFSET, _BLOCK_SCALE, TABLE_URDF_PATH, _BLOCK_NAMES, _POSN_STDDEV, 
-                         _GRASP_VERT_OFFSET, _GRASP_ORNT_XYZW, _ACTUAL_NAMES, )
+                         _GRASP_VERT_OFFSET, _GRASP_ORNT_XYZW, _ACTUAL_NAMES, _ONLY_RED, _ONLY_PRIMARY )
 
 ##### Paths #####
 
 
 ########## ENVIRONMENT #############################################################################
-_ONLY_RED     = False
-_ONLY_PRIMARY = True
 
 class DummyBelief:
     """ Stand-in for an actual `ObjectBelief` """
