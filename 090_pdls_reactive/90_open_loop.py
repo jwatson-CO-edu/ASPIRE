@@ -22,6 +22,7 @@
         [Y] (Holding ?label) ; From Pick, 2024-02-13: Easy!
         [Y] (HandEmpty) ; From Place, 2024-02-13: Easy!
         {P} ALL predicates?, 2024-02-13: Not at this time!
+    [ ] Start with deterministic classes and poses
     [>] Try two arches
     [>] Collect failure statistics
         * No Sankey Graph for the open loop version
