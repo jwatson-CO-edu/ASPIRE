@@ -6,133 +6,105 @@
   (:predicates
 
     ;;; Symbols ;;;
-    (Obj ?label ?pose)
-    (Grasp ?label ?pose ?effPose) ; A grasp has to have a target
-    (IKSoln ?effPose ?config) ; Sample from hand pose
-    (Path ?label ?poseBgn ?poseEnd ?traj) ; Is there a safe path from A to B?: Checked by world
-    (StackPlace ?labelUp ?poseUp ?poseDn1 ?poseDn2)
+    (Obj ?label ?obj)
+    ; (Grasp ?label ?pose ?effPose) ; A grasp has to have a target
+    ; (IKSoln ?effPose ?config) ; Sample from hand pose
+    ; (Path ?label ?objBgn ?objEnd ?traj) ; Is there a safe path from A to B?: Checked by world
+    (StackPlace ?labelUp ?objUp ?objDn1 ?objDn2)
 
     ;;; Domains ;;;
-    (Graspable ?label) ; Used by "stream.pddl"
-    (Conf ?config) ; Used by "stream.pddl"
-    (Pose ?pose) ; Used by "stream.pddl", Do NOT pollute this space!
-    (EffPose ?pose) ; Used by "stream.pddl"
+    (Graspable ?label); Name of a real object we can grasp
+    (Waypoint ?obj) ; Model of any object we can go to in the world, real or not
+    ; (Conf ?config) ; Used by "stream.pddl"
+    ; (Pose ?pose) ; Used by "stream.pddl", Do NOT pollute this space!
+    ; (EffPose ?pose) ; Used by "stream.pddl"
   
     ;;; States ;;;
+    (AtObj ?obj)
     (Holding ?label) ; From Pick
     (HandEmpty) ; From Place
-    (AtConf ?config) ; From moves
-    (AtPose ?effPose) ; From Move Holding
     (Supported ?labelUp ?labelDn) ; Is the up object on top of the down object?
 
     ;;; Checks ;;;
-    (FreePlacement ?label ?pose) ; Is there an open spot for placement?: Checked by world
-    (SafeMotion ?config1 ?config2) ; Is there a safe path from config A to config B?: Checked by world
+    (FreePlacement ?label ?obj) ; Is there an open spot for placement?: Checked by world
+    (SafeMotion ?obj1 ?obj2 ?traj) ; Is there a safe path from config A to config B?: Checked by world
   )
 
   ;;;;;;;;;; ACTIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-  (:action move_q
-    :parameters (?config1 ?config2)
-    :precondition (and 
-                    ;; Knowns ;;
-                    (AtConf ?config1) 
-                    ;; Requirements ;;
-                    (SafeMotion ?config1 ?config2)
-                  )
-    :effect (and (AtConf ?config2)
-                 (not (AtConf ?config1)) ) 
-  )
-
   (:action move_free
-    :parameters (?effPose1 ?effPose2 ?config1 ?config2)
+    :parameters (?obj1 ?obj2 ?traj)
     :precondition (and 
                     ;; Knowns ;;
-                    (AtPose ?effPose1)
+                    (AtObj ?obj1)
                     (HandEmpty)
                     ;; Requirements ;;
-                    (IKSoln ?effPose2 ?config2) 
-                    (IKSoln ?effPose1 ?config1)
-                    (SafeMotion ?config1 ?config2)
+                    (SafeMotion ?obj1 ?obj2 ?traj)
                   )
-    :effect (and (AtPose ?effPose2)
-                 (not (AtPose ?effPose1))
-                 (AtConf ?config2)
-                 (not (AtConf ?config1))
+    :effect (and (AtObj ?obj2)
+                 (not (AtObj ?obj1))
             ) 
   )
 
   (:action pick
-    :parameters (?label ?pose ?effPose ?config)
+    :parameters (?label ?obj)
     :precondition (and 
                     ;; Knowns ;;
-                    (Obj ?label ?pose)
-                    (AtPose ?effPose)
+                    (Obj ?label ?obj)
+                    (AtObj ?obj)
                     (HandEmpty)
-                    ;; Requirements ;;
-                    (Grasp ?label ?pose ?effPose)
                   )
     :effect (and (Holding ?label) 
                  (not (HandEmpty)))
   )
 
   (:action move_holding
-    :parameters (?label ?poseBgn ?poseEnd ?effPose1 ?effPose2 ?config1 ?config2 ?traj)
+    :parameters (?label ?obj1 ?obj2 ?traj)
     :precondition (and 
                     ;; Knowns ;;
                     (Holding ?label)
-                    (AtPose ?effPose1)
+                    (AtObj ?obj1)
                     ;; Requirements ;;
-                    (Obj ?label ?poseBgn)
-                    (Grasp ?label ?poseBgn ?effPose1)   
-                    (Grasp ?label ?poseEnd ?effPose2)  
-                    (IKSoln ?effPose1 ?config1)
-                    (IKSoln ?effPose2 ?config2) 
-                    (SafeMotion ?config1 ?config2)
-                    (Path ?label ?poseBgn ?poseEnd ?traj)
+                    (Obj ?label ?obj1)
+                    ; (FreePlacement ?label ?obj2)
+                    (SafeMotion ?obj1 ?obj2 ?traj)
                   )
-    :effect (and (Obj ?label ?poseEnd)
-                 (not (Obj ?label ?poseBgn))
-                 (AtPose ?effPose2)
-                 (not (AtPose ?effPose1))
-                 (AtConf ?config2)
-                 (not (AtConf ?config1))
+    :effect (and (Obj ?label ?obj2)
+                 (not (Obj ?label ?obj1))
+                 (AtObj ?obj2)
+                 (not (AtObj ?obj1))
             )
   )
 
   (:action place
-    :parameters (?label ?pose ?effPose)
+    :parameters (?label ?obj)
     :precondition (and 
                     ;; Knowns ;;
-                    (AtPose ?effPose)
+                    (AtObj ?obj)
                     (Holding ?label)
-                    ; (Obj ?label ?pose)
                     ;; Requirements ;;
-                    (FreePlacement ?label ?pose)
-                    (Grasp ?label ?pose ?effPose)
+                    (FreePlacement ?label ?obj)
                   )
     :effect (and (HandEmpty) 
-                 (not (Holding ?label)) ;)
-                 (not (FreePlacement ?label ?pose)))
+                 (not (Holding ?label)) 
+                 (not (FreePlacement ?label ?obj)))
   )  
 
   (:action stack
-    :parameters (?labelUp ?labelDn1 ?labelDn2 ?poseDn1 ?poseDn2 ?poseUp ?effPose)
+    :parameters (?labelUp ?labelDn1 ?labelDn2 ?objUp ?objDn1 ?objDn2)
     :precondition (and 
                     ;; Knowns ;;
-                    (AtPose ?effPose)
+                    (AtObj ?objUp)
                     (Holding ?labelUp)
                     ;; Requirements ;;
-                    (Obj ?labelDn1 ?poseDn1)
-                    (Obj ?labelDn2 ?poseDn2)
-                    (StackPlace ?labelUp ?poseUp ?poseDn1 ?poseDn2)
-                    (Grasp ?labelUp ?poseUp ?effPose)
+                    (Obj ?labelDn1 ?objDn1)
+                    (Obj ?labelDn2 ?objDn2)
+                    (StackPlace ?labelUp ?objUp ?objDn1 ?objDn2)
                   )
     :effect (and (HandEmpty) 
                  (not (Holding ?labelUp))
                  (Supported ?labelUp ?labelDn1)
                  (Supported ?labelUp ?labelDn2)
-                ;  (not (FreePlacement ?labelUp ?poseUp))
             )
   )  
 )

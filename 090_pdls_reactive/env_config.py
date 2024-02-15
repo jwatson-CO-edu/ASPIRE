@@ -15,9 +15,10 @@ TABLE_URDF_PATH = os.path.join( pybullet_data.getDataPath(), "table/table.urdf" 
 ########## OBJECTS #################################################################################
 
 _NULL_NAME    = "NOTHING"
-_BLOCK_NAMES  = ['redBlock', 'ylwBlock', 'bluBlock', 'grnBlock', 'ornBlock', 'vioBlock', _NULL_NAME]
+_WP_NAME      = "WAYPOINT"
+# _BLOCK_NAMES  = ['redBlock', 'ylwBlock', 'bluBlock', 'grnBlock', 'ornBlock', 'vioBlock', _NULL_NAME]
 # _BLOCK_NAMES  = ['redBlock', _NULL_NAME]
-# _BLOCK_NAMES  = ['redBlock', 'ylwBlock', 'bluBlock', _NULL_NAME]
+_BLOCK_NAMES  = ['redBlock', 'ylwBlock', 'bluBlock', _NULL_NAME]
 _POSE_DIM     = 7
 _ACTUAL_NAMES = _BLOCK_NAMES[:-1]
 _SUPPORT_NAME = 'table'

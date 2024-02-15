@@ -65,7 +65,7 @@ class ObjectBelief:
         label = roll_outcome( self.labels )
         try:
             poseSample = np.random.multivariate_normal( self.pose, self.covar ) 
-        except np.linalg.LinAlgError:
+        except (np.linalg.LinAlgError, RuntimeWarning,):
             self.reset_covar()
             poseSample = np.random.multivariate_normal( self.pose, self.covar ) 
         # support = self.object_supporting_pose( poseSample )
@@ -121,11 +121,15 @@ class ObjectBelief:
             np.subtract( nuPose, self.pose )
         )
         # print( self.covar )
-        nuSum = np.add( 
-            np.reciprocal( self.covar, where = self.covar != 0.0 ), 
-            np.reciprocal( nuvar, where = nuvar != 0.0 ) 
-        )
-        self.covar = np.reciprocal( nuSum, where = nuSum != 0.0 )
+        try:
+            nuSum = np.add( 
+                np.reciprocal( self.covar, where = self.covar != 0.0 ), 
+                np.reciprocal( nuvar, where = nuvar != 0.0 ) 
+            )
+            self.covar = np.reciprocal( nuSum, where = nuSum != 0.0 )
+        except RuntimeWarning:
+            print( "WARNING: Covariance reset due to overflow!" )
+            self.reset_covar()
     
     def integrate_belief( self, objBelief ):
         """ if `objBelief` is relevant, then Update this belief with evidence and return True, Otherwise return False """

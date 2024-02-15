@@ -8,6 +8,14 @@
     [Y] Pick, 2024-02-08: Easy!
     [Y] Move_Holding, 2024-02-08: Easy!
     [Y] Place, 2024-02-08: Easy!
+[>] DOMAIN REFACTOR 5, Condense {Obj,Grasp,IKSoln} --into-> Waypoint
+    [Y] Rewrite "domain.pddl", 2024-02-14: Seems consistent!
+    [Y] Rewrite "stream.pddl", 2024-02-14: Seems consistent!
+    [Y] Rewrite "sybmols.py", 2024-02-14: Condensed!
+    [Y] Rewrite streams, 2024-02-14: Condensed!
+    [>] Test on 3 blocks
+    [ ] Test on 6 blocks    
+        [ ] Does this problem need a setdown sprinkler?
 [>] Non-Reactive Version: Open Loop
     [>] Check that the goal predicates are met
         [Y] (Obj ?label ?pose), 2024-02-13: Easy!
@@ -28,7 +36,6 @@
         [ ] Sankey Graph of sequence incidents during each episode
             [ ] Makespan on X-axis?
 [ ] Responsive Version
-
 """
 
 
@@ -70,10 +77,10 @@ from utils import ( row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec, diff_norm,
 
 from env_config import ( _GRASP_VERT_OFFSET, _GRASP_ORNT_XYZW, _NULL_NAME, _ACTUAL_NAMES, _MIN_X_OFFSET,
                          _NULL_THRESH, _BLOCK_SCALE, _CLOSEST_TO_BASE, _ACCEPT_POSN_ERR, _MIN_SEP, _Z_SAFE,
-                         _N_POSE_UPDT )
+                         _N_POSE_UPDT, _WP_NAME )
 from pb_BT import connect_BT_to_robot_world, Move_Arm, Grasp, Ungrasp
 from PB_BlocksWorld import PB_BlocksWorld, rand_table_pose
-from symbols import Pose, Config, Path, Object
+from symbols import Object, Path
 
 from Cheap_PDDL_Parser import pddl_as_list, get_action_defn
 
@@ -219,39 +226,37 @@ class GroundedAction( Sequence ):
     def __repr__( self ):
         """ Get the name, Assume child classes made it sufficiently descriptive """
         return str( self.name )
-    
-# 2024-02-08: Ignore goal parsing & checking until all necessary actions execute in PB
-# FIXME: ADD GOAL PARSING
-# FIXME: ADD GOAL CHECKING
+
 
 
 class MoveFree( GroundedAction ):
     """ Move the unburdened effector to the given location """
     def __init__( self, args, goal = None, world = None, robot = None, name = None ):
 
-        # ?effPose1 ?effPose2 ?config1 ?config2
-        effPose1, effPose2, config1, config2 = args
+        # ?obj1 ?obj2 ?traj
+        obj1, obj2, traj = args
 
         if name is None:
-            name = f"Move Free to {effPose2}"
+            name = f"Move Free to {obj2.pose}"
         super().__init__( args, goal, world, robot, name )
     
-        posn, ornt = row_vec_to_pb_posn_ornt( effPose2.value )
-
-        self.add_child( 
-            Move_Arm( posn, ornt, name = name, ctrl = robot, world = world )
-        )
+        for x_i in traj.wp[1:]:
+            grasp_pose = list( x_i.grasp )
+            posn, ornt = row_vec_to_pb_posn_ornt( grasp_pose )
+            self.add_child( 
+                Move_Arm( posn, ornt, name = name, ctrl = robot, world = world )
+            )
 
 
 class Pick( GroundedAction ):
     """ Add object to the gripper payload """
     def __init__( self, args, goal = None, world = None, robot = None, name = None ):
 
-        # ?label ?pose ?effPose ?config
-        label, pose, effPose, config = args
+        # ?label ?obj
+        label, obj = args
         
         if name is None:
-            name = f"Pick object {label} at {pose}"
+            name = f"Pick object {label} at {obj.pose}"
         super().__init__( args, goal, world, robot, name )
 
         self.add_child( 
@@ -263,20 +268,17 @@ class MoveHolding( GroundedAction ):
     """ Move the burdened effector to the given location """
     def __init__( self, args, goal = None, world = None, robot = None, name = None ):
 
-        # ?label ?poseBgn ?poseEnd ?effPose1 ?effPose2 ?config1 ?config2 ?traj
-        label, bgnPose, endPose, effPose1, effPose2, config1, config2, traj = args
+        # ?label ?objBgn ?objEnd ?traj
+        label, objBgn, objEnd, traj = args
 
         if name is None:
-            name = f"Move Holding {label} to {endPose}"
+            name = f"Move Holding {label} to {objEnd.pose}"
         super().__init__( args, goal, world, robot, name )
 
-        # Compute a grasp for every waypoint in the trajectory
-        for x_i in traj.x[1:]:
-            grasp_pose = list(x_i.value)
-            grasp_pose[2] += _GRASP_VERT_OFFSET
-            posn, _ = row_vec_to_pb_posn_ornt( grasp_pose )
-            ornt = _GRASP_ORNT_XYZW.copy()
-
+        # Move grasp to every waypoint in the trajectory
+        for x_i in traj.wp[1:]:
+            grasp_pose = list( x_i.grasp )
+            posn, ornt = row_vec_to_pb_posn_ornt( grasp_pose )
             self.add_child( 
                 Move_Arm( posn, ornt, name = name, ctrl = robot, world = world )
             )
@@ -286,15 +288,17 @@ class Place( GroundedAction ):
     """ Let go of gripper payload """
     def __init__( self, args, goal = None, world = None, robot = None, name = None ):
 
-        label, pose, effPose = args
+        # ?label ?obj
+        label, obj = args
         
         if name is None:
-            name = f"Place object {label} at {pose}"
+            name = f"Place object {label} at {obj.pose}"
         super().__init__( args, goal, world, robot, name )
 
         self.add_child( 
             Ungrasp( name = name, ctrl = robot, world = world )
         )
+
 
 class Stack( GroundedAction ):
     """ Let go of gripper payload """
@@ -523,11 +527,41 @@ class ReactiveExecutive:
         nuSym = [bel.sample_fresh() for bel in self.beliefs]
         for sym in nuSym:
             if (sym.label != _NULL_NAME):
-                self.last[ sym.label ] = Pose( list( sym.pose ) )
+                self.last[ sym.label ] = list( sym.pose )
         if label in self.last:
             return self.last[ label ]
         else:
             return None
+        
+
+    def calc_grasp( self, objPose ):
+        """ A function that returns grasps """
+        grasp_pose = list( objPose )
+        grasp_pose[2] += _GRASP_VERT_OFFSET
+        posn, _ = row_vec_to_pb_posn_ornt( grasp_pose )
+        ornt = _GRASP_ORNT_XYZW.copy()
+        return pb_posn_ornt_to_row_vec( posn, ornt )
+    
+        
+    def calc_ik( self, effPose ):
+        """ Helper function for IK and Path planners """
+        currPosn, _        = self.world.robot.get_current_pose()
+        grspPosn, grspOrnt = row_vec_to_pb_posn_ornt( effPose )
+        if diff_norm( currPosn, grspPosn ) < 2.0:
+            return self.world.robot.calculate_ik_quat( grspPosn, grspOrnt )
+        else:
+            return None
+        
+
+    def object_from_label_pose( self, objcName, objcPose ):
+        """ Load a Waypoint with relevant data """
+        grspPose = self.calc_grasp( objcPose )
+        grspCnfg = self.calc_ik( grspPose )
+        rtnObj   = Object( objcName, objcPose )
+        rtnObj.grasp  = grspPose
+        rtnObj.config = grspCnfg
+        return rtnObj
+    
 
     def get_object_stream( self ):
         """ Return a function that returns poses """
@@ -537,79 +571,49 @@ class ReactiveExecutive:
 
             print( f"\nEvaluate OBJECT stream with args: {args}\n" )
 
-            objName = args[0]
+            objcName = args[0]
 
             ## Sample Symbols ##
-            # self.belief_update()
-            # nuSym     = [bel.sample_symbol() for bel in self.beliefs]
-            rtnPose = self.sample_fresh( objName )
-            if rtnPose is not None:
-                print( f"OBJECT stream SUCCESS: {rtnPose.value}\n" )
-                yield ( rtnPose, ) 
-            else:
-                print( f"OBJECT stream FAILURE: No {objName}\n" )
+            objcPose = self.sample_fresh( objcName )
+            if isinstance( objcPose, list ):
+                rtnObj = self.object_from_label_pose( objcName, objcPose )
+                print( f"OBJECT stream SUCCESS: {rtnObj}\n" )
+                yield (rtnObj,)
 
         return stream_func
     
-
-    def get_grasp_stream( self ):
-        """ Return a function that returns grasps """
-        
-        def stream_func( *args ):
-            """ A function that returns grasps """
-            
-            print( f"\nEvaluate GRASP stream with args: {args}\n" )
-
-            label, pose = args
-            grasp_pose = list( pose.value )
-            grasp_pose[2] += _GRASP_VERT_OFFSET
-            posn, _ = row_vec_to_pb_posn_ornt( grasp_pose )
-            ornt = _GRASP_ORNT_XYZW.copy()
-            grasp_pose = Pose( pb_posn_ornt_to_row_vec( posn, ornt ) )
-            print( f"GRASP stream SUCCESS: {grasp_pose.value}\n" )
-            yield (grasp_pose,) # FIXME: CHECK THAT THIS GETS CERTIFIED
-            # else yield nothing if we cannot certify the object!
-
-        return stream_func
-    
-
-    def calc_ik( self, effPose ):
-        """ Helper function for IK and Path planners """
-        currPosn, _        = self.world.robot.get_current_pose()
-        grspPosn, grspOrnt = row_vec_to_pb_posn_ornt( effPose.value )
-        if diff_norm( currPosn, grspPosn ) < 2.0:
-            graspQ = self.world.robot.calculate_ik_quat( grspPosn, grspOrnt )
-            return Config( graspQ )
+    def safe_motion_test( self, bgn, end ):
+        """ Test if a line between two effector positions passes through the robot base """
+        posn1  , _       = row_vec_to_pb_posn_ornt( bgn.grasp )
+        posn2  , _       = row_vec_to_pb_posn_ornt( end.grasp )
+        d = closest_dist_Q_to_segment_AB( [0.0,0.0,0.0], posn1, posn2, False )
+        if math.isnan( d ):
+            print( f"MOTION test SUCCESS: Non-intersection\n" )
+            return True
+        if diff_norm( posn1, posn2 ) <= 0.0:
+            print( f"MOTION test SUCCESS\n" )
+            return True
+        if d < _CLOSEST_TO_BASE:
+            print( f"MOTION test FAILURE: {d}\n" )
+            return False
         else:
-            return None
-
-
-    def get_IK_solver( self ):
-        """ Return a function that computes Inverse Kinematics for a pose """
-
-        def stream_func( *args ):
-            """ A function that computes Inverse Kinematics for a pose """
-
-            print( f"\nEvaluate IK stream with args: {args}\n" )
-
-            effPose = args[0]
-            graspQ  = self.calc_ik( effPose )
-            if graspQ is not None:
-                print( f"IK stream SUCCESS: {graspQ}\n" )
-                yield (graspQ,)
-            else:
-                print( f"IK stream FAILURE: Excessive distance\n" )
-
-        return stream_func
+            print( f"MOTION test SUCCESS\n" )
+            return True
     
-    
-    def path_segment_checker( self, label, bgn, end ):
+    def path_segment_checker( self, bgn, end ):
         """ Helper function for the path planner stream """
-        if diff_norm( bgn.value, end.value ) > 0.0: 
 
-            posnBgn, _ = row_vec_to_pb_posn_ornt( bgn.value )
-            posnEnd, _ = row_vec_to_pb_posn_ornt( end.value )
+        if not self.safe_motion_test( bgn, end ):
+            return False
 
+        label      = bgn.label
+        posnBgn, _ = row_vec_to_pb_posn_ornt( bgn.pose )
+        posnEnd, _ = row_vec_to_pb_posn_ornt( end.pose )
+
+        if label == _WP_NAME:
+            return True
+
+        if diff_norm( posnBgn, posnEnd ) > 0.0: 
             ## Sample Symbols ##
             nuSym = [bel.sample_symbol() for bel in self.beliefs]
             print( f"Symbols: {nuSym}" )
@@ -623,6 +627,7 @@ class ReactiveExecutive:
         else:
             return True
 
+
     def get_path_planner( self ):
         """ Return a function that checks if the path is free from obstruction """
 
@@ -630,21 +635,20 @@ class ReactiveExecutive:
             
             print( f"\nEvaluate PATH stream with args: {args}\n" )
 
-            label, bgn, end = args
-            qBgn = self.calc_ik( bgn )
-            qEnd = self.calc_ik( end )
-            if self.path_segment_checker( label, bgn, end ):
-                yield (Path( label, bgn, end, X = [bgn, end,], Q = [qBgn, qEnd] ),)
+            obj1, obj2 = args
+
+            if self.path_segment_checker( obj1, obj2 ):
+                yield ( Path( [obj1, obj2],), )
             else:
-                posnBgn, orntEnd = row_vec_to_pb_posn_ornt( bgn.value )
-                posnEnd, _       = row_vec_to_pb_posn_ornt( end.value )
-                posnMid = np.add( posnBgn, posnEnd ) / 2.0
+                posnBgn, orntEnd = row_vec_to_pb_posn_ornt( obj1.pose )
+                posnEnd, _       = row_vec_to_pb_posn_ornt( obj2.pose )
+                posnMid    = np.add( posnBgn, posnEnd ) / 2.0
                 posnMid[2] = _Z_SAFE
-                orntMid = orntEnd[:]
-                mid      = Pose( pb_posn_ornt_to_row_vec( posnMid, orntMid ) )
-                qMid    = self.calc_ik( mid )
-                if self.path_segment_checker( label, bgn, mid ) and self.path_segment_checker( label, mid, end ):
-                    yield (Path( label, bgn, end, X = [bgn, mid, end,], Q = [qBgn, qMid, qEnd] ),)
+                orntMid    = orntEnd[:]
+                objcPose = pb_posn_ornt_to_row_vec( posnMid, orntMid )
+                mid      = self.object_from_label_pose( obj1.label, objcPose )
+                if self.path_segment_checker( obj1, mid ) and self.path_segment_checker( mid, obj2 ):
+                    yield ( Path( [obj1, mid, obj2,],), )
         return stream_func
     
 
@@ -656,19 +660,19 @@ class ReactiveExecutive:
 
             print( f"\nEvaluate STACK PLACE stream with args: {args}\n" )
 
-            labelUp, poseDn1, poseDn2 = args
+            labelUp, objDn1, objDn2 = args
 
-            posnDn1, orntDn1 = row_vec_to_pb_posn_ornt( poseDn1.value )
-            posnDn2, _       = row_vec_to_pb_posn_ornt( poseDn2.value )
+            posnDn1, orntDn1 = row_vec_to_pb_posn_ornt( objDn1.pose )
+            posnDn2, _       = row_vec_to_pb_posn_ornt( objDn2.pose )
             dist   = diff_norm( posnDn1, posnDn2 )
             sepMax = 2.1*_BLOCK_SCALE
             if dist <= sepMax:
-                posnUp = np.add( posnDn1, posnDn2 ) / 2.0
+                posnUp    = np.add( posnDn1, posnDn2 ) / 2.0
                 posnUp[2] = 2.0*_BLOCK_SCALE
-                orntUp = orntDn1[:]
-                poseUp = Pose( pb_posn_ornt_to_row_vec( posnUp, orntUp ) )
-                print( f"STACK PLACE stream SUCCESS: {poseUp.value}\n" )
-                yield (poseUp,)
+                orntUp    = orntDn1[:]
+                objUp     = self.object_from_label_pose( labelUp, pb_posn_ornt_to_row_vec( posnUp, orntUp ) )
+                print( f"STACK PLACE stream SUCCESS: {objUp.pose}\n" )
+                yield (objUp,)
             else:
                 print( f"STACK PLACE stream FAILURE: {dist} > {sepMax}\n" )
 
@@ -683,11 +687,10 @@ class ReactiveExecutive:
             print( f"\nEvaluate PLACEMENT test with args: {args}\n" )
 
             # label, pose = args
-            label, pose = args
-            posn , _    = row_vec_to_pb_posn_ornt( pose.value )
+            label, obj = args
+            posn , _    = row_vec_to_pb_posn_ornt( obj.pose )
 
             ## Sample Symbols ##
-            # self.belief_update()
             nuSym = [bel.sample_symbol() for bel in self.beliefs]
             print( f"Symbols: {nuSym}" )
             for sym in nuSym:
@@ -702,32 +705,7 @@ class ReactiveExecutive:
         return test_func
             
 
-    def get_safe_motion_test( self ):
-        """ Return a function that checks if the path is free from obstruction """
-
-        def test_func( *args ):
-            
-            print( f"\nEvaluate MOTION test with args: {args}\n" )
-
-            config1, config2 = args
-            posn1  , _       = self.world.robot.fk_posn_ornt( config1.value )
-            posn2  , _       = self.world.robot.fk_posn_ornt( config2.value )
-            d = closest_dist_Q_to_segment_AB( [0.0,0.0,0.0], posn1, posn2, False )
-            if math.isnan( d ):
-                print( f"MOTION test SUCCESS: Non-intersection\n" )
-                return True
-            if diff_norm( posn1, posn2 ) <= 0.0:
-                print( f"MOTION test SUCCESS\n" )
-                return True
-            if d < _CLOSEST_TO_BASE:
-                print( f"MOTION test FAILURE: {d}\n" )
-                return False
-            else:
-                print( f"MOTION test SUCCESS\n" )
-                return True
-            
-        return test_func
-
+    ##### Goal Validation #################################################
 
     def validate_predicate( self, pred ):
         """ Check if the predicate is true """
@@ -740,23 +718,22 @@ class ReactiveExecutive:
             pPos = pred[2]
             tObj = self.world.get_block_true( pLbl )
             print( pred )
-            print( "Obj:", pPos.value[:3], tObj.pose[:3] )
-            print( f"Obj: {diff_norm( pPos.value[:3], tObj.pose[:3] )} <= {_ACCEPT_POSN_ERR}" )
-            return (diff_norm( pPos.value[:3], tObj.pose[:3] ) <= _ACCEPT_POSN_ERR)
+            print( "Obj:", pPos.pose[:3], tObj.pose[:3] )
+            print( f"Obj: {diff_norm( pPos.pose[:3], tObj.pose[:3] )} <= {_ACCEPT_POSN_ERR}" )
+            return (diff_norm( pPos.pose[:3], tObj.pose[:3] ) <= _ACCEPT_POSN_ERR)
         elif pTyp == 'Supported':
             lblUp = pred[1]
             lblDn = pred[2]
             objUp = self.world.get_block_true( lblUp )
             objDn = self.world.get_block_true( lblDn )
-            xySep = diff_norm( objUp.value[:2], objDn.pose[:2] )
-            zSep  = objUp.value[2] - objDn.pose[2] # Signed value
+            xySep = diff_norm( objUp.pose[:2], objDn.pose[:2] )
+            zSep  = objUp.pose[2] - objDn.pose[2] # Signed value
             print( f"Supported, X-Y Sep: {xySep} <= {2.0*_BLOCK_SCALE}, Z Sep: {zSep} >= {1.75*_BLOCK_SCALE}" )
             return ((xySep <= 2.0*_BLOCK_SCALE) and (zSep >= 1.75*_BLOCK_SCALE))
         else:
             print( f"UNSUPPORTED predicate check!: {pTyp}" )
             return False
     
-
     def validate_goal( self, goal ):
         """ Check if the goal is met """
         if goal[0] == 'and':
@@ -783,32 +760,30 @@ class ReactiveExecutive:
         print( "Read files!" )
 
         print( 'Robot:', self.world.robot.get_name() )
-        conf = Config( self.world.robot.get_joint_angles() )
-        pose = Pose( pb_posn_ornt_to_row_vec( *self.world.robot.get_current_pose() ) )
+        start = self.object_from_label_pose( _WP_NAME, pb_posn_ornt_to_row_vec( *self.world.robot.get_current_pose() ) )
         
-        trgtRed = Pose( [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
-        trgtYlw = Pose( [ _MIN_X_OFFSET+4.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
-        trgtBlu = Pose( [ _MIN_X_OFFSET+6.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
+        trgtRed = self.object_from_label_pose( 'redBlock', [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
 
-        trgtGrn = Pose( [ _MIN_X_OFFSET+6.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
-        trgtOrn = Pose( [ _MIN_X_OFFSET+8.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
-        trgtVio = Pose( [ _MIN_X_OFFSET+7.0*_BLOCK_SCALE, 0.000, 2.0*_BLOCK_SCALE,  1,0,0,0 ] )
-        
-        tCnf = Config( [0 for _ in range(6)] )
-        trgt = Pose( [ 0.492, 0.134, 0.600, 0.707, 0.0, 0.707, 0.0 ] )
+        trgtYlw = self.object_from_label_pose( 'ylwBlock', [ _MIN_X_OFFSET+4.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
+
+        trgtBlu = self.object_from_label_pose( 'bluBlock', [ _MIN_X_OFFSET+6.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
+
+        trgtGrn = self.object_from_label_pose( 'grnBlock', [ _MIN_X_OFFSET+6.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
+
+        trgtOrn = self.object_from_label_pose( 'ornBlock', [ _MIN_X_OFFSET+8.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
+
+        trgtVio = self.object_from_label_pose( 'vioBlock', [ _MIN_X_OFFSET+7.0*_BLOCK_SCALE, 0.000, 2.0*_BLOCK_SCALE,  1,0,0,0 ] )
         
         init = [
             ## Init Predicates ##
-            ('Conf', conf),
-            ('AtConf', conf),
-            ('EffPose', pose),
-            ('AtPose', pose),
+            ('Waypoint', start),
+            ('AtObj', start),
             ('HandEmpty',),
             ## Goal Predicates ##
-            ('Pose', trgtRed),
-            ('Pose', trgtYlw),
-            ('Pose', trgtGrn),
-            ('Pose', trgtOrn),
+            ('Waypoint', trgtRed),
+            ('Waypoint', trgtYlw),
+            # ('Waypoint', trgtGrn),
+            # ('Waypoint', trgtOrn),
         ] 
         
         for body in _ACTUAL_NAMES:
@@ -820,39 +795,37 @@ class ReactiveExecutive:
 
         print( "Robot grounded!" )
 
-        # goal = ('AtConf', tCnf)  
-        # goal = ('AtPose', trgt)  
-        # goal = ('Holding', 'redBlock')  
+        # goal = ('and', ('AtObj', trgtRed ), )
+        # goal = ('and', ('Holding', 'redBlock'),  )
 
-        # goal = ('and',
-        #         ('Obj', 'redBlock', trgtRed),
-        #         # # ('Obj', 'ylwBlock', trgtYlw),
-        #         # # ('Obj', 'bluBlock', trgtBlu),
-        #         # ('HandEmpty',)
-        # )
+        goal = ('and',
+                ('Obj', 'redBlock', trgtRed),
+                ('Obj', 'ylwBlock', trgtYlw),
+                # # ('Obj', 'bluBlock', trgtBlu),
+                # ('HandEmpty',)
+        )
         
-        goal = ( 'and',
-            ('HandEmpty',),
-            ('Obj', 'redBlock', trgtRed),
-            ('Obj', 'ylwBlock', trgtYlw),
-            ('Supported', 'bluBlock', 'redBlock'),
-            ('Supported', 'bluBlock', 'ylwBlock'),
-            ('Obj', 'grnBlock', trgtGrn),
-            ('Obj', 'ornBlock', trgtOrn),
-            ('Supported', 'vioBlock', 'grnBlock'),
-            ('Supported', 'vioBlock', 'ornBlock'),
-        ) 
+        # goal = ( 'and',
+        #     ('HandEmpty',),
+            
+        #     ('Obj', 'redBlock', trgtRed),
+        #     ('Obj', 'ylwBlock', trgtYlw),
+        #     ('Supported', 'bluBlock', 'redBlock'),
+        #     ('Supported', 'bluBlock', 'ylwBlock'),
+
+        #     # ('Obj', 'grnBlock', trgtGrn),
+        #     # ('Obj', 'ornBlock', trgtOrn),
+        #     # ('Supported', 'vioBlock', 'grnBlock'),
+        #     # ('Supported', 'vioBlock', 'ornBlock'),
+        # ) 
 
         stream_map = {
             ### Symbol Streams ###
-            'sample-object':      from_gen_fn( self.get_object_stream() ), 
-            'sample-grasp':       from_gen_fn( self.get_grasp_stream()  ),
-            'inverse-kinematics': from_gen_fn( self.get_IK_solver()     ),
-            'path-planner':       from_gen_fn( self.get_path_planner()  ),
-            'find-stack-place':   from_gen_fn( self.get_stacker()       ),
+            'sample-object':    from_gen_fn( self.get_object_stream() ), 
+            'find-safe-motion': from_gen_fn( self.get_path_planner()  ),
+            'find-stack-place': from_gen_fn( self.get_stacker()       ),
             ### Symbol Tests ###
             'test-free-placment': from_test( self.get_free_placement_test() ),
-            'test-safe-motion':   from_test( self.get_safe_motion_test()    ),
         }
 
         print( "About to create problem ... " )
@@ -863,7 +836,6 @@ class ReactiveExecutive:
     def run_one_episode( self, logger = None ):
         """ Run a single experiment and collect data """
         
-
         btPlan = get_BT_plan_from_PDLS_plan( plan, world )
         print( "\n\n\n" )
 
@@ -872,6 +844,7 @@ class ReactiveExecutive:
 
         while not btr.p_ended():
             btr.tick_once()
+
 
     def run_N_episodes( self, N ):
         """ Run N experiments and collect statistics """
@@ -920,7 +893,7 @@ class ReactiveExecutive:
             print( "\n\n\n" )
 
             self.run_one_episode( logger )
-            
+
             logger.end_trial()
         
 
@@ -983,18 +956,17 @@ if __name__ == "__main__":
                               visualize = True,
                               initial_complexity=4  )
             print( "Solver has completed!\n\n\n" )
+            print_solution( solution )
         except Exception as ex:
             print( "SOLVER FAULT\n" )
             print_exc()
             solution = (None, None, None)
             print( "\n\n\n" )
-
-        print_solution( solution )
         plan, cost, evaluations = solution
         print( f"\n\n\nPlan output from PDDLStream:" )
         if plan is not None:
             for i, action in enumerate( plan ):
-                print( dir( action ) )
+                # print( dir( action ) )
                 print( f"\t{i+1}: { action.__class__.__name__ }, {action.name}" )
                 for j, arg in enumerate( action.args ):
                     print( f"\t\tArg {j}:\t{type( arg )}, {arg}" )
