@@ -78,7 +78,7 @@ from utils import ( row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec, diff_norm,
 
 from env_config import ( _GRASP_VERT_OFFSET, _GRASP_ORNT_XYZW, _NULL_NAME, _ACTUAL_NAMES, _MIN_X_OFFSET,
                          _NULL_THRESH, _BLOCK_SCALE, _CLOSEST_TO_BASE, _ACCEPT_POSN_ERR, _MIN_SEP, _Z_SAFE,
-                         _N_POSE_UPDT, _WP_NAME )
+                         _N_POSE_UPDT, _WP_NAME, _SAMPLE_DET )
 from pb_BT import connect_BT_to_robot_world, Move_Arm, Grasp, Ungrasp
 from PB_BlocksWorld import PB_BlocksWorld, rand_table_pose
 from symbols import Object, Path
@@ -524,16 +524,36 @@ class ReactiveExecutive:
     
     ##### Stream Creators #################################################
 
-    def sample_fresh( self, label ):
-        """ Maintain a pose dict and only update it when needed """
+    def scan_fresh( self ):
+        """ Determinize last updated object beliefs """
         nuSym = [bel.sample_fresh() for bel in self.beliefs]
         for sym in nuSym:
             if (sym.label != _NULL_NAME):
-                self.last[ sym.label ] = list( sym.pose )
+                self.last[ sym.label ] = sym
+        return list( self.last.values() )
+    
+
+    def sample_fresh( self, label ):
+        """ Maintain a pose dict and only update it when needed """
+        self.scan_fresh()
         if label in self.last:
             return self.last[ label ]
         else:
             return None
+        
+
+    def sample_determ( self, label ):
+        """ Maintain a true pose dict and only update it when needed """
+        if label in self.last:
+            return self.last[ label ]
+        else:
+            nuSym = [world.get_block_true( name ) for name in _ACTUAL_NAMES]
+            for sym in nuSym:
+                self.last[ sym.label ] = sym
+            if label in self.last:
+                return self.last[ label ]
+            else:
+                return None
         
 
     def calc_grasp( self, objPose ):
@@ -563,6 +583,12 @@ class ReactiveExecutive:
         rtnObj.grasp  = grspPose
         rtnObj.config = grspCnfg
         return rtnObj
+
+
+    def add_grasp_config_to_object( self, obj ):
+        """ Load an existing Waypoint with relevant data """
+        obj.grasp  = self.calc_grasp( obj.pose )
+        obj.config = self.calc_ik( obj.grasp )
     
 
     def get_object_stream( self ):
@@ -576,14 +602,18 @@ class ReactiveExecutive:
             objcName = args[0]
 
             ## Sample Symbols ##
-            objcPose = self.sample_fresh( objcName )
-            if isinstance( objcPose, list ):
-                rtnObj = self.object_from_label_pose( objcName, objcPose )
+            if _SAMPLE_DET:
+                rtnObj = self.sample_determ( objcName )
+            else:
+                rtnObj = self.sample_fresh( objcName )
+            if rtnObj.label != _NULL_NAME:
+                self.add_grasp_config_to_object( rtnObj )
                 print( f"OBJECT stream SUCCESS: {rtnObj}\n" )
                 yield (rtnObj,)
 
         return stream_func
     
+
     def safe_motion_test( self, bgn, end ):
         """ Test if a line between two effector positions passes through the robot base """
         posn1  , _       = row_vec_to_pb_posn_ornt( bgn.grasp )
@@ -602,9 +632,11 @@ class ReactiveExecutive:
             print( f"MOTION test SUCCESS\n" )
             return True
     
+
     def path_segment_checker( self, bgn, end ):
         """ Helper function for the path planner stream """
 
+        print( bgn, end )
         if not self.safe_motion_test( bgn, end ):
             return False
 
@@ -616,9 +648,14 @@ class ReactiveExecutive:
             return True
 
         if diff_norm( posnBgn, posnEnd ) > 0.0: 
+
             ## Sample Symbols ##
-            nuSym = [bel.sample_symbol() for bel in self.beliefs]
+            if _SAMPLE_DET:
+                nuSym = self.world.full_scan_true()
+            else:
+                nuSym = self.scan_fresh()
             print( f"Symbols: {nuSym}" )
+
             for sym in nuSym:
                 if sym.label != label:
                     Q, _ = row_vec_to_pb_posn_ornt( sym.pose )
@@ -640,6 +677,7 @@ class ReactiveExecutive:
 
             obj1, obj2 = args
 
+            print( obj1, obj2 )
             if self.path_segment_checker( obj1, obj2 ):
                 yield ( Path( [obj1, obj2],), )
             else:
@@ -722,8 +760,12 @@ class ReactiveExecutive:
             posn , _    = row_vec_to_pb_posn_ornt( obj.pose )
 
             ## Sample Symbols ##
-            nuSym = [bel.sample_symbol() for bel in self.beliefs]
+            if _SAMPLE_DET:
+                nuSym = self.world.full_scan_true()
+            else:
+                nuSym = self.scan_fresh()
             print( f"Symbols: {nuSym}" )
+
             for sym in nuSym:
                 if label != sym.label:
                     symPosn, _ = row_vec_to_pb_posn_ornt( sym.pose )
@@ -958,8 +1000,9 @@ if __name__ == "__main__":
 
     planner = ReactiveExecutive( world )
 
-    for i in range( 2*_N_POSE_UPDT+1 ):
-        planner.belief_update() # We need at least an initial set of beliefs in order to plan
+    if not _SAMPLE_DET:
+        for i in range( 2*_N_POSE_UPDT+1 ):
+            planner.belief_update() # We need at least an initial set of beliefs in order to plan
 
     print( '\n\n\n##### PDLS INIT #####' )
     problem = planner.pddlstream_from_problem()
@@ -986,13 +1029,17 @@ if __name__ == "__main__":
             solution = solve( 
                 problem, 
                 algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
-                max_skeletons = 15,
-                unit_costs = True, 
-                unit_efforts = True,
+                max_skeletons = 50,
+                unit_costs   = False, 
+                unit_efforts = False,
+                effort_weight = 10.0,
                 success_cost = 40,
-                initial_complexity=2,
+                initial_complexity = 1,
                 complexity_step = 3,
-                search_sample_ratio = 1/25
+                search_sample_ratio = 1/1000, #1/750 # 1/1000, #1/2000 #500, #1/2, # 1/500, #1/200, #1/10, #2, # 25 #1/25
+                reorder = True,
+                # max_iterations = 2,
+                # max_memory = 1500000, #kb
             )
             print( "Solver has completed!\n\n\n" )
             print_solution( solution )
@@ -1024,35 +1071,9 @@ if __name__ == "__main__":
         while not btr.p_ended():
             btr.tick_once()
 
-
-    """
-    Plan has type: <class 'list'>
-	1:	<class 'pddlstream.language.constants.Action'>, move_free
-		1:	<class 'symbols.Pose'>, <Pose 0: [ 0.492  0.134  0.488  0.707 -0.     0.707 -0.   ]>
-		2:	<class 'symbols.Pose'>, <Pose 4: [0.671 0.265 0.098 0.707 0.    0.707 0.   ]>
-		3:	<class 'symbols.Config'>, <Config 1: [ 0.    -1.571  1.571 -1.571 -1.571  0.   ]>
-		4:	<class 'symbols.Config'>, <Config 3: [ 0.188 -0.757  1.472 -2.286 -1.571  0.188]>
-	2:	<class 'pddlstream.language.constants.Action'>, pick
-		1:	<class 'str'>, redBlock
-		2:	<class 'symbols.Pose'>, <Pose 2: [ 0.671  0.265  0.098  1.003 -0.008  0.011 -0.002]>
-		3:	<class 'symbols.Pose'>, <Pose 4: [0.671 0.265 0.098 0.707 0.    0.707 0.   ]>
-	3:	<class 'pddlstream.language.constants.Action'>, move_holding
-		1:	<class 'str'>, redBlock
-		2:	<class 'symbols.Pose'>, <Pose 2: [ 0.671  0.265  0.098  1.003 -0.008  0.011 -0.002]>
-		3:	<class 'symbols.Pose'>, <Pose 1: [0.476 0.    0.114 1.    0.    0.    0.   ]>
-		4:	<class 'symbols.Pose'>, <Pose 4: [0.671 0.265 0.098 0.707 0.    0.707 0.   ]>
-		5:	<class 'symbols.Pose'>, <Pose 3: [0.476 0.    0.114 0.707 0.    0.707 0.   ]>
-		6:	<class 'symbols.Config'>, <Config 3: [ 0.188 -0.757  1.472 -2.286 -1.571  0.188]>
-		7:	<class 'symbols.Config'>, <Config 2: [-0.282 -1.182  2.223 -2.611 -1.571 -0.282]>
-	4:	<class 'pddlstream.language.constants.Action'>, place
-		1:	<class 'str'>, redBlock
-		2:	<class 'symbols.Pose'>, <Pose 1: [0.476 0.    0.114 1.    0.    0.    0.   ]>
-		3:	<class 'symbols.Pose'>, <Pose 3: [0.476 0.    0.114 0.707 0.    0.707 0.   ]>
-
-    """
-
-    for i in range( 10 ):
-        planner.belief_update() # We need at least an initial set of beliefs in order to plan
+    if not _SAMPLE_DET:
+        for i in range( 10 ):
+            planner.belief_update() # We need at least an initial set of beliefs in order to plan
 
     print( f"Were the goals met?: {planner.validate_goal( problem.goal )}" )
     

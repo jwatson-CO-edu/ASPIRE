@@ -8,7 +8,7 @@
     :inputs (?label)
     :domain (Graspable ?label)
     :outputs (?obj)
-    :certified (and (GraspObj ?label ?obj) (Waypoint ?obj))
+    :certified (and (GraspObj ?label ?obj) (Waypoint ?obj) ) ;(Occupied ?obj))
   )
 
   ;; Safe Motion Planner ;;
@@ -33,7 +33,7 @@
   (:stream find-stack-place
     :inputs (?objDn1 ?objDn2)
     :domain (and (Waypoint ?objDn1) (Waypoint ?objDn2))
-    ; :fluents (Block) 
+    ; :fluents (FreePlacement) 
     :outputs (?objUp)
     :certified (and (StackPlace ?objUp ?objDn1 ?objDn2) (Waypoint ?objUp))
   )

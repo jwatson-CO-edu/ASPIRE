@@ -14,7 +14,7 @@
     ;;; Domains ;;;
     (Graspable ?label); Name of a real object we can grasp
     (Waypoint ?obj) ; Model of any object we can go to in the world, real or not
-    ; (Block ?obj) ; Model of a real object we can grasp
+    (Occupied ?obj) ; Model of a real object we can grasp
     
     ; (Conf ?config) ; Used by "stream.pddl"
     ; (Pose ?pose) ; Used by "stream.pddl", Do NOT pollute this space!
@@ -54,13 +54,13 @@
                     (GraspObj ?label ?obj)
                     (AtObj ?obj)
                     (HandEmpty)
-                    ; (Block ?obj)
+                    ; (Occupied ?obj)
+                    (FreePlacement ?label ?obj)
                   )
     :effect (and (Holding ?label) 
                  (not (HandEmpty))
-                ;  (not (Block ?obj))
             )
-  )
+    )
 
   (:action move_holding
     :parameters (?label ?obj1 ?obj2 ?traj)
@@ -76,8 +76,12 @@
                   )
     :effect (and (GraspObj ?label ?obj2)
                  (not (GraspObj ?label ?obj1))
+                ;  (FreePlacement ?label ?obj1)
+                ;  (not (FreePlacement ?label ?obj2))
                  (AtObj ?obj2)
                  (not (AtObj ?obj1))
+                 (Occupied ?obj2)
+                 (not (Occupied ?obj1))
             )
   )
 
@@ -87,6 +91,7 @@
                     ;; Knowns ;;
                     (AtObj ?obj)
                     (Holding ?label)
+                    ; (not (Occupied ?obj))
                     ;; Requirements ;;
                     (FreePlacement ?label ?obj)
                   )
@@ -95,7 +100,8 @@
                  (not (FreePlacement ?label ?obj))
                 ;  (Block ?obj)
             )
-  )  
+  )
+  
 
   (:action stack
     :parameters (?labelUp ?labelDn1 ?labelDn2 ?objUp ?objDn1 ?objDn2)
@@ -103,10 +109,11 @@
                     ;; Knowns ;;
                     (AtObj ?objUp)
                     (Holding ?labelUp)
+                    ; (not (Occupied ?objUp))
                     ;; Requirements ;;
                     (FreePlacement ?labelUp ?objUp)
-                    ; ; (Block ?objDn1)
-                    ; ; (Block ?objDn2)
+                    ; (Occupied ?objDn1)
+                    ; (Occupied ?objDn2)
                     (GraspObj ?labelDn1 ?objDn1)
                     (GraspObj ?labelDn2 ?objDn2)
                     (StackPlace ?objUp ?objDn1 ?objDn2)
@@ -116,5 +123,5 @@
                  (Supported ?labelUp ?labelDn1)
                  (Supported ?labelUp ?labelDn2)
             )
-  )  
-)
+  )
+)  

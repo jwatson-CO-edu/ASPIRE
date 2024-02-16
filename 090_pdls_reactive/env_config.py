@@ -47,6 +47,7 @@ _CLOSEST_TO_BASE   = 0.300
 
 ########## BELIEFS #################################################################################
 
+_SAMPLE_DET   = True
 _N_POSE_UPDT  = 25
 _POSN_STDDEV  =  0.008
 _NULL_THRESH  =  0.75
