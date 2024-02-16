@@ -17,16 +17,18 @@
     [ ] Test on 6 blocks    
         [ ] Does this problem need a setdown sprinkler?
 [>] Non-Reactive Version: Open Loop
-    [>] Check that the goal predicates are met
+    [Y] Check that the goal predicates are met, 2024-02-15: Straightforward
         [Y] (Obj ?label ?pose), 2024-02-13: Easy!
         [Y] (Holding ?label) ; From Pick, 2024-02-13: Easy!
         [Y] (HandEmpty) ; From Place, 2024-02-13: Easy!
         {P} ALL predicates?, 2024-02-13: Not at this time!
-    [ ] Start with deterministic classes and poses
-    [>] Try two arches
-    [>] Collect failure statistics
-        * No Sankey Graph for the open loop version
-        [>] What do I need to create a Sankey Graph? Is there a prettier one than PLT?
+    [Y] Start with deterministic classes and poses, 2024-02-15: Solver req's about 30s for the 2-arch problem in the 6 block env
+    [Y] Try two arches, 2024-02-15: Solver req's about 30s for the 2-arch problem in the 6 block env
+    [>] Re-implement sampling without dupes
+    [ ] Add a pre-check before the solver runs to verify that all the req'd objects EXIST
+    [ ] Collect failure statistics
+         * No Sankey Graph for the open loop version
+        [ ] What do I need to create a Sankey Graph? Is there a prettier one than PLT?
 [ ] Replanning Version
     [ ] Working Demo @ PyBullet
         [ ] Plan open loop
@@ -37,6 +39,13 @@
         [ ] Sankey Graph of sequence incidents during each episode
             [ ] Makespan on X-axis?
 [ ] Responsive Version
+    [ ] Working Demo @ PyBullet
+        [ ] Goal check at the start of each symbolic phase --> Instantiate predicates
+        [ ] Test 1: Replan after every action
+        [ ] Test 2, if Test 1 results are poor: Replan ONLY after action FAILURES or crises of BELIEF
+    [ ] Experimental Data
+[ ] Data Analysis
+[ ] PROPOSAL
 """
 
 
