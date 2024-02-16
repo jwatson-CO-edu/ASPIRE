@@ -8,14 +8,14 @@
     [Y] Pick, 2024-02-08: Easy!
     [Y] Move_Holding, 2024-02-08: Easy!
     [Y] Place, 2024-02-08: Easy!
-[>] DOMAIN REFACTOR 5, Condense {Obj,Grasp,IKSoln} --into-> Waypoint
+[Y] DOMAIN REFACTOR 5, Condense {Obj,Grasp,IKSoln} --into-> Waypoint, 2024-02-15: 30s for planning.
     [Y] Rewrite "domain.pddl", 2024-02-14: Seems consistent!
     [Y] Rewrite "stream.pddl", 2024-02-14: Seems consistent!
     [Y] Rewrite "sybmols.py", 2024-02-14: Condensed!
     [Y] Rewrite streams, 2024-02-14: Condensed!
-    [>] Test on 3 blocks
-    [ ] Test on 6 blocks    
-        [ ] Does this problem need a setdown sprinkler?
+    [Y] Test on 3 blocks, 2024-02-15: 1.5s-7s for planning!
+    [Y] Test on 6 blocks, 2024-02-15: 30s for planning. Not bad, Not great. Commensurate with original paper results.
+        [N] Does this problem need a setdown sprinkler?, 2024-02-15: Does not appear to be needed, but keep the option open
 [>] Non-Reactive Version: Open Loop
     [Y] Check that the goal predicates are met, 2024-02-15: Straightforward
         [Y] (Obj ?label ?pose), 2024-02-13: Easy!
@@ -167,8 +167,9 @@ class DataLogger:
         runDct = {
             "makespan" : now() - self.g_BGN,
             "result"   : p_pass,
-            "events"   : self.events[:],
+            "events"   : list( self.events ),
         }
+        self.events = []
         runDct.update( infoDict )
         self.metrics['trials'].append( runDct )
         if p_pass:
