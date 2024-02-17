@@ -10,12 +10,13 @@ from utils import row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec
 from symbols import Object
 from beliefs import ObjectBelief
 from env_config import ( _MIN_X_OFFSET, _BLOCK_SCALE, TABLE_URDF_PATH, _BLOCK_NAMES, _POSN_STDDEV, 
-                         _GRASP_VERT_OFFSET, _GRASP_ORNT_XYZW, _ACTUAL_NAMES, _ONLY_RED, _ONLY_PRIMARY )
+                         _GRASP_VERT_OFFSET, _GRASP_ORNT_XYZW, _ACTUAL_NAMES, _ONLY_RED, _ONLY_PRIMARY,
+                        _BLOCK_ALPHA, _CONFUSE_PROB )
 
 ##### Paths #####
 
 
-########## ENVIRONMENT #############################################################################
+########## HELPERS #################################################################################
 
 class DummyBelief:
     """ Stand-in for an actual `ObjectBelief` """
@@ -49,8 +50,57 @@ def make_block():
         globalScaling = 0.25/4.0
     )
 
+def draw_cross( position, scale, color, w = 2.0 ):
+    """ Draw a static cross at the XYZ `position` with arms aligned with the lab axes """
+    ofst = scale/2.0
+    cntr = np.array( position )
+    Xdif = [ofst,0,0]
+    Ydif = [0,ofst,0]
+    Zdif = [0,0,ofst]
+    Xlin = [ np.add( cntr, Xdif ), np.subtract( cntr, Xdif ) ]
+    Ylin = [ np.add( cntr, Ydif ), np.subtract( cntr, Ydif ) ]
+    Zlin = [ np.add( cntr, Zdif ), np.subtract( cntr, Zdif ) ]
+    pb.addUserDebugLine( Xlin[0], Xlin[1], color, lineWidth = w )
+    pb.addUserDebugLine( Ylin[0], Ylin[1], color, lineWidth = w )
+    pb.addUserDebugLine( Zlin[0], Zlin[1], color, lineWidth = w )
+
+
+########## SIMULATED VISION ########################################################################
+
+class ObjectReading:
+    """ Represents a signal coming from the vision pipeline """
+    def __init__( self, distribution = None, objPose = None ):
+        self.dstr = distribution if (distribution is not None) else {} # Current belief in each class
+        self.pose = objPose if isinstance(objPose, (list,np.ndarray)) else np.array([0,0,0,1,0,0,0]) # Object pose
+
+
+class NoisyObjectSensor:
+    """ A fake vision pipeline with simple discrete class error and Gaussian pose error """
+
+    def __init__( self, poseStddev = _POSN_STDDEV, confuseProb = _CONFUSE_PROB ):
+        self.pStdDev  = np.array( poseStddev ) 
+        self.confProb = confuseProb
+
+    def noisy_reading_from_true( self, trueObj ):
+        """ Add noise to the true reading and return it """
+        rtnObj = ObjectReading()
+        blockPos, blockOrn = row_vec_to_pb_posn_ornt( trueObj.pose )
+        blockPos = np.array( blockPos ) + np.array( [np.random.normal( 0.0, self.pStdDev[i] ) for i in range(3)] )
+        rtnObj.pose = pb_posn_ornt_to_row_vec( blockPos, blockOrn )
+        for blkName_i in _BLOCK_NAMES:
+            if blkName_i == trueObj.label:
+                rtnObj.dstr[ blkName_i ] = 1.0-self.confProb*(len( _BLOCK_NAMES )-1)
+            else:
+                rtnObj.dstr[ blkName_i ] = self.confProb
+        return rtnObj
+
+########## ENVIRONMENT #############################################################################
+
+
 class PB_BlocksWorld:
     """ Simple physics simulation with blocks """
+
+    ##### Init ############################################################
 
     def __init__( self ):
         """ Create objects """
@@ -68,24 +118,30 @@ class PB_BlocksWorld:
 
         ## Instantiate Blocks ##
         redBlock = make_block()
-        pb.changeVisualShape( redBlock, -1, rgbaColor=[1.0, 0.0, 0.0, 1] )
+        pb.changeVisualShape( redBlock, -1, rgbaColor=[1.0, 0.0, 0.0, _BLOCK_ALPHA] )
 
         ylwBlock = make_block()
-        pb.changeVisualShape( ylwBlock, -1, rgbaColor=[1.0, 1.0, 0.0, 1] )
+        pb.changeVisualShape( ylwBlock, -1, rgbaColor=[1.0, 1.0, 0.0, _BLOCK_ALPHA] )
 
         bluBlock = make_block()
-        pb.changeVisualShape( bluBlock, -1, rgbaColor=[0.0, 0.0, 1.0, 1] )
+        pb.changeVisualShape( bluBlock, -1, rgbaColor=[0.0, 0.0, 1.0, _BLOCK_ALPHA] )
 
         grnBlock = make_block()
-        pb.changeVisualShape( grnBlock, -1, rgbaColor=[0.0, 1.0, 0.0, 1] )
+        pb.changeVisualShape( grnBlock, -1, rgbaColor=[0.0, 1.0, 0.0, _BLOCK_ALPHA] )
 
         ornBlock = make_block()
-        pb.changeVisualShape( ornBlock, -1, rgbaColor=[1.0, 0.5, 0.0, 1] )
+        pb.changeVisualShape( ornBlock, -1, rgbaColor=[1.0, 0.5, 0.0, _BLOCK_ALPHA] )
 
         vioBlock = make_block()
-        pb.changeVisualShape( vioBlock, -1, rgbaColor=[0.5, 0.0, 1.0, 1] )
+        pb.changeVisualShape( vioBlock, -1, rgbaColor=[0.5, 0.0, 1.0, _BLOCK_ALPHA] )
 
         self.blocks = [redBlock, ylwBlock, bluBlock, grnBlock, ornBlock, vioBlock, None]
+
+        ## Fake Vision ##
+        self.sensor = NoisyObjectSensor()
+
+
+    ##### Block Movements #################################################
 
     def reset_blocks( self ):
         """ Send blocks to random locations """
@@ -100,6 +156,21 @@ class PB_BlocksWorld:
                     posn, ornt = banished_pose()
                     pb.resetBasePositionAndOrientation( blockHandl, posn, ornt )
                 
+    def robot_grasp_block( self, blockName ):
+        """ Lock the block to the end effector """
+        hndl = self.get_handle( blockName )
+        symb = self.get_block_true( blockName )
+        bPsn, bOrn = row_vec_to_pb_posn_ornt( symb.pose )
+        ePsn, _    = self.robot.get_current_pose()
+        pDif = np.subtract( bPsn, ePsn )
+        self.grasp.append( (hndl,pDif,bOrn,) ) # Preserve the original orientation because I am lazy
+
+    def robot_release_all( self ):
+        """ Unlock all objects from end effector """
+        self.grasp = []
+
+
+    ##### Block Queries ###################################################
 
     def get_handle( self, name ):
         """ Get the ID of the requested object by `name` """
@@ -123,6 +194,40 @@ class PB_BlocksWorld:
         if (indxMin > -1) and (distMin <= posnErr):
             return self.blocks[ indxMin ]
         return None
+    
+
+    def get_handle_name( self, handle ):
+        """ Get the block name that corresponds to the handle """
+        try:
+            idx = self.blocks.index( handle )
+            return _BLOCK_NAMES[ idx ]
+        except ValueError:
+            return None
+
+
+    def get_block_true( self, blockName ):
+        """ Find one of the ROYGBV blocks, Fully Observable, Return None if the name is not in the world """
+        try:
+            idx = _BLOCK_NAMES.index( blockName )
+            blockPos, blockOrn = pb.getBasePositionAndOrientation( self.blocks[idx] )
+            # blockPos = np.array( blockPos )
+            return Object( 
+                blockName, 
+                pb_posn_ornt_to_row_vec( blockPos, blockOrn ),
+                DummyBelief( blockName ), 
+            )
+        except ValueError:
+            return None
+        
+    def full_scan_true( self ):
+        """ Find all of the ROYGBV blocks, Fully Observable """
+        rtnSym = []
+        for name in _ACTUAL_NAMES:
+            rtnSym.append( self.get_block_true( name ) )
+        return rtnSym
+    
+
+    ##### Simulation ######################################################
 
     def step( self ):
         """ Advance one step and sleep """
@@ -140,57 +245,17 @@ class PB_BlocksWorld:
     def stop( self ):
         """ Disconnect from the simulation """
         pb.disconnect()
-
-    def get_block_true( self, blockName ):
-        """ Find one of the ROYGBV blocks, Fully Observable, Return None if the name is not in the world """
-        try:
-            idx = _BLOCK_NAMES.index( blockName )
-            blockPos, blockOrn = pb.getBasePositionAndOrientation( self.blocks[idx] )
-            blockPos = np.array( blockPos )
-            return Object( 
-                blockName, 
-                pb_posn_ornt_to_row_vec( blockPos, blockOrn ),
-                DummyBelief( blockName ), 
-            )
-        except ValueError:
-            return None
-        
-    def full_scan_true( self ):
-        """ Find all of the ROYGBV blocks, Fully Observable """
-        rtnSym = []
-        for name in _ACTUAL_NAMES:
-            rtnSym.append( self.get_block_true( name ) )
-        return rtnSym
-        
-    def get_block_grasp_true( self, blockName ):
-        """ Find a grasp for one of the ROYGBV blocks, Fully Observable, Return None if the name is not in the world """
-        symb = self.get_block_true( blockName )
-        pose = symb.pose
-        pose[2] += _GRASP_VERT_OFFSET
-        posn, _ = row_vec_to_pb_posn_ornt( pose )
-        ornt = _GRASP_ORNT_XYZW.copy()
-        return pb_posn_ornt_to_row_vec( posn, ornt )
     
-    def robot_grasp_block( self, blockName ):
-        """ Lock the block to the end effector """
-        hndl = self.get_handle( blockName )
-        symb = self.get_block_true( blockName )
-        bPsn, bOrn = row_vec_to_pb_posn_ornt( symb.pose )
-        ePsn, _    = self.robot.get_current_pose()
-        pDif = np.subtract( bPsn, ePsn )
-        self.grasp.append( (hndl,pDif,bOrn,) ) # Preserve the original orientation because I am lazy
 
-    def robot_release_all( self ):
-        """ Unlock all objects from end effector """
-        self.grasp = []
+    ##### Pose Sampling ###################################################
 
     def get_block_noisy( self, blockName, confuseProb = 0.10, poseStddev = _POSN_STDDEV ):
         """ Find one of the ROYGBV blocks, Partially Observable, Return None if the name is not in the world """
         try:
+            rtnObj = ObjectBelief()
             idx = _BLOCK_NAMES.index( blockName )
             blockPos, blockOrn = pb.getBasePositionAndOrientation( self.blocks[idx] )
             blockPos = np.array( blockPos ) + np.array( [np.random.normal( 0.0, poseStddev/3.0 ) for _ in range(3)] )
-            rtnObj = ObjectBelief()
             rtnObj.pose = pb_posn_ornt_to_row_vec( blockPos, blockOrn )
             for i in range( len( _BLOCK_NAMES ) ):
                 blkName_i = _BLOCK_NAMES[i]
@@ -209,13 +274,7 @@ class PB_BlocksWorld:
             rtnBel.append( self.get_block_noisy( name, confuseProb, poseStddev ) )
         return rtnBel
     
-    def get_handle_name( self, handle ):
-        """ Get the block name that corresponds to the handle """
-        try:
-            idx = self.blocks.index( handle )
-            return _BLOCK_NAMES[ idx ]
-        except ValueError:
-            return None
+    
 
     def check_predicate( self, symbol, posnErr = _POSN_STDDEV*2.0 ):
         """ Check that the `symbol` is True """

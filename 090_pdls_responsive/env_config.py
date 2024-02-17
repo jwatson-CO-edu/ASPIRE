@@ -32,6 +32,7 @@ _SUPPORT_NAME = 'table'
 _BLOCK_SCALE  = 0.038
 _MIN_X_OFFSET = 0.400
 _ROUND_PLACES = 5
+_BLOCK_ALPHA  = 0.25
 
 
 
@@ -47,11 +48,12 @@ _CLOSEST_TO_BASE   = 0.300
 
 ########## BELIEFS #################################################################################
 
-_SAMPLE_DET   = True
+_SAMPLE_DET   = False
 _N_POSE_UPDT  = 25
-_POSN_STDDEV  =  0.008
+_POSN_STDDEV  =  _BLOCK_SCALE / 4.0
 _NULL_THRESH  =  0.75
-_CONFUSE_PROB = 0.05
+_CONFUSE_PROB = 0.025
+_NEAR_PROB    = 0.75
 
 
 

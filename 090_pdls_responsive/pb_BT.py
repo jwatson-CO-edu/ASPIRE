@@ -205,7 +205,7 @@ class Move_Arm( BasicBehavior ):
                 self.status = Status.SUCCESS
             else:
                 print( self.name, ", POSE ERROR:", [errT, errO] )
-                self.msg = "(Action) POSE ERROR"
+                self.msg = "Move_Arm: POSE ERROR"
                 pass_msg_up( self )
                 self.status = Status.FAILURE
 

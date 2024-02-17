@@ -3,79 +3,85 @@
 import numpy as np
 from scipy.stats import chi2
 
-from utils import ( roll_outcome, get_confusion_matx, multiclass_Bayesian_belief_update, p_lst_has_nan )
+from utils import ( roll_outcome, get_confusion_matx, multiclass_Bayesian_belief_update, p_lst_has_nan, 
+                    row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec )
 
-from env_config import ( _SUPPORT_NAME, _POSN_STDDEV, _BLOCK_NAMES, _NULL_NAME, _N_POSE_UPDT, _POSE_DIM, _CONFUSE_PROB )
+from env_config import ( _POSN_STDDEV, _BLOCK_NAMES, _NULL_NAME, _N_POSE_UPDT, _NEAR_PROB, _CONFUSE_PROB )
 
 from symbols import Object
 
 
 
-########## SYMBOLS & BELIEFS #######################################################################
-
+########## HYBRID BELIEFS ##########################################################################
 
 class ObjectBelief:
     """ Hybrid belief: A discrete distribution of classes that may exist at a continuous distribution of poses """
 
-    def reset_covar( self ):
-        self.covar   = np.zeros( (_POSE_DIM,_POSE_DIM,) ) # ------ Pose covariance matrix
-        for i, stdDev in enumerate( self.pStdDev ):
-            self.covar[i,i] = stdDev * stdDev
+    def reset_std_dev( self ):
+        self.pStdDev = np.array([self.iStdDev for _ in range( 3 )]) 
 
-    def __init__( self, initStddev = _POSN_STDDEV ):
+    def __init__( self, initStddev = _POSN_STDDEV, nearThresh = _NEAR_PROB ):
         """ Initialize with origin poses and uniform, independent variance """
-        # stdDev = [initStddev if (i<3) else 0.0 for i in range(7)]
-        stdDev = [initStddev for i in range( _POSE_DIM )]
         self.labels  = {} # ---------------------- Current belief in each class
-        self.pose    = np.array([0,0,0,1,0,0,0]) # Mean pose
-        self.pStdDev = np.array(stdDev) # -------- Pose variance
+        self.mean    = np.array([0,0,0,]) # Mean pose
+        self.ornt    = np.array([0,0,0,1,])
+        self.iStdDev = initStddev
+        self.reset_std_dev()# Position stddev
         self.pHist   = [] # ---------------------- Recent history of poses
-        self.pThresh = 0.5 # --------------------- Minimum prob density at which a nearby pose is relevant
-        self.reset_covar()
+        self.pThresh = nearThresh # --------------------- Minimum prob density at which a nearby pose is relevant
         self.visited = False
         self.fresh   = True
 
-    def get_posn( self, poseOrBelief ):
-        """ Get the position from the object """
-        if isinstance( poseOrBelief, (ObjectBelief, Object) ):
-            return poseOrBelief.pose[0:3]
-        elif isinstance( poseOrBelief, np.ndarray ):
-            if poseOrBelief.size == (4,4,):
-                return poseOrBelief[0:3,3]
-            else:
-                return poseOrBelief[0:3]
+    def posn( self ):
+        """ Get the position """
+        return np.array( self.mean[:3] )
 
-    def p_pose_relevant( self, poseOrBelief ):
+    def posn_covar( self ):
+        """ Get the pose covariance """
+        rtnArr = np.zeros( (3,3,) )
+        for i in range(3):
+            rtnArr[i,i] = (self.pStdDev[i])**2
+        return rtnArr
+
+
+    def prob_density( self, obj ):
+        """ Return the probability that this object lies within the present distribution """
+        x     = np.array( obj.pose[:3] )
+        mu    = self.posn()
+        sigma = self.posn_covar()
+        try:
+            m_dist_x = np.dot((x-mu).transpose(),np.linalg.inv(sigma))
+            m_dist_x = np.dot(m_dist_x, (x-mu))
+            return 1-chi2.cdf( m_dist_x, 3 )
+        except np.linalg.LinAlgError:
+            return 0.0
+
+
+    def p_reading_relevant( self, obj ):
         """ Determine if a nearby pose is relevant """
-        x        = self.get_posn( poseOrBelief )
-        mu       = self.get_posn( self.pose )
-        sigma    = self.covar[0:3,0:3]
-        m_dist_x = np.dot((x-mu).transpose(),np.linalg.inv(sigma))
-        m_dist_x = np.dot(m_dist_x, (x-mu))
-        return (1-chi2.cdf( m_dist_x, 3 ) >= self.pThresh)
+        return ( self.prob_density( obj ) >= self.pThresh )
     
-    def object_supporting_pose( self, pose ):
-        """ Return the name of the object that this pose is resting on """
-        # GRIEF: GEO GRAMMAR WOULD BE GOOD HERE
-        # HACK:  WE ONLY SAMPLE RAW POSES FOR UNSTACKED BLOCKS, SO ALWAYS RETURN TABLE
-        return _SUPPORT_NAME
+
+    def sample_pose( self ):
+        """ Sample a pose from the present distribution, Reset on failure """
+        try:
+            posnSample = np.random.multivariate_normal( self.posn(), self.posn_covar() ) 
+        except (np.linalg.LinAlgError, RuntimeWarning,):
+            self.reset_std_dev()
+            posnSample = np.random.multivariate_normal( self.posn(), self.posn_covar() ) 
+        while p_lst_has_nan( posnSample ):
+            self.reset_std_dev()
+            posnSample = np.random.multivariate_normal( self.posn(), self.posn_covar() ) 
+        return pb_posn_ornt_to_row_vec( posnSample, self.ornt )
+
 
     def sample_symbol( self ):
         """ Sample a determinized symbol from the hybrid distribution """
         label = roll_outcome( self.labels )
-        try:
-            poseSample = np.random.multivariate_normal( self.pose, self.covar ) 
-        except (np.linalg.LinAlgError, RuntimeWarning,):
-            self.reset_covar()
-            poseSample = np.random.multivariate_normal( self.pose, self.covar ) 
-        
-        while p_lst_has_nan( poseSample ):
-            self.reset_covar()
-            poseSample = np.random.multivariate_normal( self.pose, self.covar ) 
-
+        pose  = self.sample_pose()
         return Object( 
             label, 
-            poseSample,
+            pose,
             self
         )
     
@@ -88,67 +94,62 @@ class ObjectBelief:
         )
     
     def sample_fresh( self ):
+        """ Only return a labeled pose if it is fresh, That is sampled after a pose update """
         if self.fresh:
             self.fresh = False
             return self.sample_symbol()
         else: 
             return self.sample_null()
-    
-    def sample_nothing( self, confuseProb = 0.1 ):
-        """ Sample a negative indication for this pose """
-        rtnObj = ObjectBelief()
-        for i in range( len( _BLOCK_NAMES ) ):
-            blkName_i = _BLOCK_NAMES[i]
-            if blkName_i == _NULL_NAME:
-                rtnObj.labels[ blkName_i ] = 1.0-confuseProb*(len( _BLOCK_NAMES )-1)
-            else:
-                rtnObj.labels[ blkName_i ] = confuseProb
-        rtnObj.pose = np.array( self.pose )
-        return rtnObj
+        
+    def get_posn_history( self ):
+        """ Get the positions of all pose history readings """
+        hist = np.zeros( (len(self.pHist),3,) )
+        for i, row in enumerate( self.pHist ):
+            hist[i,:] = row[:3]
+        return hist
+
 
     def update_pose_dist( self ):
         """ Update the pose distribution from the history of observations """
-        self.fresh = True
-        poseHist   = np.array( self.pHist )
-        self.pHist = []
-        nuPose     = np.mean( poseHist, axis = 0 )
-        nuStdDev   = np.std( poseHist, axis = 0 )
-        nuvar      = np.zeros( (_POSE_DIM,_POSE_DIM,) ) # ------ Pose covariance matrix
-        for i, stdDev in enumerate( nuStdDev ):
-            nuvar[i,i] = stdDev * stdDev
-        self.pose = self.pose + np.dot(
-            np.divide( 
-                self.covar,
-                np.add( self.covar, nuvar ), 
-                where = self.covar != 0.0 
-            ),
-            np.subtract( nuPose, self.pose )
-        )
+        self.fresh   = True
+        posnHist     = self.get_posn_history()
+        q_1_Hat      = np.array( self.mean )
+        q_2_Hat      = np.mean( posnHist, axis = 0 )
+        nuStdDev     = np.std(  posnHist, axis = 0 )
+        omegaSqr_1   = np.dot( self.pStdDev, self.pStdDev )
+        omegaSqr_2   = np.dot( nuStdDev    , nuStdDev     )
         try:
-            nuSum = np.add( 
-                np.reciprocal( self.covar, where = self.covar != 0.0 ), 
-                np.reciprocal( nuvar, where = nuvar != 0.0 ) 
-            )
-            self.covar = np.reciprocal( nuSum, where = nuSum != 0.0 )
-        except RuntimeWarning:
+            self.mean    = q_1_Hat + omegaSqr_1 / ( omegaSqr_1 + omegaSqr_2 ).dot( q_2_Hat - q_1_Hat )
+            self.pStdDev = np.sqrt( np.reciprocal( np.add(
+                np.reciprocal( omegaSqr_1 ),
+                np.reciprocal( omegaSqr_2 ),
+            ) ) )
+        except:
             print( "WARNING: Covariance reset due to overflow!" )
-            self.reset_covar()
-    
-    def integrate_belief( self, objBelief ):
+            self.mean = q_1_Hat
+            self.reset_std_dev()
+
+        
+    def integrate_reading( self, objReading ):
         """ if `objBelief` is relevant, then Update this belief with evidence and return True, Otherwise return False """
         # NOTE: THIS WILL NOT BE AS CLEAN IF THE CLASSIFIER DOES NO PROVIDE A DIST ACROSS ALL CLASSES
-        if self.p_pose_relevant( objBelief ):
+        if self.p_pose_relevant( objReading ):
             Nclass = len( _BLOCK_NAMES )
             cnfMtx = get_confusion_matx( Nclass, _CONFUSE_PROB )
             priorB = [ self.labels[ label ] for label in _BLOCK_NAMES ] 
-            evidnc = [ objBelief.labels[ label ] for label in _BLOCK_NAMES ]
+            evidnc = [ objReading.dstr[ label ] for label in _BLOCK_NAMES ]
             updatB = multiclass_Bayesian_belief_update( cnfMtx, priorB, evidnc )
             self.labels = {}
             for i, name in enumerate( _BLOCK_NAMES ):
                 self.labels[ name ] = updatB[i]
-            self.pHist.append( objBelief.pose )
+            self.pHist.append( objReading.pose )
             if len( self.pHist ) >= _N_POSE_UPDT:
                 self.update_pose_dist()
             return True
         else:
             return False
+
+
+class ObjectMemory:
+    # FIXME, START HERE: MOVE ALL SCANS AND CONSISTENCY CHECKS HERE
+    pass

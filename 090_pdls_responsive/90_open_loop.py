@@ -88,7 +88,7 @@ from utils import ( row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec, diff_norm,
 from env_config import ( _GRASP_VERT_OFFSET, _GRASP_ORNT_XYZW, _NULL_NAME, _ACTUAL_NAMES, _MIN_X_OFFSET,
                          _NULL_THRESH, _BLOCK_SCALE, _CLOSEST_TO_BASE, _ACCEPT_POSN_ERR, _MIN_SEP, _Z_SAFE,
                          _N_POSE_UPDT, _WP_NAME, _SAMPLE_DET )
-from pb_BT import connect_BT_to_robot_world, Move_Arm, Grasp, Ungrasp
+from pb_BT import connect_BT_to_robot_world, Move_Arm, Grasp, Ungrasp, pass_msg_up
 from PB_BlocksWorld import PB_BlocksWorld, rand_table_pose
 from symbols import Object, Path
 
@@ -107,6 +107,7 @@ class BT_Runner:
         self.status = Status.INVALID
         self.freq   = tickHz
         self.Nstep  = int( max(1.0, math.ceil((1.0 / tickHz) / world.period)))
+        self.msg    = ""
 
     def setup_BT_for_running( self ):
         """ Connect the plan to world and robot """
@@ -128,6 +129,8 @@ class BT_Runner:
             self.root.tick_once()
         self.status = self.root.status
         if self.p_ended():
+            pass_msg_up( self.root )
+            self.msg = self.root.msg
             self.display_BT()    
 
     
@@ -179,7 +182,7 @@ class DataLogger:
 
     def save( self, prefix = "Experiment-Data" ):
         """ Serialize recorded stats """
-        fName = str( prefix ) + "__" + str( datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d_%H-%M-%S') )
+        fName = str( prefix ) + "__" + str( datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d_%H-%M-%S') ) + ".pkl"
         with open( fName, 'wb' ) as handle:
             pickle.dump( self.metrics, handle )
         print( f"Wrote: {fName}" ) 
@@ -450,9 +453,14 @@ def display_PDLS_plan( plan ):
     else:
         print( plan )
 
+def p_list_duplicates( lst ):
+    """ Return True if a value appears more than once """
+    s = set( lst )
+    return (len( lst ) > len( s ))
+
 ########## EXECUTIVE (THE METHOD) ##################################################################
 
-class ReactiveExecutive:
+class ResponsiveExecutive:
     """ Least structure needed to compare plans """
 
     ##### Init ############################################################
@@ -534,6 +542,39 @@ class ReactiveExecutive:
     
     ##### Stream Creators #################################################
 
+
+    def scan_consistent( self ):
+        """ Keep only the most likely version of a label """
+        smplSym = [bel.sample_symbol() for bel in self.beliefs]
+        uniqSym = {}
+        for sym in smplSym:
+            if sym.label not in uniqSym:
+                uniqSym[ sym.label ] = sym
+            elif sym.prob() > uniqSym[ sym.label ].prob():
+                uniqSym[ sym.label ] = sym
+        rtnSym = list( uniqSym.values() )
+        for sym in rtnSym:
+            if (sym.label != _NULL_NAME):
+                self.last[ sym.label ] = sym
+        return rtnSym
+    
+
+    def scan_consistent_fresh( self ):
+        """ Keep only the most likely version of a label """
+        smplSym = [bel.sample_fresh() for bel in self.beliefs]
+        uniqSym = {}
+        for sym in smplSym:
+            if sym.label not in uniqSym:
+                uniqSym[ sym.label ] = sym
+            elif sym.prob() > uniqSym[ sym.label ].prob():
+                uniqSym[ sym.label ] = sym
+        rtnSym = list( uniqSym.values() )
+        for sym in rtnSym:
+            if (sym.label != _NULL_NAME):
+                self.last[ sym.label ] = sym
+        return rtnSym
+
+
     def scan_fresh( self ):
         """ Determinize last updated object beliefs """
         nuSym = [bel.sample_fresh() for bel in self.beliefs]
@@ -542,10 +583,19 @@ class ReactiveExecutive:
                 self.last[ sym.label ] = sym
         return list( self.last.values() )
     
+    def sample_consistent( self, label ):
+        """ Maintain a pose dict and only update it when needed """
+        # self.scan_fresh()
+        nuSym = self.scan_consistent()
+        for sym in nuSym:
+            if (sym.label == label):
+                return sym
+        return None
 
     def sample_fresh( self, label ):
         """ Maintain a pose dict and only update it when needed """
-        self.scan_fresh()
+        # self.scan_fresh()
+        self.scan_consistent_fresh()
         if label in self.last:
             return self.last[ label ]
         else:
@@ -557,7 +607,7 @@ class ReactiveExecutive:
         if label in self.last:
             return self.last[ label ]
         else:
-            nuSym = [world.get_block_true( name ) for name in _ACTUAL_NAMES]
+            nuSym = [self.world.get_block_true( name ) for name in _ACTUAL_NAMES]
             for sym in nuSym:
                 self.last[ sym.label ] = sym
             if label in self.last:
@@ -615,7 +665,7 @@ class ReactiveExecutive:
             if _SAMPLE_DET:
                 rtnObj = self.sample_determ( objcName )
             else:
-                rtnObj = self.sample_fresh( objcName )
+                rtnObj = self.sample_consistent( objcName )
             if rtnObj.label != _NULL_NAME:
                 self.add_grasp_config_to_object( rtnObj )
                 print( f"OBJECT stream SUCCESS: {rtnObj}\n" )
@@ -663,7 +713,7 @@ class ReactiveExecutive:
             if _SAMPLE_DET:
                 nuSym = self.world.full_scan_true()
             else:
-                nuSym = self.scan_fresh()
+                nuSym = self.scan_consistent()
             print( f"Symbols: {nuSym}" )
 
             for sym in nuSym:
@@ -773,7 +823,7 @@ class ReactiveExecutive:
             if _SAMPLE_DET:
                 nuSym = self.world.full_scan_true()
             else:
-                nuSym = self.scan_fresh()
+                nuSym = self.scan_consistent()
             print( f"Symbols: {nuSym}" )
 
             for sym in nuSym:
@@ -828,6 +878,22 @@ class ReactiveExecutive:
             raise ValueError( f"Unexpected goal format!: {goal}" )
 
     ##### PDLS Solver #####################################################
+
+    def check_goal_objects( self, goal, symbols ):
+        """ Return True if the labels mentioned in the goals are a subset of the determinized symbols """
+        goalSet = set([])
+        symbSet = set( [sym.label for sym in symbols] )
+        for g in goal:
+            if isinstance( g, (tuple, list) ):
+                prdName = g[0]
+                if prdName == 'GraspObj':
+                    goalSet.add( g[1] )
+                elif prdName == 'Supported':
+                    goalSet.add( g[1] )
+                    goalSet.add( g[2] )
+                else:
+                    continue
+        return (goalSet <= symbSet)
 
     def pddlstream_from_problem( self ):
         """ Set up a PDDLStream problem with the UR5 """
@@ -897,10 +963,10 @@ class ReactiveExecutive:
             ('Supported', 'bluBlock', 'redBlock'),
             ('Supported', 'bluBlock', 'ylwBlock'),
 
-            # ('GraspObj', 'grnBlock', trgtGrn),
-            # ('GraspObj', 'ornBlock', trgtOrn),
-            # ('Supported', 'vioBlock', 'grnBlock'),
-            # ('Supported', 'vioBlock', 'ornBlock'),
+            ('GraspObj', 'grnBlock', trgtGrn),
+            ('GraspObj', 'ornBlock', trgtOrn),
+            ('Supported', 'vioBlock', 'grnBlock'),
+            ('Supported', 'vioBlock', 'ornBlock'),
         ) 
 
         stream_map = {
@@ -918,68 +984,109 @@ class ReactiveExecutive:
         return PDDLProblem( domain_pddl, constant_map, stream_pddl, stream_map, init, goal )
     
 
-    def run_one_episode( self, logger = None ):
+    def run_one_episode( self, plan, logger = None ):
         """ Run a single experiment and collect data """
         
-        btPlan = get_BT_plan_from_PDLS_plan( plan, world )
+        btPlan = get_BT_plan_from_PDLS_plan( plan, self.world )
         print( "\n\n\n" )
 
-        btr = BT_Runner( btPlan, world, 20.0 )
+        btr = BT_Runner( btPlan, self.world, 20.0 )
         btr.setup_BT_for_running()
 
         while not btr.p_ended():
             btr.tick_once()
+            if (btr.status == Status.FAILURE):
+                logger.log_event( "Action Failure: " + btr.msg )
+
+        return (btr.status == Status.SUCCESS)
 
 
     def run_N_episodes( self, N ):
         """ Run N experiments and collect statistics """
         
         logger = DataLogger()
-
-        self.world.reset_blocks()
-        robot = self.world.robot
-        robot.goto_home()
-        self.world.spin_for( 500 )
-
-        for _ in range( _N_POSE_UPDT+1 ):
-            planner.belief_update() # We need at least an initial set of beliefs in order to plan
+        robot  = self.world.robot
 
         for i in range( N ):
             print( f"\n\n########## Experiment {i+1} of {N} ##########" )
 
-            print( f"\n##### Solving Problem {i+1} #####" )
+            robot.goto_home()
+            self.world.reset_blocks()
+            self.world.spin_for( 500 )
+
+            self.reset_beliefs()
 
             logger.begin_trial()
+
+            print( '\n\n\n##### PDLS INIT #####' )
+            problem = self.pddlstream_from_problem()
+
+            if not _SAMPLE_DET:
+                for i in range( 2*_N_POSE_UPDT+1 ):
+                    self.belief_update() # We need at least an initial set of beliefs in order to plan
+
+                objs = self.scan_consistent()
+                print( f"Starting Objects:" )
+                for obj in objs:
+                    print( f"\t{obj}" )
+                    
+
+                if not self.check_goal_objects( problem.goal, objs ):
+                    logger.log_event( "Required objects missing" )   
+                    logger.end_trial( False, { 'symbols' : [str(sym) for sym in self.scan_fresh()] } ) 
+                    continue
+
+
+            print( f"\n##### Solving Problem {i+1} #####" )
+
+            
             logger.log_event( "Begin Solver" )
 
-            problem = planner.pddlstream_from_problem()
+            problem = self.pddlstream_from_problem()
+
+
             try:
-                solution = solve( problem, 
-                                  algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
-                                  unit_costs = True, success_cost = 1,
-                                  visualize = True,
-                                  initial_complexity=2  )
+                solution = solve( 
+                    problem, 
+                    algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
+                    max_skeletons = 50,
+                    unit_costs   = False, 
+                    unit_efforts = False,
+                    effort_weight = 10.0,
+                    success_cost = 40,
+                    initial_complexity = 1,
+                    complexity_step = 3,
+                    search_sample_ratio = 1/1000, #1/750 # 1/1000, #1/2000 #500, #1/2, # 1/500, #1/200, #1/10, #2, # 25 #1/25
+                    reorder = True,
+                )
                 print( "Solver has completed!\n\n\n" )
-                logger.log_event( "Solver SUCCESS" )
+                print_solution( solution )
             except Exception as ex:
-                logger.log_event( "Solver FAILURE" )
                 print( "SOLVER FAULT\n" )
                 print_exc()
                 solution = (None, None, None)
-                print( "\n" )
+                print( "\n\n\n" )
 
             logger.log_event( "End Solver" )
 
-            print_solution( solution )
             plan, cost, evaluations = solution
             display_PDLS_plan( plan )
             
-            # print( dir( plan[0] ) )
             print( "\n\n\n" )
 
-            self.run_one_episode( logger )
+            self.run_one_episode( plan, logger )
 
-            logger.end_trial()
+            # if not _SAMPLE_DET:
+            #     for i in range( 2*_N_POSE_UPDT+1 ):
+            #         self.belief_update() # We need at least an initial set of beliefs in order to plan
+
+            goalMet = self.validate_goal( problem.goal )
+
+            print( f"Were the goals met?: {goalMet}" )
+
+            logger.end_trial( goalMet )
+
+        logger.save( "Open-Loop_6-blocks_" )
         
 
 
@@ -994,103 +1101,13 @@ from tarski.io import PDDLReader
 #     return parser( read( path ) )
 
 ##### Env. Settings #####
-np.set_printoptions( precision = 3, linewidth = 145 )
+np.set_printoptions( precision = 3, linewidth = 130 )
 
 
 ##### Run Sim #####
 if __name__ == "__main__":
-
-    ### Init ###
-
-    world = PB_BlocksWorld()
-    world.reset_blocks()
-    robot = world.robot
-    robot.goto_home()
-    world.spin_for( 500 )
-
-    planner = ReactiveExecutive( world )
-
-    if not _SAMPLE_DET:
-        for i in range( 2*_N_POSE_UPDT+1 ):
-            planner.belief_update() # We need at least an initial set of beliefs in order to plan
-
-    print( '\n\n\n##### PDLS INIT #####' )
-    problem = planner.pddlstream_from_problem()
-    
-    # dom = domain_from_path( get_file_path(__file__, 'domain.pddl') )
-    
-
-    # dom = pddl_as_list( get_file_path(__file__, 'domain.pddl') )
-    # pprint( dom )
-    # print( "\n\n" )
-    # pprint( get_action_defn( dom, 'place' ) )
-    # print( type( reader ) )
-    # print( dir( reader ) )
-    
-    # print( dir(problem) )
-    print( type( problem.goal ) )
-    pprint( problem.goal )
-    print( 'Created!\n\n\n' )
-    # exit(0)
-
-    if 1:
-        print( '##### PDLS SOLVE #####' )
-        try:
-            solution = solve( 
-                problem, 
-                algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
-                max_skeletons = 50,
-                unit_costs   = False, 
-                unit_efforts = False,
-                effort_weight = 10.0,
-                success_cost = 40,
-                initial_complexity = 1,
-                complexity_step = 3,
-                search_sample_ratio = 1/1000, #1/750 # 1/1000, #1/2000 #500, #1/2, # 1/500, #1/200, #1/10, #2, # 25 #1/25
-                reorder = True,
-                # max_iterations = 2,
-                # max_memory = 1500000, #kb
-            )
-            print( "Solver has completed!\n\n\n" )
-            print_solution( solution )
-        except Exception as ex:
-            print( "SOLVER FAULT\n" )
-            print_exc()
-            solution = (None, None, None)
-            print( "\n\n\n" )
-        plan, cost, evaluations = solution
-        print( f"\n\n\nPlan output from PDDLStream:" )
-        if plan is not None:
-            for i, action in enumerate( plan ):
-                # print( dir( action ) )
-                print( f"\t{i+1}: { action.__class__.__name__ }, {action.name}" )
-                for j, arg in enumerate( action.args ):
-                    print( f"\t\tArg {j}:\t{type( arg )}, {arg}" )
-        else:
-            print( plan )
-        # print( dir( plan[0] ) )
-        print( "\n\n\n" )
-
-    if 1:
-        btPlan = get_BT_plan_from_PDLS_plan( plan, world )
-        print( "\n\n\n" )
-
-        btr = BT_Runner( btPlan, world, 20.0 )
-        btr.setup_BT_for_running()
-
-        while not btr.p_ended():
-            btr.tick_once()
-
-    if not _SAMPLE_DET:
-        for i in range( 10 ):
-            planner.belief_update() # We need at least an initial set of beliefs in order to plan
-
-    print( f"Were the goals met?: {planner.validate_goal( problem.goal )}" )
-    
-
-    robot.goto_home()
-    world.spin_for( 500 )
-
+    planner = ResponsiveExecutive()
+    planner.run_N_episodes( 250 )
 
 
 #     def exec_plans_noisy( self, N = 1200,  Npause = 200 ):
