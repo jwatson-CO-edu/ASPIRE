@@ -31,6 +31,7 @@ class ObjectBelief:
         self.pThresh = nearThresh # --------------------- Minimum prob density at which a nearby pose is relevant
         self.visited = False
         self.fresh   = True
+        self.symbols = [] # FIXME: TRACK SYMBOL REFS EACH TIME ONE IS CREATED
 
     def posn( self ):
         """ Get the position """
@@ -152,4 +153,6 @@ class ObjectBelief:
 
 class ObjectMemory:
     # FIXME, START HERE: MOVE ALL SCANS AND CONSISTENCY CHECKS HERE
+    # DON'T FORGET POSITION CONSISTENCY (RESAMPLE UNTIL NON-COLLIDING)
+    # BELIEF DECAY ALSO GOES HERE, REMEMBER TO CLEAN UP HIGH NULL BELIEFS
     pass
