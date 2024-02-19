@@ -912,7 +912,7 @@ class ResponsiveExecutive:
             problem = self.pddlstream_from_problem()
 
             if not _SAMPLE_DET:
-                for i in range( 3*_N_POSE_UPDT+1 ):
+                for _ in range( 3*_N_POSE_UPDT+1 ):
                     self.memory.belief_update( self.world.full_scan_noisy() ) # We need at least an initial set of beliefs in order to plan
 
                 objs = self.memory.scan_consistent_fresh()
