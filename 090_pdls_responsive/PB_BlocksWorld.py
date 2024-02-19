@@ -267,13 +267,13 @@ class PB_BlocksWorld:
         except ValueError:
             return None
         
+        
     def full_scan_noisy( self, confuseProb = 0.10, poseStddev = _POSN_STDDEV ):
         """ Find all of the ROYGBV blocks, Partially Observable """
         rtnBel = []
         for name in _ACTUAL_NAMES:
             rtnBel.append( self.get_block_noisy( name, confuseProb, poseStddev ) )
         return rtnBel
-    
     
 
     def check_predicate( self, symbol, posnErr = _POSN_STDDEV*2.0 ):

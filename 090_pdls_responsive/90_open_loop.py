@@ -92,7 +92,7 @@ from pb_BT import connect_BT_to_robot_world, Move_Arm, Grasp, Ungrasp, pass_msg_
 from PB_BlocksWorld import PB_BlocksWorld, rand_table_pose
 from symbols import Object, Path
 
-from Cheap_PDDL_Parser import pddl_as_list, get_action_defn
+from beliefs import ObjectMemory
 
 
 ########## BT-PLANNER INTERFACE ####################################################################
@@ -467,7 +467,7 @@ class ResponsiveExecutive:
 
     def reset_beliefs( self ):
         """ Erase belief memory """
-        self.beliefs = [] # Distributions over objects
+        self.memory  = ObjectMemory() # Distributions over objects
         self.symbols = []
         self.plans   = [] # PriorityQueue()
         self.last    = {}
@@ -476,59 +476,6 @@ class ResponsiveExecutive:
         """ Create a pre-determined collection of poses and plan skeletons """
         self.world = world if (world is not None) else PB_BlocksWorld()
         self.reset_beliefs()
-
-    ##### Belief Updates ##################################################
-
-    def integrate_one_segmentation( self, objBelief ):
-        """ Fuse this belief with the current beliefs """
-        # 1. Determine if this belief provides evidence for an existing belief
-        relevant = False
-        for belief in self.beliefs:
-            if belief.integrate_belief( objBelief ):
-                relevant = True
-                belief.visited = True
-                # Assume that this is the only relevant match, break
-                break
-        # 2. If this evidence does not support an existing belief, it is a new belief
-        if not relevant:
-            self.beliefs.append( objBelief )
-        return relevant
-
-    def unvisit_beliefs( self ):
-        """ Set visited flag to False for all beliefs """
-        for belief in self.beliefs:
-            belief.visited = False
-
-    def decay_beliefs( self ):
-        retain = []
-        for belief in self.beliefs:
-            if not belief.visited:
-                belief.integrate_belief( belief.sample_nothing() )
-            if belief.labels[ _NULL_NAME ] < _NULL_THRESH:
-                retain.append( belief )
-            else:
-                print( f"{str(belief)} DESTROYED!" )
-
-    def belief_update( self ):
-        """ Gather and aggregate evidence """
-        objEvidence = self.world.full_scan_noisy()
-        print( f"Got {len(objEvidence)} beliefs!" )
-
-        ## Integrate Beliefs ##
-        cNu = 0
-        cIn = 0
-        self.unvisit_beliefs()
-        for objEv in objEvidence:
-            if self.integrate_one_segmentation( objEv ):
-                cIn += 1
-            else:
-                cNu += 1
-        if (cNu or cIn):
-            print( f"\t{cNu} new object beliefs this iteration!" )
-            print( f"\t{cIn} object beliefs updated!" )
-        else:
-            print( f"\tNO belief update!" )
-        print( f"Total Beliefs: {len(self.beliefs)}" )
 
     def check_OOB( self, thresh_m = 10.0 ):
         """ Return true if any of the simulated objects are out of bounds """
@@ -543,77 +490,16 @@ class ResponsiveExecutive:
     ##### Stream Creators #################################################
 
 
-    def scan_consistent( self ):
-        """ Keep only the most likely version of a label """
-        smplSym = [bel.sample_symbol() for bel in self.beliefs]
-        uniqSym = {}
-        for sym in smplSym:
-            if sym.label not in uniqSym:
-                uniqSym[ sym.label ] = sym
-            elif sym.prob() > uniqSym[ sym.label ].prob():
-                uniqSym[ sym.label ] = sym
-        rtnSym = list( uniqSym.values() )
-        for sym in rtnSym:
-            if (sym.label != _NULL_NAME):
-                self.last[ sym.label ] = sym
-        return rtnSym
-    
-
-    def scan_consistent_fresh( self ):
-        """ Keep only the most likely version of a label """
-        smplSym = [bel.sample_fresh() for bel in self.beliefs]
-        uniqSym = {}
-        for sym in smplSym:
-            if sym.label not in uniqSym:
-                uniqSym[ sym.label ] = sym
-            elif sym.prob() > uniqSym[ sym.label ].prob():
-                uniqSym[ sym.label ] = sym
-        rtnSym = list( uniqSym.values() )
-        for sym in rtnSym:
-            if (sym.label != _NULL_NAME):
-                self.last[ sym.label ] = sym
-        return rtnSym
-
-
-    def scan_fresh( self ):
-        """ Determinize last updated object beliefs """
-        nuSym = [bel.sample_fresh() for bel in self.beliefs]
+    def sample_determ( self, objName ):
+        """ Return the deterministic pose of the block """
+        nuSym = self.world.full_scan_true()
         for sym in nuSym:
-            if (sym.label != _NULL_NAME):
+            if sym.label not in self.last:
                 self.last[ sym.label ] = sym
-        return list( self.last.values() )
-    
-    def sample_consistent( self, label ):
-        """ Maintain a pose dict and only update it when needed """
-        # self.scan_fresh()
-        nuSym = self.scan_consistent()
-        for sym in nuSym:
-            if (sym.label == label):
-                return sym
-        return None
-
-    def sample_fresh( self, label ):
-        """ Maintain a pose dict and only update it when needed """
-        # self.scan_fresh()
-        self.scan_consistent_fresh()
-        if label in self.last:
-            return self.last[ label ]
+        if objName in self.last:
+            return self.last[ objName ]
         else:
             return None
-        
-
-    def sample_determ( self, label ):
-        """ Maintain a true pose dict and only update it when needed """
-        if label in self.last:
-            return self.last[ label ]
-        else:
-            nuSym = [self.world.get_block_true( name ) for name in _ACTUAL_NAMES]
-            for sym in nuSym:
-                self.last[ sym.label ] = sym
-            if label in self.last:
-                return self.last[ label ]
-            else:
-                return None
         
 
     def calc_grasp( self, objPose ):
@@ -665,8 +551,9 @@ class ResponsiveExecutive:
             if _SAMPLE_DET:
                 rtnObj = self.sample_determ( objcName )
             else:
-                rtnObj = self.sample_consistent( objcName )
-            if rtnObj.label != _NULL_NAME:
+                # rtnObj = self.memory.sample_consistent( objcName )
+                rtnObj = self.memory.sample_consistent_fresh( objcName )
+            if (rtnObj is not None) and (rtnObj.label != _NULL_NAME):
                 self.add_grasp_config_to_object( rtnObj )
                 print( f"OBJECT stream SUCCESS: {rtnObj}\n" )
                 yield (rtnObj,)
@@ -713,7 +600,8 @@ class ResponsiveExecutive:
             if _SAMPLE_DET:
                 nuSym = self.world.full_scan_true()
             else:
-                nuSym = self.scan_consistent()
+                nuSym = self.memory.scan_consistent_fresh()
+                # nuSym = self.memory.scan_consistent()
             print( f"Symbols: {nuSym}" )
 
             for sym in nuSym:
@@ -823,7 +711,8 @@ class ResponsiveExecutive:
             if _SAMPLE_DET:
                 nuSym = self.world.full_scan_true()
             else:
-                nuSym = self.scan_consistent()
+                # nuSym = self.memory.scan_consistent()
+                nuSym = self.memory.scan_consistent_fresh()
             print( f"Symbols: {nuSym}" )
 
             for sym in nuSym:
@@ -1022,10 +911,11 @@ class ResponsiveExecutive:
             problem = self.pddlstream_from_problem()
 
             if not _SAMPLE_DET:
-                for i in range( 2*_N_POSE_UPDT+1 ):
-                    self.belief_update() # We need at least an initial set of beliefs in order to plan
+                for i in range( 3*_N_POSE_UPDT+1 ):
+                    self.memory.belief_update( self.world.full_scan_noisy() ) # We need at least an initial set of beliefs in order to plan
 
-                objs = self.scan_consistent()
+                objs = self.memory.scan_consistent_fresh()
+                # objs = self.memory.scan_consistent()
                 print( f"Starting Objects:" )
                 for obj in objs:
                     print( f"\t{obj}" )
@@ -1033,7 +923,8 @@ class ResponsiveExecutive:
 
                 if not self.check_goal_objects( problem.goal, objs ):
                     logger.log_event( "Required objects missing" )   
-                    logger.end_trial( False, { 'symbols' : [str(sym) for sym in self.scan_fresh()] } ) 
+                    logger.end_trial( False, { 'symbols' : [str(sym) for sym in self.memory.scan_consistent_fresh()] } ) 
+                    # logger.end_trial( False, { 'symbols' : [str(sym) for sym in self.memory.scan_consistent()] } ) 
                     continue
 
 

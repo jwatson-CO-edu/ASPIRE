@@ -26,18 +26,35 @@ class Object:
     def posn_ornt( self ):
         """ Get the pose in PyBullet format """
         return row_vec_to_pb_posn_ornt( self.pose )
+    
+    def p_attached( self ):
+        """ Return true if this symbol has been assigned to an action """
+        return (self.ref is not None)
 
     def prob( self ):
         """ Get the current belief this symbol is true based on the belief this symbol was drawn from """
-        return self.ref.labels[self.label]
+        if self.p_attached():
+            return self.ref.labels[self.label]
+        else:
+            return 0.0
+        
+    def fresh( self ):
+        """ Return the freshness of the ref where it exists, otherwise return False """
+        if self.p_attached():
+            return self.ref.fresh
+        else:
+            return False
+        
+    def detach( self ):
+        """ Remove self from reference, then remove reference """
+        if self.p_attached():
+            self.ref.remove_symbol( self.index )
     
     def __repr__( self ):
         """ String representation, Including current symbol belief """
         return f"<{self.label} @ {self.pose}, P={self.prob() if (self.ref is not None) else None}>"
     
-    def p_attached( self ):
-        """ Return true if this symbol has been assigned to an action """
-        return (self.action is not None)
+    
     
     
 class Path:
