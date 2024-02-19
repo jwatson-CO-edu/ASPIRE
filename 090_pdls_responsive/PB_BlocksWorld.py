@@ -10,7 +10,7 @@ from utils import row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec
 from symbols import Object
 from beliefs import ObjectBelief
 from env_config import ( _MIN_X_OFFSET, _BLOCK_SCALE, TABLE_URDF_PATH, _BLOCK_NAMES, _POSN_STDDEV, 
-                         _GRASP_VERT_OFFSET, _GRASP_ORNT_XYZW, _ACTUAL_NAMES, _ONLY_RED, _ONLY_PRIMARY,
+                         _GRASP_VERT_OFFSET, _ACCEPT_POSN_ERR, _ACTUAL_NAMES, _ONLY_RED, _ONLY_PRIMARY,
                         _BLOCK_ALPHA, _CONFUSE_PROB )
 
 ##### Paths #####
@@ -165,6 +165,19 @@ class PB_BlocksWorld:
         pDif = np.subtract( bPsn, ePsn )
         self.grasp.append( (hndl,pDif,bOrn,) ) # Preserve the original orientation because I am lazy
 
+
+    def robot_grasp_at( self, graspPose ):
+        """ Lock the block to the end effector that is nearest the effector """
+        hndl = self.get_handle_at_pose( graspPose, 2.0*_ACCEPT_POSN_ERR )
+        if hndl is not None:
+            blockName = self.get_handle_name( hndl )
+            symb = self.get_block_true( blockName )
+            bPsn, bOrn = row_vec_to_pb_posn_ornt( symb.pose )
+            ePsn, _    = self.robot.get_current_pose()
+            pDif = np.subtract( bPsn, ePsn )
+            self.grasp.append( (hndl,pDif,bOrn,) ) # Preserve the original orientation because I am lazy
+
+
     def robot_release_all( self ):
         """ Unlock all objects from end effector """
         self.grasp = []
@@ -267,7 +280,7 @@ class PB_BlocksWorld:
         except ValueError:
             return None
         
-        
+
     def full_scan_noisy( self, confuseProb = 0.10, poseStddev = _POSN_STDDEV ):
         """ Find all of the ROYGBV blocks, Partially Observable """
         rtnBel = []

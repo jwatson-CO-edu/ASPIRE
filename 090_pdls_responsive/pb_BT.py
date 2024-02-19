@@ -250,10 +250,11 @@ class Ungrasp( BasicBehavior ):
 class Grasp( BasicBehavior ):
     """ Close fingers completely """
     
-    def __init__( self, objName, name = None, ctrl = None, world = None ):
+    def __init__( self, objName, objPose = None, name = None, ctrl = None, world = None ):
         """ Set the target """
         super().__init__( name, ctrl, world )
-        self.target = objName
+        self.target  = objName
+        self.objPose = objPose
         # self.wait_s = 0.5
                 
     def initialise( self ):
@@ -262,7 +263,10 @@ class Grasp( BasicBehavior ):
         # self.ctrl.close_gripper()
         # sleep( self.wait_s )
         self.world.spin_for( _HAND_WAIT )
-        self.world.robot_grasp_block( self.target )
+
+        # self.world.robot_grasp_block( self.target )
+        self.world.robot_grasp_at( self.objPose )
+
         self.world.spin_for( _HAND_WAIT )
         
     def update( self ):

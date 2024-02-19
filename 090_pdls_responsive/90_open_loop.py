@@ -274,7 +274,8 @@ class Pick( GroundedAction ):
         super().__init__( args, goal, world, robot, name )
 
         self.add_child( 
-            Grasp( label, name = name, ctrl = robot, world = world )
+            # Grasp( label, name = name, ctrl = robot, world = world )
+            Grasp( label, obj.pose, name = name, ctrl = robot, world = world )
         )
 
 
