@@ -338,7 +338,7 @@ class ResponsiveExecutive:
 
     ##### Goal Validation #################################################
 
-    def validate_predicate( self, pred ):
+    def validate_predicate_true( self, pred ):
         """ Check if the predicate is true """
         pTyp = pred[0]
         if pTyp == 'HandEmpty':
@@ -365,15 +365,92 @@ class ResponsiveExecutive:
             print( f"UNSUPPORTED predicate check!: {pTyp}" )
             return False
     
-    def validate_goal( self, goal ):
+    def validate_goal_true( self, goal ):
         """ Check if the goal is met """
         if goal[0] == 'and':
             for g in goal[1:]:
-                if not self.validate_predicate( g ):
+                if not self.validate_predicate_true( g ):
                     return False
             return True
         else:
             raise ValueError( f"Unexpected goal format!: {goal}" )
+        
+
+    def get_met_goal_predicates_true( self, goal ):
+        """ Return a list of goal predicates that have already been met """
+        rtnPred = []
+        if goal[0] == 'and':
+            for g in goal[1:]:
+                if self.validate_predicate_true( g ):
+                    rtnPred.append( g )
+        else:
+            print( f"Unexpected goal format!: {goal}" )
+        return rtnPred
+
+
+    ##### Goal Validation (Noisy) #########################################
+
+    def validate_predicate_noisy( self, pred, objs ):
+        """ Check if the predicate is true """
+
+        def get_by_name( name, syms ):
+            """ Get the list item with a label matching `name` """
+            for sym in syms:
+                if sym.label == name:
+                    return sym
+            return None
+
+        pTyp = pred[0]
+        if pTyp == 'HandEmpty':
+            print( f"HandEmpty: {self.world.grasp}" )
+            return (len( self.world.grasp ) == 0)
+        elif pTyp == 'GraspObj':
+            pLbl = pred[1]
+            pPos = pred[2]
+            # tObj = self.memory.sample_consistent( pLbl )
+            tObj = get_by_name( pLbl, objs )
+            try:
+                return (diff_norm( pPos.pose[:3], tObj.pose[:3] ) <= _ACCEPT_POSN_ERR)
+            except Exception:
+                return False
+        elif pTyp == 'Supported':
+            lblUp = pred[1]
+            lblDn = pred[2]
+            # objUp = self.memory.sample_consistent( lblUp )
+            objUp = get_by_name( lblUp, objs )
+            # objDn = self.memory.sample_consistent( lblDn )
+            objDn = get_by_name( lblDn, objs )
+            try:
+                xySep = diff_norm( objUp.pose[:2], objDn.pose[:2] )
+                zSep  = objUp.pose[2] - objDn.pose[2] # Signed value
+                print( f"Supported, X-Y Sep: {xySep} <= {2.0*_BLOCK_SCALE}, Z Sep: {zSep} >= {1.35*_BLOCK_SCALE}" )
+                return ((xySep <= 2.0*_BLOCK_SCALE) and (zSep >= 1.35*_BLOCK_SCALE))
+            except Exception:
+                return False
+        else:
+            print( f"UNSUPPORTED predicate check!: {pTyp}" )
+            return False
+
+    def validate_goal_noisy( self, goal, objs ):
+        """ Check if the goal is met """
+        if goal[0] == 'and':
+            for g in goal[1:]:
+                if not self.validate_predicate_noisy( g, objs ):
+                    return False
+            return True
+        else:
+            raise ValueError( f"Unexpected goal format!: {goal}" )
+        
+    def get_met_goal_predicates_noisy( self, goal, objs ):
+        """ Return a list of goal predicates that have already been met """
+        rtnPred = []
+        if goal[0] == 'and':
+            for g in goal[1:]:
+                if self.validate_predicate_noisy( g, objs ):
+                    rtnPred.append( g )
+        else:
+            print( f"Unexpected goal format!: {goal}" )
+        return rtnPred
 
 
     ##### TAMP Helpers ####################################################
@@ -453,18 +530,6 @@ class ResponsiveExecutive:
         return (goalSet <= symbSet)
 
 
-    def get_met_goal_predicates( self, goal ):
-        """ Return a list of goal predicates that have already been met """
-        rtnPred = []
-        if goal[0] == 'and':
-            for g in goal[1:]:
-                if self.validate_predicate( g ):
-                    rtnPred.append( g )
-        else:
-            print( f"Unexpected goal format!: {goal}" )
-        return rtnPred
-
-
     def pddlstream_from_problem( self ):
         """ Set up a PDDLStream problem with the UR5 """
 
@@ -489,13 +554,18 @@ class ResponsiveExecutive:
         return PDDLProblem( domain_pddl, constant_map, stream_pddl, stream_map, self.facts, self.goal )
         
 
+    def p_failed( self ):
+        """ Has the system encountered a failure? """
+        return (self.status == Status.FAILURE)
+    
+
     ##### Task And Motion Planning ########################################
 
 
     def phase_1_Perceive( self, Nscans ):
         """ Take in evidence and form beliefs """
 
-        self.logger.begin_trial()
+        self.reset_beliefs()
 
         for _ in range( Nscans ):
             self.memory.belief_update( self.world.full_scan_noisy() ) # We need at least an initial set of beliefs in order to plan
@@ -515,17 +585,16 @@ class ResponsiveExecutive:
     
         self.get_init_predicates()
 
-        # FIXME, START HERE: CHECK WIN CONDITIONS, BUT WITH THE NOISY READINGS!
-
-        if not self.check_goal_objects( self.goal, self.symbols ):
-            self.logger.log_event( "Required objects missing" )   
-            # self.logger.end_trial( False, { 'symbols' : [str(sym) for sym in self.memory.scan_consistent_fresh()] } ) 
+        if self.validate_goal_noisy( self.goal, self.symbols ):
+            self.status = Status.SUCCESS
+        elif not self.check_goal_objects( self.goal, self.symbols ):
+            self.logger.log_event( "Required objects missing", str( self.symbols ) )   
             self.status = Status.FAILURE
         else:
-            self.facts.extend( self.get_met_goal_predicates( self.goal ) )
+            self.facts.extend( self.get_met_goal_predicates_noisy( self.goal, self.symbols ) )
 
 
-    def phase_3_Task_Planning( self ):
+    def phase_3_Plan_Task( self ):
         """ Attempt to solve the symbolic problem """
 
         self.task = self.pddlstream_from_problem()
@@ -564,85 +633,63 @@ class ResponsiveExecutive:
             self.action   = get_ith_BT_action_from_PDLS_plan( plan, 0, self.world )
 
 
-    def phase_4_Action_Execution( self ):
+    def phase_4_Execute_Action( self ):
         """ Attempt to execute the first action in the symbolic plan """
-        # FIXME, START HERE: RUN A 1-ACTION BT AND OBSERVE STATE
-        pass
-
-    ##### PDLS Solver #####################################################
-
-    
-
-    
-    
-
-    def run_one_episode( self, plan, logger = None ):
-        """ Run a single experiment and collect data """
         
-        btPlan = get_BT_plan_from_PDLS_plan( plan, self.world )
-        print( "\n\n\n" )
-
-        btr = BT_Runner( btPlan, self.world, 20.0 )
+        btr = BT_Runner( self.action, self.world, 20.0 )
         btr.setup_BT_for_running()
 
         while not btr.p_ended():
             btr.tick_once()
             if (btr.status == Status.FAILURE):
-                logger.log_event( "Action Failure: " + btr.msg )
-
-        return (btr.status == Status.SUCCESS)
-
-
-    def run_N_episodes( self, N ):
-        """ Run N experiments and collect statistics """
-        
-        
-        robot  = self.world.robot
-
-        for i in range( N ):
-            print( f"\n\n########## Experiment {i+1} of {N} ##########" )
-
-            robot.goto_home()
-            self.world.reset_blocks()
-            self.world.spin_for( 500 )
-
-            self.reset_beliefs()
-
-            logger.begin_trial()
-
-            print( '\n\n\n##### PDLS INIT #####' )
-            problem = self.pddlstream_from_problem()
-
-            if not _SAMPLE_DET:
-                pass
-                    
-
-                
+                self.status = Status.FAILURE
+                self.logger.log_event( "Action Failure", btr.msg )
 
 
-            print( f"\n##### Solving Problem {i+1} #####" )
+    def solve_task( self, maxIter = 100 ):
+        """ Solve the goal """
+        self.reset_state()
+        i = 0
 
+        print( "\n\n\n##### TAMP BEGIN #####\n" )
+
+        self.logger.begin_trial()
+
+        while (self.status != Status.SUCCESS) and (i < maxIter):
+
+            print( f"### Iteration {i+1} ###" )
             
-            
+            i += 1
 
-            
-            
-            print( "\n\n\n" )
+            print( f"Phase 1, {self.status} ..." )
+            self.phase_1_Perceive( 3*_N_POSE_UPDT+1 )
 
-            self.run_one_episode( plan, logger )
+            print( f"Phase 2, {self.status} ..." )
+            self.phase_2_Ground_Symbols()
 
-            # if not _SAMPLE_DET:
-            #     for i in range( 2*_N_POSE_UPDT+1 ):
-            #         self.belief_update() # We need at least an initial set of beliefs in order to plan
+            if self.status in (Status.SUCCESS, Status.FAILURE):
+                print( f"LOOP, {self.status} ..." )
+                continue
 
-            goalMet = self.validate_goal( problem.goal )
+            print( f"Phase 3, {self.status} ..." )
+            self.phase_3_Plan_Task()
 
-            print( f"Were the goals met?: {goalMet}" )
+            if self.p_failed():
+                print( f"LOOP, {self.status} ..." )
+                continue
 
-            logger.end_trial( goalMet )
+            print( f"Phase 4, {self.status} ..." )
+            self.phase_4_Execute_Action()
 
-        logger.save( "Open-Loop_6-blocks_" )
-        
+            print()
+
+        self.logger.end_trial(
+            self.validate_goal_true( self.goal ),
+            {'end_symbols' : list( self.symbols ) }
+        )
+
+        print( f"\n##### TAMP END with status {self.status} after iteration {i} #####\n\n\n" )
+
 
 
 
