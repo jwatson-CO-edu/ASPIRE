@@ -2,6 +2,7 @@
 */runs/
 .gitignore~
 */statistics/
+*/data/
 */*.pt
 */*.png
 */*.pkl
