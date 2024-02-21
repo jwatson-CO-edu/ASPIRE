@@ -255,12 +255,15 @@ class MoveFree( GroundedAction ):
             name = f"Move Free to {obj2.pose}"
         super().__init__( args, goal, world, robot, name )
     
-        for x_i in traj.wp[1:]:
-            grasp_pose = list( x_i.grasp )
-            posn, ornt = row_vec_to_pb_posn_ornt( grasp_pose )
-            self.add_child( 
-                Move_Arm( posn, ornt, name = name, ctrl = robot, world = world )
-            )
+        try:
+            for x_i in traj.wp[1:]:
+                grasp_pose = list( x_i.grasp )
+                posn, ornt = row_vec_to_pb_posn_ornt( grasp_pose )
+                self.add_child( 
+                    Move_Arm( posn, ornt, name = name, ctrl = robot, world = world )
+                )
+        except Exception as e:
+            print( f"MoveFree ERROR, Args: {args}",  )
 
 
 class Pick( GroundedAction ):
@@ -950,7 +953,7 @@ class ResponsiveExecutive:
                     initial_complexity = 1,
                     complexity_step = 3,
                     search_sample_ratio = 1/1000, #1/750 # 1/1000, #1/2000 #500, #1/2, # 1/500, #1/200, #1/10, #2, # 25 #1/25
-                    reorder = True,
+                    reorder = False, # Setting to false bare impacts sol'n time
                 )
                 print( "Solver has completed!\n\n\n" )
                 print_solution( solution )
@@ -994,7 +997,7 @@ np.set_printoptions( precision = 3, linewidth = 130 )
 ##### Run Sim #####
 if __name__ == "__main__":
     planner = ResponsiveExecutive()
-    planner.run_N_episodes( 10 )
+    planner.run_N_episodes( 40 )
 
     print("\n\nExperiments DONE!!\n\n")
     duration =   3  # seconds

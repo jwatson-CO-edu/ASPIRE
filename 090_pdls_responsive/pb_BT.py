@@ -235,6 +235,8 @@ class Ungrasp( BasicBehavior ):
         super().initialise()
         self.world.spin_for( _HAND_WAIT )
         self.world.robot_release_all()
+        self.world.spin_for( 2 )
+        self.world.robot_release_all()
         self.world.spin_for( _HAND_WAIT )
         
         

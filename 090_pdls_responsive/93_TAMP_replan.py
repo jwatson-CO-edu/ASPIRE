@@ -63,9 +63,26 @@ from PB_BlocksWorld import PB_BlocksWorld
 from symbols import Object, Path
 
 from beliefs import ObjectMemory
-from actions import get_BT_plan_from_PDLS_plan, display_PDLS_plan, BT_Runner, get_ith_BT_action_from_PDLS_plan
+from actions import Plan, display_PDLS_plan, BT_Runner, get_ith_BT_action_from_PDLS_plan, Place, Stack
 
 
+
+########## HELPER FUNCTIONS ########################################################################
+
+
+def get_BT_plan_until_block_change( pdlsPlan, world ):
+    """ Translate the PDLS plan to one that can be executed by the robot """
+    rtnBTlst = []
+    if pdlsPlan is not None:
+        for i in range( len( pdlsPlan ) ):
+            btAction = get_ith_BT_action_from_PDLS_plan( pdlsPlan, i, world )
+            rtnBTlst.append( btAction )
+            if btAction.__class__ in ( Place, Stack ):
+                break
+
+    rtnPlan = Plan()
+    rtnPlan.add_children( rtnBTlst )
+    return rtnPlan
 
 ########## EXECUTIVE (THE METHOD) ##################################################################
 
@@ -562,10 +579,15 @@ class ResponsiveExecutive:
     ##### Task And Motion Planning ########################################
 
 
+    def set_table( self ):
+        """ Get ready for an experiment """
+        self.world.robot.goto_home()
+        self.world.reset_blocks()
+        self.world.spin_for( 500 )
+
+
     def phase_1_Perceive( self, Nscans ):
         """ Take in evidence and form beliefs """
-
-        self.reset_beliefs()
 
         for _ in range( Nscans ):
             self.memory.belief_update( self.world.full_scan_noisy() ) # We need at least an initial set of beliefs in order to plan
@@ -606,14 +628,15 @@ class ResponsiveExecutive:
                 self.task, 
                 algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
                 max_skeletons = 50,
-                unit_costs   = False, 
+                max_time      = 80.0,
+                unit_costs   = True, 
                 unit_efforts = False,
                 effort_weight = 10.0,
                 success_cost = 40,
                 initial_complexity = 1,
                 complexity_step = 3,
                 search_sample_ratio = 1/1000, #1/750 # 1/1000, #1/2000 #500, #1/2, # 1/500, #1/200, #1/10, #2, # 25 #1/25
-                reorder = True,
+                reorder = False, # Setting to false bare impacts sol'n time
             )
             # print( "Solver has completed!\n\n\n" )
             print_solution( solution )
@@ -624,14 +647,16 @@ class ResponsiveExecutive:
             solution = (None, None, None)
             # print( "\n\n\n" )
 
-        self.logger.log_event( "End Solver" )
-
         plan, cost, evaluations = solution
-        if plan is not None:
+        if (plan is not None) and len( plan ):
             display_PDLS_plan( plan )
             self.currPlan = plan
-            self.action   = get_ith_BT_action_from_PDLS_plan( plan, 0, self.world )
+            self.action   = get_BT_plan_until_block_change( plan, self.world )
+        else:
+            self.logger.log_event( "NO SOLUTION" )
+            self.status = Status.FAILURE
 
+        self.logger.log_event( "End Solver" )
 
     def phase_4_Execute_Action( self ):
         """ Attempt to execute the first action in the symbolic plan """
@@ -662,6 +687,7 @@ class ResponsiveExecutive:
             i += 1
 
             print( f"Phase 1, {self.status} ..." )
+            self.reset_beliefs() # WARNING: REMOVE FOR RESPONSIVE
             self.phase_1_Perceive( 3*_N_POSE_UPDT+1 )
 
             print( f"Phase 2, {self.status} ..." )
@@ -688,6 +714,8 @@ class ResponsiveExecutive:
             {'end_symbols' : list( self.symbols ) }
         )
 
+        self.logger.save( "TAMP-Loop" )
+
         print( f"\n##### TAMP END with status {self.status} after iteration {i} #####\n\n\n" )
 
 
@@ -703,7 +731,8 @@ np.set_printoptions( precision = 3, linewidth = 130 )
 ##### Run Sim #####
 if __name__ == "__main__":
     planner = ResponsiveExecutive()
-    planner.run_N_episodes( 10 )
+    planner.set_table()
+    planner.solve_task()
 
     print("\n\nExperiments DONE!!\n\n")
     duration =   3  # seconds

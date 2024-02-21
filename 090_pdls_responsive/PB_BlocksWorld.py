@@ -180,7 +180,7 @@ class PB_BlocksWorld:
 
     def robot_release_all( self ):
         """ Unlock all objects from end effector """
-        self.grasp = []
+        self.grasp = list()
 
 
     ##### Block Queries ###################################################

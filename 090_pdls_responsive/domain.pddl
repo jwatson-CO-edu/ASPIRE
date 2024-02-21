@@ -14,7 +14,7 @@
     ;;; Domains ;;;
     (Graspable ?label); Name of a real object we can grasp
     (Waypoint ?obj) ; Model of any object we can go to in the world, real or not
-    (Occupied ?obj) ; Model of a real object we can grasp
+    ; (Occupied ?obj) ; Model of a real object we can grasp
     
     ; (Conf ?config) ; Used by "stream.pddl"
     ; (Pose ?pose) ; Used by "stream.pddl", Do NOT pollute this space!
@@ -55,7 +55,7 @@
                     (AtObj ?obj)
                     (HandEmpty)
                     ; (Occupied ?obj)
-                    (FreePlacement ?label ?obj)
+                    (FreePlacement ?label ?obj) ; This is silly but the solver REQUIRES it!
                   )
     :effect (and (Holding ?label) 
                  (not (HandEmpty))
@@ -70,8 +70,6 @@
                     (AtObj ?obj1)
                     ;; Requirements ;;
                     (GraspObj ?label ?obj1)
-                    ; (FreePlacement ?label ?obj2)
-                    ; (SafeMotion ?obj1 ?obj2 ?traj)
                     (SafeCarry ?label ?obj1 ?obj2 ?traj)
                   )
     :effect (and (GraspObj ?label ?obj2)
@@ -80,8 +78,8 @@
                 ;  (not (FreePlacement ?label ?obj2))
                  (AtObj ?obj2)
                  (not (AtObj ?obj1))
-                 (Occupied ?obj2)
-                 (not (Occupied ?obj1))
+                ;  (Occupied ?obj2)
+                ;  (not (Occupied ?obj1))
             )
   )
 
@@ -122,6 +120,7 @@
                  (not (Holding ?labelUp))
                  (Supported ?labelUp ?labelDn1)
                  (Supported ?labelUp ?labelDn2)
+                 (not (FreePlacement ?labelUp ?objUp)) ; Planner does dumb things if this isn't here
             )
   )
 )  
