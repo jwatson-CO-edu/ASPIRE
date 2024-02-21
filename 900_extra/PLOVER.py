@@ -32,6 +32,8 @@ class SpatialNode:
         self.data     = {}
         self.incoming = {} # Upstream
         self.outgoing = {} # Downstream
+        # BEGIN TIME?
+        # END TIME?
         
 
 
