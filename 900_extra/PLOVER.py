@@ -32,6 +32,7 @@ In which I entertain an obsession with Geometric Grammars without knowledge of i
         [ ] Place
             [ ] Automatically resolve Stacked On/Touching relationships
     [ ] Build Geometric Solver via increasingly complex problems, Execute Open Loop
+        * Sample randomly. Do NOT optimize until it is ABSOLUTELY REQUIRED!
         [ ] Object @ Location
             [ ] Planned
             [ ] Execute Open Loop
