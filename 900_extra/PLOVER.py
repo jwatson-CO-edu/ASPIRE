@@ -37,16 +37,22 @@ In which I entertain an obsession with Geometric Grammars without knowledge of i
             [ ] Execute Open Loop
         [ ] Object On Object
             [ ] Planned
+                * Sample in regions that will ground the desired predicate
             [ ] Execute Open Loop
         [ ] 1 Arch
             [ ] Planned
+                [ ] Q: What is a general and efficient way to satisfy two `On` predicates simultaneously? 
+                    Where to sample? How to compute where to samples based on {Predicates, Goals}?
             [ ] Execute Open Loop
         [ ] 2 Arches
             [ ] Planned
+                [ ] Q: Does it make sense to automatically break a problem into subproblems?
+                [ ] Q: Is there an efficient means to determine if subproblems interfere with each other?
             [ ] Execute Open Loop
     [ ] Full TAMP Loop
         [ ] Collect data, esp. on solver performance
         [ ] Demonstrate superiority over PDLS
+    [ ] Full MAGPIE Loop: MAGPIE and PLOVER are friends!
     [ ] Intutive Interface
         [ ] Render Predicates in 3D
         [ ] Render Plan in 3D
@@ -69,7 +75,7 @@ In which I entertain an obsession with Geometric Grammars without knowledge of i
               (Callback to degree of completion in Prelim)
             - When we can measure our confidence in the truth of a fact, We can optimize on confidence
         * Geometric expression of facts has a side effect of being able to *render* facts to a display
-        * If we can render facts, then we get visual explainability for free!
+        * If we can render facts, then we get visual explainability for (almost) free!
     [ ] Demo
         [ ] Performant Planning
         [ ] Intutive Output and Troubleshooting
@@ -77,7 +83,7 @@ In which I entertain an obsession with Geometric Grammars without knowledge of i
     [ ] Choose audience
     [ ] Market PLOVER: Share what is exciting and true in a concise way
 
-[ ] Model the fruit picking environment: There are MANY questions to be answered!
+[ ] Model the fruit picking problem: There are MANY questions to be answered!
     [ ] Q: Need to handle novel object classes?
         [ ] Q: Can an object class remain indeterminate until it is identified with certainty?
     [ ] Q: How to handle objects for which a model DNE?
@@ -87,6 +93,8 @@ In which I entertain an obsession with Geometric Grammars without knowledge of i
         [ ] Q: Can geo predicates provide input for VQA?
         [ ] Q: Can the LLM suggest geo predicates?
     
+[ ] Model the ConMod problem
+
 [ ] DANGER: Review the PLOVER `DEV PLAN` at https://github.com/jwatson-CO-edu/CogArch/blob/main/README.md#plover-rich-real-world-representation
     [ ] Q: How to model unintended/unmodeled side effects?
         [ ] Q: How to even identify them?
