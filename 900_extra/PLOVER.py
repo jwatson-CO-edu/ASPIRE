@@ -3,10 +3,12 @@
 PLOVER: [P]robabilistic [L]anguage [O]ver [V]olumes for [E]nvironment [R]easoning
 In which I entertain an obsession with Geometric Grammars without knowledge of its Ultimate Value
 
-[ ] Solve the Arches problem in the 6-Block environemnt
-    [ ] Belief
+[>] Solve the 2-Arches problem in the 6-Block environemnt
+    [>] Belief
     [ ] Belief Samples
-    [ ] Required Predicates
+    [ ] Required Symbols and Predicates (w/ PyBullet tests)
+        [ ] Block class
+        [ ] Block beliefs
         [ ] Object @ Location predicate
         [ ] Object On Object predicate
             [ ] Object Above Object predicate
@@ -17,14 +19,31 @@ In which I entertain an obsession with Geometric Grammars without knowledge of i
         [ ] Lightweight Pre-Image Volume
             [ ] Start with convex hull, This is a simple problem with few obstructions
             {?} Move to Minkowski Sums only if needed
-        [ ] Project a presumptive future state
+            [ ] Render preimage to PyBullet
+        [ ] Define and Project a presumptive future state
             [ ] Q: How to automatically sample targets that fulfill the req'd predicates?  Can this come directly from the predicate definition?
+            [ ] Q: How to differentiate a presumptive future fact from a present fact?
+                [ ] Q: Is there a need to establish durations in order to prevent collisions during planning?
+            [ ] Render presumptive state(s) to PyBullet
     [ ] Required Actions
         [ ] Move Arm
             [ ] Automatically resolve Move Free -vs- Move Holding w/ predicate
         [ ] Pick
         [ ] Place
             [ ] Automatically resolve Stacked On/Touching relationships
+    [ ] Build Geometric Solver via increasingly complex problems, Execute Open Loop
+        [ ] Object @ Location
+            [ ] Planned
+            [ ] Execute Open Loop
+        [ ] Object On Object
+            [ ] Planned
+            [ ] Execute Open Loop
+        [ ] 1 Arch
+            [ ] Planned
+            [ ] Execute Open Loop
+        [ ] 2 Arches
+            [ ] Planned
+            [ ] Execute Open Loop
     [ ] Full TAMP Loop
         [ ] Collect data, esp. on solver performance
         [ ] Demonstrate superiority over PDLS
@@ -54,8 +73,9 @@ In which I entertain an obsession with Geometric Grammars without knowledge of i
     [ ] Demo
         [ ] Performant Planning
         [ ] Intutive Output and Troubleshooting
+        {?} Human intervention?
     [ ] Choose audience
-    
+    [ ] Market PLOVER: Share what is exciting and true in a concise way
 
 [ ] Model the fruit picking environment: There are MANY questions to be answered!
     [ ] Q: Need to handle novel object classes?
@@ -67,7 +87,9 @@ In which I entertain an obsession with Geometric Grammars without knowledge of i
         [ ] Q: Can geo predicates provide input for VQA?
         [ ] Q: Can the LLM suggest geo predicates?
     
-[ ] Review the PLOVER `DEV PLAN` at https://github.com/jwatson-CO-edu/CogArch/blob/main/README.md#plover-rich-real-world-representation
+[ ] DANGER: Review the PLOVER `DEV PLAN` at https://github.com/jwatson-CO-edu/CogArch/blob/main/README.md#plover-rich-real-world-representation
+    [ ] Q: How to model unintended/unmodeled side effects?
+        [ ] Q: How to even identify them?
 """
 ########## INIT ####################################################################################
 from uuid import uuid5
