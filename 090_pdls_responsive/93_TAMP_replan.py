@@ -669,6 +669,9 @@ class ResponsiveExecutive:
             if (btr.status == Status.FAILURE):
                 self.status = Status.FAILURE
                 self.logger.log_event( "Action Failure", btr.msg )
+            if self.check_OOB( 1.5 ):
+                self.status = Status.FAILURE
+                self.logger.log_event( "Object OOB", str( self.world.full_scan_true() ) )
 
 
     def solve_task( self, maxIter = 100 ):
