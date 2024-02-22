@@ -5,7 +5,7 @@ In which I entertain an obsession with Geometric Grammars without knowledge of i
 
 [>] Solve the 2-Arches problem in the 6-Block environemnt
     [>] Belief
-    [ ] Belief Samples
+        [>] Belief Samples
     [ ] Required Symbols and Predicates (w/ PyBullet tests)
         [ ] Block class
         [ ] Block beliefs
@@ -101,11 +101,21 @@ In which I entertain an obsession with Geometric Grammars without knowledge of i
         [ ] Q: How to even identify them?
 """
 ########## INIT ####################################################################################
+
+##### Imports #####
+
+### Standard ###
 from uuid import uuid5
+from random import random
 
+### Special ###
+import numpy as np
 from trimesh import Trimesh
+from scipy.stats import chi2
 
+### Local ###
 from env_config import _POSN_STDDEV, _ORNT_STDDEV
+from utils import ( p_lst_has_nan, pb_posn_ornt_to_row_vec, row_vec_normd_ornt )
 
 
 
@@ -126,6 +136,7 @@ class Volume:
 
 class SpatialNode:
     """ A concept that can be situated in space and participate in relationships """
+    # NOTE: This can also be used as a non-physical reference frame
 
     def __init__( self, label = "", pose = None, volume = None ):
         self.ID       = uuid5() # --------------------------------------- Means for identifying an unique object
@@ -136,6 +147,7 @@ class SpatialNode:
         self.data     = {} # -------------------------------------------- TBD
         self.incoming = {} # -------------------------------------------- Upstream 
         self.outgoing = {} # -------------------------------------------- Downstream
+        # TDB: Give nodes a lifespan so that we avoid collisions with them when sequencing actions?
         # BEGIN TIME?
         # END TIME?
         
@@ -143,13 +155,16 @@ class SpatialNode:
 class Object( SpatialNode ):
     """ A determinized instance of an object belief """
 
-    def __init__( self, label = "", pose = None, volume = None ):
+    def __init__( self, label = "", pose = None, volume = None, ref = None ):
         """ Set pose Gaussian and geo info """
         super().__init__( label, pose, volume )
+        self.ref = ref
 
 
 class ObjectBelief( SpatialNode ):
     """ A physical thing that the robot has beliefs about """
+
+    ##### Init ############################################################
 
     def reset_pose_distrib( self ):
         """ Reset the pose distribution """
@@ -159,6 +174,62 @@ class ObjectBelief( SpatialNode ):
     def __init__( self, label = "", pose = None, volume = None ):
         """ Set pose Gaussian and geo info """
         super().__init__( label, pose, volume )
-        
+        self.symbols = {}
         self.reset_pose_distrib()
+
+    ##### Symbol Memory ###################################################
+
+    def spawn_symbol( self, label, pose ):
+        """ Spawn a tracked object that references this belief """
+        rtnObj = Object( label, pose, self.volume, self )
+        self.symbols[ rtnObj.ID ] = rtnObj
+        return rtnObj
+    
+    def remove_symbol( self, sym ):
+        """ Remove the symbol with the given `idx` """
+        if sym.ID in self.symbols:
+            sym.ref = None
+            del self.symbols[ sym.ID ]
+
+    def remove_all_symbols( self ):
+        for sym in self.symbols.values():
+            sym.ref = None
+        self.symbols = {}
+
+    ##### Probability & Sampling ##########################################
         
+    def pose_covar( self ):
+        """ Get the pose covariance """
+        rtnArr = np.zeros( (7,7,) )
+        for i in range(7):
+            rtnArr[i,i] = (self.stddev[i])**2
+        return rtnArr
+    
+    def prob_density( self, obj ):
+        """ Return the probability that this object lies within the present distribution """
+        x     = np.array( obj.pose )
+        mu    = np.array( self.pose )
+        sigma = self.pose_covar()
+        try:
+            m_dist_x = np.dot((x-mu).transpose(),np.linalg.inv(sigma))
+            m_dist_x = np.dot(m_dist_x, (x-mu))
+            return 1-chi2.cdf( m_dist_x, 3 )
+        except np.linalg.LinAlgError:
+            return 0.0
+        
+    def p_reading_relevant( self, obj ):
+        """ Roll die to determine if a nearby pose is relevant """
+        return ( random() <= self.prob_density( obj ) )
+    
+    def sample_pose( self ):
+        """ Sample a pose from the present distribution, Reset on failure """
+        try:
+            posnSample = np.random.multivariate_normal( self.pose, self.pose_covar() ) 
+        except (np.linalg.LinAlgError, RuntimeWarning,):
+            self.reset_pose_distrib()
+            posnSample = np.random.multivariate_normal( self.pose, self.pose_covar() ) 
+        while p_lst_has_nan( posnSample ):
+            self.reset_std_dev()
+            posnSample = np.random.multivariate_normal( self.pose, self.pose_covar() ) 
+        # FIXME, START HERE: NORMALIZE THE QUAT PART `row_vec_normd_ornt`
+        return 

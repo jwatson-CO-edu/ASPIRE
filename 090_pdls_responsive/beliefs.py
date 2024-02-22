@@ -227,8 +227,9 @@ class ObjectMemory:
             if belief.integrate_reading( objReading ):
                 relevant = True
                 belief.visited = True
+                # 2024-02-22: Let the dice decide how many beliefs this influences
                 # Assume that this is the only relevant match, break
-                break
+                # break
         # 2. If this evidence does not support an existing belief, it is a new belief
         if not relevant:
             self.beliefs.append( self.belief_from_reading( objReading ) )

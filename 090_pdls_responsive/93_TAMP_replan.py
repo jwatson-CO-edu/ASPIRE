@@ -8,6 +8,10 @@
         [ ] Execute one action
         [ ] Replan
         [ ] Loop until done or timeout
+    [ ] Time Tests
+        [ ] Extensive Pose Update
+        [ ] Shortcutting Pose Update
+        [ ] Other planning settings that were 15s @ Open Loop
     [ ] Experimental Data
         [Y] What do I need to create a Sankey Graph? Is there a prettier one than PLT?, 2024-02-19: Will has the link
         [ ] Sankey Graph of sequence incidents during each episode
