@@ -5,6 +5,8 @@
 */*/statistics/
 */data/
 */*/data/
+*/temp/
+*/*/temp/
 */*.pt
 */*.png
 */*.pkl
