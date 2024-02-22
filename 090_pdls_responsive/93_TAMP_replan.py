@@ -624,19 +624,39 @@ class ResponsiveExecutive:
         self.logger.log_event( "Begin Solver" )
 
         try:
+            # 'ff-eager-pref': 20s
+            # 'ff-ehc' : No Sol'n
+            # 'goal-lazy' : Very long
+            # 'dijkstra' : Very long
+            # 'max-astar' : Very long
+            # 'lmcut-astar' : No Sol'n
+            # 'ff-astar' : 40s
+            # 'ff-ehc' : Very long
+            # 'ff-wastar1' : 30s
+            # 'ff-wastar2' : 15s
+            # 'ff-wastar4' : 10-15s, Fails sometimes
+            # 'ff-wastar5' : 10-15s, Fails sometimes
+            # 'cea-wastar1' : Fails often
+            # 'cea-wastar3' : 15-20s, Fails sometimes
+            # 'cea-wastar5' : Very long
+            # 'ff-wastar3' : 7-15s
+
+            planner = 'ff-wastar3' #'ff-eager-pref' # 'add-random-lazy' # 'ff-eager-tiebreak' #'goal-lazy' #'ff-eager'
             solution = solve( 
                 self.task, 
                 algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
                 max_skeletons = 50,
                 max_time      = 80.0,
-                unit_costs   = True, 
+                unit_costs   = False, 
                 unit_efforts = False,
-                effort_weight = 10.0,
+                effort_weight = 10.0, #200.0, #100.0, #50.0, #20.0, # 5.0, # 2.0 #10.0,
                 success_cost = 40,
                 initial_complexity = 1,
-                complexity_step = 3,
-                search_sample_ratio = 1/1000, #1/750 # 1/1000, #1/2000 #500, #1/2, # 1/500, #1/200, #1/10, #2, # 25 #1/25
+                complexity_step = 1,
+                search_sample_ratio = 1/1000, #1/1500, #1/5, #1/1000, #1/750 # 1/1000, #1/2000 #500, #1/2, # 1/500, #1/200, #1/10, #2, # 25 #1/25
                 reorder = False, # Setting to false bare impacts sol'n time
+                planner = planner
+                # stream_info = stream_info,
             )
             # print( "Solver has completed!\n\n\n" )
             print_solution( solution )
@@ -717,7 +737,7 @@ class ResponsiveExecutive:
             {'end_symbols' : list( self.symbols ) }
         )
 
-        self.logger.save( "TAMP-Loop" )
+        self.logger.save( "data/TAMP-Loop" )
 
         print( f"\n##### TAMP END with status {self.status} after iteration {i} #####\n\n\n" )
 
@@ -737,8 +757,9 @@ if __name__ == "__main__":
     planner.set_table()
     planner.solve_task()
 
-    print("\n\nExperiments DONE!!\n\n")
-    duration =   3  # seconds
-    freq     = 500 #440  # Hz
-    os.system( 'play -nq -t alsa synth {} sine {}'.format(duration, freq) )
+    if 0:
+        print("\n\nExperiments DONE!!\n\n")
+        duration =   3  # seconds
+        freq     = 500 #440  # Hz
+        os.system( 'play -nq -t alsa synth {} sine {}'.format(duration, freq) )
     
