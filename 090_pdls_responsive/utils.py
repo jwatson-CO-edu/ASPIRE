@@ -2,7 +2,7 @@
 
 ##### Imports #####
 
-import pickle, math, time, datetime
+import pickle, math, time, datetime, copy
 now = time.time
 
 from random import random
@@ -205,6 +205,20 @@ class DataLogger:
             self.metrics['pass'] += 1
         else:
             self.metrics['fail'] += 1
+
+
+    def get_snapshot( self ):
+        """ Copy and return the data as it currently exists """
+        return copy.deepcopy( self.metrics )
+
+
+    def merge_from( self, otherLogger ):
+        """ Merge the metrics from another logger """
+        self.metrics['N']    += otherLogger.metrics['N']
+        self.metrics['pass'] += otherLogger.metrics['pass']
+        self.metrics['fail'] += otherLogger.metrics['fail']
+        self.metrics['trials'].extend( otherLogger.metrics['trials'] )
+
 
     def save( self, prefix = "Experiment-Data" ):
         """ Serialize recorded stats """

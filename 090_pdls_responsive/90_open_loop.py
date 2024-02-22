@@ -79,6 +79,7 @@ from pddlstream.algorithms.meta import solve, create_parser
 from pddlstream.language.generator import from_gen_fn, from_fn, empty_gen, from_test, universe_test
 from pddlstream.utils import read, INF, get_file_path, find_unique, Profiler, str_from_object, negate_test
 from pddlstream.language.constants import print_solution, PDDLProblem
+from pddlstream.language.function import FunctionInfo
 
 ## MAGPIE ##
 sys.path.append( "../" )
@@ -463,6 +464,20 @@ def p_list_duplicates( lst ):
     s = set( lst )
     return (len( lst ) > len( s ))
 
+def move_cost_func( *args ):
+    """ Return the distance between the endpoints [m] """
+    
+    print( f"\nEvaluate MOVEMENT cost with args: {args}\n" )
+
+    traj = args[0]
+    bgn  = traj.wp[ 0]
+    end  = traj.wp[-1]
+    dist = diff_norm( bgn.pose[:3], end.pose[:3] )
+
+    print( f"\nMOVEMENT cost: {dist}\n" )
+
+    return dist
+
 ########## EXECUTIVE (THE METHOD) ##################################################################
 
 class ResponsiveExecutive:
@@ -492,8 +507,8 @@ class ResponsiveExecutive:
                     return True
         return False
     
-    ##### Stream Creators #################################################
 
+    ##### Stream Creators #################################################
 
     def sample_determ( self, objName ):
         """ Return the deterministic pose of the block """
@@ -670,7 +685,6 @@ class ResponsiveExecutive:
                 yield ( Path( [obj1, mid, obj2,],), )
         return stream_func
     
-    
 
     def get_stacker( self ):
         """ Return a function that computes Inverse Kinematics for a pose """
@@ -730,7 +744,28 @@ class ResponsiveExecutive:
             return True
         
         return test_func
+
+    ##### Function Creators ###############################################
+
+    def get_movement_cost_function( self ):
+        """ Return a function that estimates the path length """
+
+        def move_cost_func( *args ):
+            """ Return the distance between the endpoints [m] """
             
+            print( f"\nEvaluate MOVEMENT cost with args: {args}\n" )
+
+            traj = args[0]
+            bgn  = traj.wp[ 0]
+            end  = traj.wp[-1]
+            dist = diff_norm( bgn.pose[:3], end.pose[:3] )
+
+            print( f"\nMOVEMENT cost: {dist}\n" )
+
+            return dist
+        
+        return move_cost_func
+
 
     ##### Goal Validation #################################################
 
@@ -871,6 +906,10 @@ class ResponsiveExecutive:
             'find-stack-place': from_gen_fn( self.get_stacker()       ),
             ### Symbol Tests ###
             'test-free-placment': from_test( self.get_free_placement_test() ),
+            ### Cost Functions ###
+            # 'MoveCost': from_fn( self.get_movement_cost_function() )
+            # 'MoveCost': move_cost_func
+            # 'MoveCost': self.get_movement_cost_function()
         }
 
         print( "About to create problem ... " )
@@ -942,18 +981,42 @@ class ResponsiveExecutive:
 
 
             try:
+                # stream_info = {
+                #     'MoveCost': FunctionInfo(opt_fn=self.get_movement_cost_function()),
+                # }
+                # 'ff-eager-pref': 20s
+                # 'ff-ehc' : No Sol'n
+                # 'goal-lazy' : Very long
+                # 'dijkstra' : Very long
+                # 'max-astar' : Very long
+                # 'lmcut-astar' : No Sol'n
+                # 'ff-astar' : 40s
+                # 'ff-ehc' : Very long
+                # 'ff-wastar1' : 30s
+                # 'ff-wastar2' : 15s
+                # 'ff-wastar4' : 10-15s, Fails sometimes
+                # 'ff-wastar5' : 10-15s, Fails sometimes
+                # 'cea-wastar1' : Fails often
+                # 'cea-wastar3' : 15-20s, Fails sometimes
+                # 'cea-wastar5' : Very long
+                # 'ff-wastar3' : 7-15s
+
+                planner = 'ff-wastar3' #'ff-eager-pref' # 'add-random-lazy' # 'ff-eager-tiebreak' #'goal-lazy' #'ff-eager'
                 solution = solve( 
                     problem, 
                     algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
                     max_skeletons = 50,
+                    max_time      = 80.0,
                     unit_costs   = False, 
                     unit_efforts = False,
-                    effort_weight = 10.0,
+                    effort_weight = 10.0, #200.0, #100.0, #50.0, #20.0, # 5.0, # 2.0 #10.0,
                     success_cost = 40,
                     initial_complexity = 1,
-                    complexity_step = 3,
-                    search_sample_ratio = 1/1000, #1/750 # 1/1000, #1/2000 #500, #1/2, # 1/500, #1/200, #1/10, #2, # 25 #1/25
+                    complexity_step = 1,
+                    search_sample_ratio = 1/1000, #1/1500, #1/5, #1/1000, #1/750 # 1/1000, #1/2000 #500, #1/2, # 1/500, #1/200, #1/10, #2, # 25 #1/25
                     reorder = False, # Setting to false bare impacts sol'n time
+                    planner = planner
+                    # stream_info = stream_info,
                 )
                 print( "Solver has completed!\n\n\n" )
                 print_solution( solution )
@@ -997,10 +1060,10 @@ np.set_printoptions( precision = 3, linewidth = 130 )
 ##### Run Sim #####
 if __name__ == "__main__":
     planner = ResponsiveExecutive()
-    planner.run_N_episodes( 40 )
+    planner.run_N_episodes( 5 )
 
     print("\n\nExperiments DONE!!\n\n")
-    duration =   3  # seconds
-    freq     = 500 #440  # Hz
-    os.system( 'play -nq -t alsa synth {} sine {}'.format(duration, freq) )
+    # duration =   3  # seconds
+    # freq     = 500 #440  # Hz
+    # os.system( 'play -nq -t alsa synth {} sine {}'.format(duration, freq) )
     

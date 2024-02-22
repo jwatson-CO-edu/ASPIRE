@@ -14,7 +14,7 @@
     ;;; Domains ;;;
     (Graspable ?label); Name of a real object we can grasp
     (Waypoint ?obj) ; Model of any object we can go to in the world, real or not
-    ; (Path ?traj) ; A robot motion
+    ; (Occupied ?obj) ; Model of a real object we can grasp
     
     ; (Conf ?config) ; Used by "stream.pddl"
     ; (Pose ?pose) ; Used by "stream.pddl", Do NOT pollute this space!
@@ -33,9 +33,9 @@
 
   ;;;;;;;;;; FUNCTIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-  ; (:functions
-  ;   (MoveCost ?traj)
-  ; )
+  (:functions
+    (MoveCost ?traj)
+  )
 
   ;;;;;;;;;; ACTIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -50,7 +50,7 @@
                   )
     :effect (and (AtObj ?obj2)
                  (not (AtObj ?obj1))
-                 (increase (total-cost) 2)
+                 (increase (total-cost) (MoveCost ?traj))
             ) 
   )
 
@@ -84,7 +84,7 @@
                  (not (GraspObj ?label ?obj1))
                  (AtObj ?obj2)
                  (not (AtObj ?obj1))
-                 (increase (total-cost) 1)
+                 (increase (total-cost) (MoveCost ?traj))
             )
   )
 
@@ -100,7 +100,6 @@
     :effect (and (HandEmpty) 
                  (not (Holding ?label)) 
                  (not (FreePlacement ?label ?obj))
-                ;  (not (Waypoint ?obj))
                  (increase (total-cost) 0)
             )
   )
@@ -123,7 +122,6 @@
                  (Supported ?labelUp ?labelDn1)
                  (Supported ?labelUp ?labelDn2)
                  (not (FreePlacement ?labelUp ?objUp)) ; Planner does dumb things if this isn't here
-                ;  (not (Waypoint ?objUp))
                  (increase (total-cost) 0)
             )
   )

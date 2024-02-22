@@ -2,12 +2,7 @@
 
 ;;;;;;;;;; FUNCTIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-; (:function (MoveCost ?traj)
-;   (Path ?traj)
-;   ; :inputs (?traj)
-;   ; :domain (and (Path ?traj))
-;   ; :outputs (?dist)
-; )
+(:function (MoveCost ?traj))
 
 ;;;;;;;;;; SYMBOL STREAMS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -22,19 +17,19 @@
   ;; Safe Motion Planner ;;
   (:stream find-safe-motion
     :inputs (?obj1 ?obj2)
-    :domain (and (Waypoint ?obj1) (Waypoint ?obj2)); (Path ?traj))
+    :domain (and (Waypoint ?obj1) (Waypoint ?obj2))
     :fluents (AtObj) 
     :outputs (?traj)
-    :certified (and (SafeMotion ?obj1 ?obj2 ?traj)) ;(Path ?traj))
+    :certified (SafeMotion ?obj1 ?obj2 ?traj)
   )
 
   ;; Safe Carry Planner ;;
   (:stream find-safe-carry
     :inputs (?label ?obj1 ?obj2)
-    :domain (and (Graspable ?label) (Waypoint ?obj1) (Waypoint ?obj2)); (Path ?traj))
+    :domain (and (Graspable ?label) (Waypoint ?obj1) (Waypoint ?obj2))
     :fluents (AtObj) 
     :outputs (?traj)
-    :certified (and (SafeCarry ?label ?obj1 ?obj2 ?traj)) ;(Path ?traj))
+    :certified (SafeCarry ?label ?obj1 ?obj2 ?traj)
   )
 
   ;; Stack Location Search ;;
