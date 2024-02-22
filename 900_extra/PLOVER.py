@@ -54,19 +54,25 @@ In which I entertain an obsession with Geometric Grammars without knowledge of i
         [ ] Collect data, esp. on solver performance
         [ ] Demonstrate superiority over PDLS
     [ ] Full MAGPIE Loop: MAGPIE and PLOVER are friends!
-    [ ] Intutive Interface
+
+    {?} DANGER, NON-MVP: Intutive Interface
         [ ] Render Predicates in 3D
         [ ] Render Plan in 3D
         [ ] Render Faults in 3D
         [ ] JSON Goal Statement
-         *  FUTURE: Allow the human to correct or create robot plans in a 3D env., Compare to MoveIt!
     
 [ ] Show Them, Show Them All (They Called Me Mad)
     [ ] Assess Graduation Risk
     [ ] Refine PLOVER slide deck
-        * Scene graphs are maps that robots can plan on
-        * Probabilistic scene graphs are maps that robots can plan on probabilistically
-        * Facts should be physical first, and semantic second, (Cats Don't Study Semantics)
+        * A representation with desirable properties
+            - Scene graphs are maps that robots can plan on
+            - Probabilistic scene graphs are maps that robots can plan on probabilistically
+            - Desirable Properties, Clear and Correct representation of
+                * Pose
+                * Pose Uncert
+                * Relationships
+                * Relationship Uncert
+        * Facts should be physical first, and semantic second, (Cats Don't Study Semantics)            
             - Symbols (concepts) can be fuzzy
             - Predicates (relationships) can be fuzzy
                 * Partially met
@@ -75,8 +81,26 @@ In which I entertain an obsession with Geometric Grammars without knowledge of i
             - When we can measure the degree to which a fact is true, We can optimize on degree 
               (Callback to degree of completion in Prelim)
             - When we can measure our confidence in the truth of a fact, We can optimize on confidence
-        * Geometric expression of facts has a side effect of being able to *render* facts to a display
-        * If we can render facts, then we get visual explainability for (almost) free!
+        * PDDL -vs- PLOVER Showdown: What it is like to solve the same problem in both frameworks?
+            - Compare symbols
+            - Compare predicates
+            - Compare solver performance
+                * Solver: Running time, Success rate
+                * Execution: Running time, Success rate
+        * Explainability in Robot Plans
+            - Geometric expression of facts has a side effect of being able to *render* facts to a display
+            - If we can render facts, then we get visual explainability for (almost) free!
+        * Render the Physical Facts, Intuitively
+            - Show facts from 2-Arches, and how they change over time
+            - Show facts from Fruit Picking, and how they change over time
+        * Future Work
+            - Allow the human to correct or create robot plans in a 3D env, Compare to MoveIt!
+            - PLOVER planning in other metric spaces other than the physical (Word2Vec???)
+                * Polytopes, distance, translation, and rotation (geo alg) all work the same in higher dims!
+            - What is the connection to SLAM methods that operate on scene graphs?
+            - What is the connection to VQA systems that operate on scene graphs?
+                * Feed a visual scene to an LLM and let it explain the scene
+            - Can PLOVER simplify working on hi-dim problems?
     [ ] Demo
         [ ] Performant Planning
         [ ] Intutive Output and Troubleshooting

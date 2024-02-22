@@ -2,11 +2,15 @@
 */runs/
 .gitignore~
 */statistics/
+*/*/statistics/
 */data/
+*/*/data/
 */*.pt
 */*.png
 */*.pkl
 */*/*.pkl
+*/*/*/*.pkl
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

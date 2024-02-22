@@ -20,7 +20,8 @@ class UR5e_RBT( ERobot ):
         """ Load URDF from local files """
         
         links, name, urdf, path = self.URDF_read( 
-            os.path.join( os.getcwd(), ROBOT_URDF_PATH[2:] )
+            # os.path.join( os.getcwd(), ROBOT_URDF_PATH[2:] )
+            ROBOT_URDF_PATH
         )
         super().__init__(
             links,

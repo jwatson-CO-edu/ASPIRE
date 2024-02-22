@@ -43,18 +43,20 @@ from pprint import pprint
 import numpy as np
 from py_trees.common import Status
 
-
 ### Local ###
+from beliefs import ObjectMemory
 
 ## PDDLStream ##
-sys.path.append( "../pddlstream/" )
+sys.path.append( "../../pddlstream/" )
 from pddlstream.algorithms.meta import solve
 from pddlstream.language.generator import from_gen_fn, from_test
 from pddlstream.utils import read, INF, get_file_path
 from pddlstream.language.constants import print_solution, PDDLProblem
 
+
+
 ## MAGPIE ##
-sys.path.append( "../" )
+sys.path.append( "../../" )
 # from magpie.poses import translation_diff
 
 from utils import ( row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec, diff_norm, closest_dist_Q_to_segment_AB,
@@ -67,7 +69,7 @@ from env_config import ( _GRASP_VERT_OFFSET, _GRASP_ORNT_XYZW, _NULL_NAME, _ACTU
 from PB_BlocksWorld import PB_BlocksWorld
 from symbols import Object, Path
 
-from beliefs import ObjectMemory
+
 from actions import Plan, display_PDLS_plan, BT_Runner, get_ith_BT_action_from_PDLS_plan, Place, Stack
 
 
@@ -555,8 +557,10 @@ class ResponsiveExecutive:
     def pddlstream_from_problem( self ):
         """ Set up a PDDLStream problem with the UR5 """
 
-        domain_pddl = read(get_file_path(__file__, 'domain.pddl'))
-        stream_pddl = read(get_file_path(__file__, 'stream.pddl'))
+        # domain_pddl = read(get_file_path(__file__, 'domain.pddl'))
+        # stream_pddl = read(get_file_path(__file__, 'stream.pddl'))
+        domain_pddl = read('../domain.pddl')
+        stream_pddl = read('../stream.pddl')
 
         constant_map = {}
     
@@ -646,7 +650,7 @@ class ResponsiveExecutive:
             # 'cea-wastar5' : Very long
             # 'ff-wastar3' : 7-15s
 
-            planner = 'ff-wastar3' #'ff-eager-pref' # 'add-random-lazy' # 'ff-eager-tiebreak' #'goal-lazy' #'ff-eager'
+            planner = 'ff-wastar2' #'ff-eager-pref' # 'add-random-lazy' # 'ff-eager-tiebreak' #'goal-lazy' #'ff-eager'
             solution = solve( 
                 self.task, 
                 algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 

@@ -7,7 +7,7 @@ import pybullet_data
 
 ########## PATHS ###################################################################################
 
-ROBOT_URDF_PATH = "./ur_e_description/urdf/ur5e.urdf"
+ROBOT_URDF_PATH = os.path.expanduser( "~/MAGPIE/090_pdls_responsive/ur_e_description/urdf/ur5e.urdf" )
 TABLE_URDF_PATH = os.path.join( pybullet_data.getDataPath(), "table/table.urdf" )
 
 

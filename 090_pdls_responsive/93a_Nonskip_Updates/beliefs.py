@@ -1,10 +1,13 @@
 ########## INIT ####################################################################################
 
+import sys
 from random import random
 from pprint import pprint
 
 import numpy as np
 from scipy.stats import chi2
+
+sys.path.append( "../" )
 
 from utils import ( roll_outcome, get_confusion_matx, multiclass_Bayesian_belief_update, p_lst_has_nan, 
                     diff_norm, pb_posn_ornt_to_row_vec )
@@ -229,7 +232,8 @@ class ObjectMemory:
                 belief.visited = True
                 # 2024-02-22: Let the dice decide how many beliefs this influences
                 # Assume that this is the only relevant match, break
-                break
+                # break
+                # print( "NONSKIP!", end=", " )
         # 2. If this evidence does not support an existing belief, it is a new belief
         if not relevant:
             self.beliefs.append( self.belief_from_reading( objReading ) )
