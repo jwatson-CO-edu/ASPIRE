@@ -43,7 +43,7 @@ _GRASP_ORNT_XYZW   = np.array( [0, 0.7070727, 0, 0.7071408,] )
 _Q_HOME            = [0, -math.pi/2, math.pi/2, -math.pi/2, -math.pi/2, 0]
 _ROT_VEL_SMALL     = 0.00125
 _CLOSEST_TO_BASE   = 0.300
-
+_USE_GRAPHICS      = False
 
 
 ########## BELIEFS #################################################################################
