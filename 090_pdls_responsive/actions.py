@@ -52,7 +52,7 @@ class GroundedAction( Sequence ):
     """ This is the parent class for all actions available to the planner """
 
     def __init__( self, args = None, goal = None, world = None, robot = None, name = "Grounded Sequence" ):
-        super().__init__( name = name )
+        super().__init__( name = name, memory = True )
         self.args   = args if (args is not None) else list() # Prerequisites required by this action
         self.goal   = goal if (goal is not None) else list() # Predicates satisfied by this action
         self.symbol = None # -- Symbol on which this behavior relies
@@ -191,7 +191,7 @@ class Plan( Sequence ):
 
     def __init__( self ):
         """ Set default priority """
-        super().__init__( name = "PDDLStream Plan" )
+        super().__init__( name = "PDDLStream Plan", memory = True )
         self.rank   = 0.0 # -------------- Priority of this plan
         self.rand   = random() * 10000.0 # Tie-breaker for sorting
         self.goal   = -1 # --------------- Goal that this plan satisfies if completed
