@@ -298,17 +298,20 @@ class ObjectBelief( SpatialNode ):
             self.mean = q_1_Hat
             self.reset_pose_distrib()
 
+
+    def sorted_labels( self ):
+        """ Get the label dist keys in a PREDICTABLE ORDER """
+        rtnLst = list( self.labels.keys() )
+        rtnLst.sort()
+        return rtnLst
+
+
     def integrate_reading( self, objReading ):
         """ if `objReading` is relevant, then Update this belief with evidence and return True, Otherwise return False """
         # FIXME: HANDLE THE CASE WHERE THE READING HAS *DIFFERENT* CLASSES IN ITS DISTRIBUTION THAN THIS BELIEF,
         #        IN THIS CASE, INCOMING EVIDENCE FOR NON-REPRESENTED CLASSES SHOULD BE *ZERO*
         raise NotImplementedError( "`integrate_reading` does NOT account for unseen labels!" )
     
-    def sorted_labels( self ):
-        """ Get the label dist keys in a PREDICTABLE ORDER """
-        rtnLst = list( self.labels.keys() )
-        rtnLst.sort()
-        return rtnLst
 
     def integrate_null( self ):
         """ Accrue a non-observation """

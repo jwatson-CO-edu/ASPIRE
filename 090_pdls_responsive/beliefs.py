@@ -157,6 +157,7 @@ class ObjectBelief:
 
     def sorted_labels( self ):
         """ Get the label dist keys in a PREDICTABLE ORDER """
+        # WARNING: THIS FUNCTION BECOMES NECESSARY *AS SOON AS* GLOBAL LABLES ARE **NOT** FIXED!
         rtnLst = list( self.labels.keys() )
         rtnLst.sort()
         return rtnLst
