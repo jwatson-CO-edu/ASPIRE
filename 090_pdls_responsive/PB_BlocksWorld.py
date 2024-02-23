@@ -12,7 +12,7 @@ from symbols import Object
 from beliefs import ObjectBelief
 from env_config import ( _MIN_X_OFFSET, _BLOCK_SCALE, TABLE_URDF_PATH, _BLOCK_NAMES, _POSN_STDDEV, 
                          _USE_GRAPHICS, _ACCEPT_POSN_ERR, _ACTUAL_NAMES, _ONLY_RED, _ONLY_PRIMARY,
-                        _BLOCK_ALPHA, _CONFUSE_PROB )
+                         _BLOCK_ALPHA, _CONFUSE_PROB )
 
 ##### Paths #####
 
