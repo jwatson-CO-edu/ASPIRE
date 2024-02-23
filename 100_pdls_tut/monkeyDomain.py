@@ -15,66 +15,63 @@ class MonkeyDomain( Domain ):
     # Monkey  = create_type( "Monkey"  ) # There is only one agent
     Fruit   = create_type( "Fruit"   ) # - Allow multiple fruit
     Loc     = create_type( "Loc"    ) # -- There are several places the chair could be
-    Support = create_type( "Support" ) # - There are several places the monkey could stand
-    Elev    = create_type( "Elev"    ) # - Relative elevation
 
 
     ##### Predicates #############################
 
     @predicate()
     def monkey_hungry( self ):
-        """ <MONKEY @ STATUS> state """
+        """ <HUNGRY> state """
 
-    @predicate( Loc, Elev )
-    def monkey_at( self, loc, elev ):
+    @predicate( Loc )
+    def monkey_at( self, loc ):
         """ <MONKEY @ LOC, ELEV> state """
 
-    @predicate( Fruit, Loc, Elev )
-    def fruit_at( self, fruit, loc, elev ):
+    @predicate( Fruit, Loc )
+    def fruit_at( self, fruit, loc ):
         """ <MONKEY @ ELEVATION> state """
 
-    @predicate( Support, Loc )
-    def support_at( self, support, loc ):
-        """ <MONKEY @ LOC, ELEV> state """
-
-    @predicate( Support, Elev )
-    def support_height( self, support, elev ):
-        """ <MONKEY @ LOC, ELEV> state """
+    @predicate( Loc )
+    def chair_at( self,  loc ):
+        """ <CHAIR @ LOC> state """
 
 
     ##### Actions ################################
 
-    @action( Support, Loc, Loc )
-    def move_support( self, support, locBgn, locEnd ):
+    @action( Loc, Loc )
+    def move_chair( self, locBgn, locEnd ):
 
-        precond = [ self.support_at( support, locBgn ), ]
+        precond = [ self.chair_at( locBgn ),
+                    self.monkey_at( locBgn ), ]
 
-        effect  = [ self.support_at( support, locEnd ), 
-                   ~self.support_at( support, locBgn ),  ]
+        effect  = [ self.monkey_at( locEnd ), 
+                   ~self.monkey_at( locBgn ),
+                    self.chair_at( locEnd ), 
+                   ~self.chair_at( locBgn ),  ]
         
         return precond, effect
     
 
-    @action( Loc, Elev, Support, Loc, Elev )
-    def go_from_to( self, locBgn, elevBgn, support, locEnd, elevEnd ):
+    @action( Loc, Loc )
+    def go_from_to( self, locBgn, locEnd ):
 
-        precond = [ self.monkey_at( locBgn, elevBgn ), 
-                    self.support_at( support, locEnd ), 
-                    self.support_height( support, elevEnd ) ]
+        precond = [ self.monkey_at( locBgn ) ]
         
-        effect  = [ self.monkey_at( locEnd, elevEnd ), 
-                   ~self.monkey_at( locBgn, elevBgn ), ]
+        effect  = [ self.monkey_at( locEnd ), 
+                   ~self.monkey_at( locBgn ), ]
         
         return precond, effect
     
 
-    @action( Fruit, Loc, Elev )
-    def eat( self, fruit, loc, elev ):
+    @action( Fruit, Loc )
+    def eat( self, fruit, loc ):
 
-        precond = [ self.monkey_at( loc, elev ), 
-                    self.fruit_at( fruit, loc, elev ), ]
+        precond = [ self.monkey_at( loc ), 
+                    self.chair_at( loc ),
+                    self.fruit_at( fruit, loc ), ]
         
-        effect  = [ ~self.monkey_hungry(), ]
+        effect  = [ ~self.monkey_hungry(),
+                    ~self.fruit_at( fruit, loc ) ]
 
         return precond, effect
 
@@ -85,35 +82,28 @@ class MonkeyDomain( Domain ):
 
 class MonkeyProblem( MonkeyDomain ):
 
-    def __init__( self, supports, locations, elevations, fruitNames ):
+    def __init__( self, locations, fruitNames ):
         super().__init__()
-        self.sppt = MonkeyDomain.Support.create_objs( supports  , prefix = "support" )
         self.locs = MonkeyDomain.Loc.create_objs(     locations , prefix = "loc"     )
-        self.elev = MonkeyDomain.Elev.create_objs(    elevations, prefix = "elev"    )
         self.frut = MonkeyDomain.Fruit.create_objs(   fruitNames, prefix = "fruit"   )
 
     @init
     def init( self, initDict ) -> list:
         rtnStates = []
-        if 'support_at' in initDict:
-            for (support, loc) in initDict['support_at']:
+        if 'chair_at' in initDict:
+            for loc in initDict['chair_at']:
                 rtnStates.append(
-                    self.support_at( self.sppt[ support ], self.locs[ loc ] )
+                    self.chair_at(  self.locs[ loc ] )
                 )
         if 'monkey_at' in initDict:
-            for (loc, elev) in initDict['monkey_at']:
+            for loc in initDict['monkey_at']:
                 rtnStates.append(
-                    self.monkey_at( self.locs[ loc ], self.elev[ elev ] )
+                    self.monkey_at( self.locs[ loc ] )
                 )
         if 'fruit_at' in initDict:
-            for (fruit, loc, elev) in initDict['fruit_at']:
+            for (fruit, loc) in initDict['fruit_at']:
                 rtnStates.append(
-                    self.fruit_at( self.frut[ fruit ], self.locs[ loc ], self.elev[ elev ] )
-                )
-        if 'support_height' in initDict:
-            for (support, elev) in initDict['support_height']:
-                rtnStates.append(
-                    self.support_height( self.sppt[ support ], self.elev[ elev ] )
+                    self.fruit_at( self.frut[ fruit ], self.locs[ loc ] )
                 )
         rtnStates.append( self.monkey_hungry() ) # The monkey always begins hungry
         return rtnStates

@@ -7,9 +7,7 @@ def get_PDDL_problem():
     """ Generate all the parts of a PDDL problem """  
     
     mp = MonkeyProblem( 
-        supports   = ['FLOOR', 'CHAIR'],
         locations  = ['NORTH', 'EAST', 'SOUTH', 'WEST', 'CENTER'],
-        elevations = ['LO', 'HI'],
         fruitNames = ['BANANA']
     )
 
@@ -17,32 +15,23 @@ def get_PDDL_problem():
 
     mp.generate_problem_pddl(
         init = { 'initDict':{
-            'support_at':[
-                ('CHAIR', 'NORTH', ),
-                ('FLOOR', 'NORTH', ),
-                ('FLOOR', 'EAST',  ),
-                ('FLOOR', 'SOUTH', ),
-                ('FLOOR', 'WEST',  ),
-                ('FLOOR', 'CENTER',),
+            'chair_at':[
+                'NORTH',
             ],
             'monkey_at':[
-                ('SOUTH', 'LO', ),
+                'SOUTH',
             ],
             'fruit_at':[
-                ('BANANA', 'CENTER', 'HI',),
+                ('BANANA', 'CENTER',),
             ],
-            'support_height':[
-                ('FLOOR', 'LO',),
-                ('CHAIR', 'HI',),
-            ],}
-        },
+        },},
         goal = { 'goalDict':{ 'hungry':False, } }
     )
     return mp
 
 def solve_PDDL_problem():
     """ Ask Fast Downward to solve the problem """
-    cmd = """./downward/fast-downward.py domain.pddl problem.pddl --evaluator "hff=ff()" --search "lazy_greedy([hff], preferred=[hff])" """
+    cmd = """./downward/fast-downward.py domain.pddl problem.pddl --evaluator "hff=ff()" --search "eager_greedy([hff], preferred=[hff])" """
     subprocess.run( 
         cmd, 
         shell  = True, 

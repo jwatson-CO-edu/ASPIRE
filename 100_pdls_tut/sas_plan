@@ -1,4 +1,4 @@
-(move-support supportchair locnorth loccenter)
-(go-from-to locsouth elevlo supportchair loccenter elevhi)
-(eat fruitbanana loccenter elevhi)
+(go-from-to locsouth locnorth)
+(move-chair locnorth loccenter)
+(eat fruitbanana loccenter)
 ; cost = 3 (unit cost)

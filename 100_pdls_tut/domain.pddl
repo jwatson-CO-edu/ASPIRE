@@ -2,31 +2,28 @@
 	(domain monkey)
 	(:requirements :strips :typing)
 	(:types
-		elev
 		fruit
 		loc
-		support
 	)
 	(:predicates
-		(fruit-at ?fruit - fruit ?loc - loc ?elev - elev)
-		(monkey-at ?loc - loc ?elev - elev)
+		(chair-at ?loc - loc)
+		(fruit-at ?fruit - fruit ?loc - loc)
+		(monkey-at ?loc - loc)
 		(monkey-hungry )
-		(support-at ?support - support ?loc - loc)
-		(support-height ?support - support ?elev - elev)
 	)
 	(:action eat
-		:parameters (?fruit - fruit ?loc - loc ?elev - elev)
-		:precondition (and (monkey-at ?loc ?elev) (fruit-at ?fruit ?loc ?elev))
-		:effect (not (monkey-hungry ))
+		:parameters (?fruit - fruit ?loc - loc)
+		:precondition (and (monkey-at ?loc) (chair-at ?loc) (fruit-at ?fruit ?loc))
+		:effect (and (not (monkey-hungry )) (not (fruit-at ?fruit ?loc)))
 	)
 	(:action go-from-to
-		:parameters (?locBgn - loc ?elevBgn - elev ?support - support ?locEnd - loc ?elevEnd - elev)
-		:precondition (and (monkey-at ?locBgn ?elevBgn) (support-at ?support ?locEnd) (support-height ?support ?elevEnd))
-		:effect (and (monkey-at ?locEnd ?elevEnd) (not (monkey-at ?locBgn ?elevBgn)))
+		:parameters (?locBgn - loc ?locEnd - loc)
+		:precondition (monkey-at ?locBgn)
+		:effect (and (monkey-at ?locEnd) (not (monkey-at ?locBgn)))
 	)
-	(:action move-support
-		:parameters (?support - support ?locBgn - loc ?locEnd - loc)
-		:precondition (support-at ?support ?locBgn)
-		:effect (and (support-at ?support ?locEnd) (not (support-at ?support ?locBgn)))
+	(:action move-chair
+		:parameters (?locBgn - loc ?locEnd - loc)
+		:precondition (and (chair-at ?locBgn) (monkey-at ?locBgn))
+		:effect (and (monkey-at ?locEnd) (not (monkey-at ?locBgn)) (chair-at ?locEnd) (not (chair-at ?locBgn)))
 	)
 )
