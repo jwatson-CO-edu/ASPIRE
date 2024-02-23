@@ -3,6 +3,10 @@
 [ ] Simulate an event sequence
 [ ] Take symbol likelihood into account
 [ ] Q: How do we use the projected duration and result?
+    * Possible scenarios
+        - Robot is given a time limit for a task
+        - Robot has to choose between tasks
+        - Conmod install vs restart decisions
 
 * Predict failure, but from what?
     - FT sequence?
