@@ -154,9 +154,16 @@ class ObjectBelief:
             self.mean = q_1_Hat
             self.reset_std_dev()
 
+
+    def sorted_labels( self ):
+        """ Get the label dist keys in a PREDICTABLE ORDER """
+        rtnLst = list( self.labels.keys() )
+        rtnLst.sort()
+        return rtnLst
+
     
     def integrate_reading( self, objReading ):
-        """ if `objBelief` is relevant, then Update this belief with evidence and return True, Otherwise return False """
+        """ if `objReading` is relevant, then Update this belief with evidence and return True, Otherwise return False """
         # NOTE: THIS WILL NOT BE AS CLEAN IF THE CLASSIFIER DOES NO PROVIDE A DIST ACROSS ALL CLASSES
         if self.p_reading_relevant( objReading ):
             Nclass = len( _BLOCK_NAMES )
