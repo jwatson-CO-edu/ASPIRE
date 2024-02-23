@@ -59,8 +59,8 @@ def plot_pass_fail_histo( msPass, msFail, Nbins, plotName ):
 
 
 if __name__ == "__main__":
-    prefix = "TAMP-Loop"
-    data = get_merged_logs_in_dir_with_prefix( "./", prefix )
+    prefix = "TAMP-Loop__2024-02-2"
+    data   = get_merged_logs_in_dir_with_prefix( "./data/", prefix )
     print( f"There are {data['N']} trials." )
     print( f"Success Rate: {data['pass']/data['N']}" )
     
