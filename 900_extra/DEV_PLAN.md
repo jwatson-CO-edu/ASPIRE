@@ -97,6 +97,7 @@
                 * `[ ]` Q: Is there an efficient means to determine if subproblems interfere with each other?
             - `[ ]` Execute Open Loop
     - `[ ]` Full TAMP Loop
+        * `[ ]` Add physics gripper (increases credibility && complexity)
         * `[ ]` Collect data, esp. on solver performance
         * `[ ]` Demonstrate superiority over PDLS
     - `[ ]` Full MAGPIE Loop: MAGPIE and PLOVER are friends!
