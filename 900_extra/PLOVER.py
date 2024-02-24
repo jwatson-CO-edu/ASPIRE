@@ -25,6 +25,7 @@ In which I entertain an obsession with Geometric Grammars without knowledge of i
             [ ] Q: How to differentiate a presumptive future fact from a present fact?
                 [ ] Q: Is there a need to establish durations in order to prevent collisions during planning?
             [ ] Render presumptive state(s) to PyBullet
+            
     [ ] Required Actions
         [ ] Move Arm
             [ ] Automatically resolve Move Free -vs- Move Holding w/ predicate
@@ -109,6 +110,8 @@ In which I entertain an obsession with Geometric Grammars without knowledge of i
     [ ] Market PLOVER: Share what is exciting and true in a concise way
 
 [ ] Model the fruit picking problem: There are MANY questions to be answered!
+    * Dream: System constructs a packed lattice of stacked interactions that allows fast planning on 
+             single objects involving local interactions only
     [ ] Q: Need to handle novel object classes?
         [ ] Q: Can an object class remain indeterminate until it is identified with certainty?
     [ ] Q: How to handle objects for which a model DNE?
@@ -117,8 +120,14 @@ In which I entertain an obsession with Geometric Grammars without knowledge of i
     [ ] Q: What are the LLM connections?
         [ ] Q: Can geo predicates provide input for VQA?
         [ ] Q: Can the LLM suggest geo predicates?
-    
+
 [ ] Model the ConMod problem
+
+{?} Cool Features (DANGER: NON-MVP)
+    {?} Idea: Use future durations to plan non-interfering sub-goals in parallel by declaring volumes occupied for that time
+        * Multiple robots
+        * Lazy, hierarchical planning at increasing granularity, planned in parallel
+        * Assign entire dynamic regions of space their own planning process and/or robot
 
 [ ] DANGER: Review the PLOVER `DEV PLAN` at https://github.com/jwatson-CO-edu/CogArch/blob/main/README.md#plover-rich-real-world-representation
     [ ] Q: How to model unintended/unmodeled side effects?
@@ -149,10 +158,16 @@ from utils import ( p_lst_has_nan, roll_outcome, row_vec_normd_ornt, get_confusi
 
 class Volume:
     """ Basic geometric representation """
-
     def __init__( self ):
         """ Geo Data """
         self.mesh = Trimesh()
+
+
+class ObjectReading:
+    """ Represents an object segmentation in space not yet integrated into the scene belief """
+    def __init__( self, distribution = None, objPose = None ):
+        self.dstr = distribution if (distribution is not None) else {} # Current belief in each class
+        self.pose = objPose if isinstance(objPose, (list,np.ndarray)) else np.array([0,0,0,1,0,0,0]) # Object pose
 
 
 
@@ -177,6 +192,7 @@ class SpatialNode:
         # END TIME?
         
 
+
 class Object( SpatialNode ):
     """ A determinized instance of an object belief """
 
@@ -186,6 +202,7 @@ class Object( SpatialNode ):
         self.ref = ref
 
 
+
 class ObjectBelief( SpatialNode ):
     """ The concept of a physical thing that the robot has beliefs about """
 
@@ -193,8 +210,9 @@ class ObjectBelief( SpatialNode ):
 
     def reset_pose_distrib( self ):
         """ Reset the pose distribution """
-        self.stddev = [_POSN_STDDEV for _ in range(3)]
+        self.stddev = [_POSN_STDDEV for _ in range(3)] # Standard deviation of pose
         self.stddev.extend( [_ORNT_STDDEV for _ in range(4)] )
+
 
     def __init__( self, label = "", pose = None, volume = None ):
         """ Set pose Gaussian and geo info """
@@ -204,6 +222,7 @@ class ObjectBelief( SpatialNode ):
         self.pHist   = [] # Recent history of poses
         self.reset_pose_distrib()
 
+
     ##### Symbol Memory ###################################################
 
     def spawn_symbol( self, label, pose ):
@@ -212,16 +231,19 @@ class ObjectBelief( SpatialNode ):
         self.symbols[ rtnObj.ID ] = rtnObj
         return rtnObj
     
+
     def remove_symbol( self, sym ):
         """ Remove the symbol with the given `idx` """
         if sym.ID in self.symbols:
             sym.ref = None
             del self.symbols[ sym.ID ]
 
+
     def remove_all_symbols( self ):
         for sym in self.symbols.values():
             sym.ref = None
         self.symbols = {}
+
 
     ##### Probability & Sampling ##########################################
         
@@ -232,6 +254,7 @@ class ObjectBelief( SpatialNode ):
             rtnArr[i,i] = (self.stddev[i])**2
         return rtnArr
     
+
     def prob_density( self, obj ):
         """ Return the probability that this object lies within the present distribution """
         x     = np.array( obj.pose )
@@ -244,10 +267,12 @@ class ObjectBelief( SpatialNode ):
         except np.linalg.LinAlgError:
             return 0.0
         
+
     def p_reading_relevant( self, obj ):
         """ Roll die to determine if a nearby pose is relevant """
         return ( random() <= self.prob_density( obj ) )
     
+
     def sample_pose( self ):
         """ Sample a pose from the present distribution, Reset on failure """
         try:
@@ -260,16 +285,19 @@ class ObjectBelief( SpatialNode ):
             posnSample = np.random.multivariate_normal( self.pose, self.pose_covar() ) 
         return row_vec_normd_ornt( posnSample )
     
+
     def sample_symbol( self ):
         """ Sample a determinized symbol from the hybrid distribution """
         label = roll_outcome( self.labels )
         pose  = self.sample_pose()
         return self.spawn_symbol( label, pose )
     
+
     def sample_null( self ):
         """ Empty Pose """
         return self.spawn_symbol( _NULL_NAME, np.array( self.pose ) )
     
+
     def get_pose_history( self ):
         """ Get all pose history readings as a 2D matrix where each row is a reading """
         hist = np.zeros( (len(self.pHist),7,) )
@@ -277,6 +305,7 @@ class ObjectBelief( SpatialNode ):
             hist[i,:] = row
         return hist
     
+
     def update_pose_dist( self ):
         """ Update the pose distribution from the history of observations """
         self.fresh   = True
