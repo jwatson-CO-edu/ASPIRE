@@ -47,10 +47,10 @@
 ## Representation, Computation, and Planner
 
 * `[>]` Solve the 2-Arches problem in the 6-Block environemnt
-    - `[>]` Belief
-        * `[>]` Belief Samples
-    - `[ ]` Required Symbols and Predicates (w/ PyBullet tests)
-        * `[ ]` Block class, Using PLOVER as a lib
+    - `[Y]` Belief, 2024-02-24: Written (Ported)
+        * `[Y]` Belief Samples, 2024-02-24: Written (Ported)
+    - `[>]` Required Symbols and Predicates (w/ PyBullet tests)
+        * `[>]` Block class, Using PLOVER as a lib
         * `[ ]` Block beliefs @ PyBullet
             - `{?}` Render belief? Ellipsoid?
         * `[ ]` Object @ Location predicate

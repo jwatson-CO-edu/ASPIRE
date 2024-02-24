@@ -12,7 +12,7 @@ import numpy as np
 from scipy.stats import chi2
 
 ### Local ###
-from env_config import _POSN_STDDEV, _ORNT_STDDEV, _NULL_NAME, _CONFUSE_PROB
+from env_config import _POSN_STDDEV, _ORNT_STDDEV, _NULL_NAME, _CONFUSE_PROB, _NULL_THRESH
 from utils import ( p_lst_has_nan, roll_outcome, row_vec_normd_ornt, get_confusion_matx,
                     multiclass_Bayesian_belief_update )
 
@@ -50,6 +50,9 @@ class Object( SpatialNode ):
 
 
 
+########## BELIEF ##################################################################################
+
+
 class ObjectBelief( SpatialNode ):
     """ The concept of a physical thing that the robot has beliefs about """
 
@@ -64,9 +67,10 @@ class ObjectBelief( SpatialNode ):
     def __init__( self, label = "", pose = None, volume = None ):
         """ Set pose Gaussian and geo info """
         super().__init__( label, pose, volume )
-        self.symbols = {} # All symbols sampled from this object concept
-        self.labels  = {} # Discrete dist over labels for this object
-        self.pHist   = [] # Recent history of poses
+        self.symbols = {} # -- All symbols sampled from this object concept
+        self.labels  = {} # -- Discrete dist over labels for this object
+        self.pHist   = [] # -- Recent history of poses
+        self.visited = False # Has there been evidence for this pose
         self.reset_pose_distrib()
 
 
@@ -184,9 +188,22 @@ class ObjectBelief( SpatialNode ):
 
     def integrate_reading( self, objReading ):
         """ if `objReading` is relevant, then Update this belief with evidence and return True, Otherwise return False """
-        # FIXME: HANDLE THE CASE WHERE THE READING HAS *DIFFERENT* CLASSES IN ITS DISTRIBUTION THAN THIS BELIEF,
-        #        IN THIS CASE, INCOMING EVIDENCE FOR NON-REPRESENTED CLASSES SHOULD BE *ZERO*
-        raise NotImplementedError( "`integrate_reading` does NOT account for unseen labels!" )
+        if self.p_reading_relevant( objReading ):
+            allKeys = set( objReading.labels.keys() )
+            allKeys.update( self.labels.keys() )
+            keyList = list( allKeys )
+            keyList.sort()
+            priorL = [ self.labels[k] if (k in self.labels) else 0.0 for k in keyList ]
+            evidnc = [ objReading.labels[ k ] if (k in objReading.labels) else 0.0 for k in keyList ]
+            Nclass = len( keyList )
+            cnfMtx = get_confusion_matx( Nclass, _CONFUSE_PROB )
+            updatB = multiclass_Bayesian_belief_update( cnfMtx, priorL, evidnc )
+            self.labels = {}
+            for i, name in enumerate( keyList ):
+                self.labels[ name ] = updatB[i]
+            return True
+        else:
+            return False
     
 
     def integrate_null( self ):
@@ -201,7 +218,7 @@ class ObjectBelief( SpatialNode ):
 
         for objName_i in ordLbls:
             if objName_i == _NULL_NAME:
-                # FIXME: `_CONFUSE_PROB` SHOULD NOT BE A CONSTANT THING AND COMES FROM THE SPECIFIC CLASSIFIER
+                # WARN: `_CONFUSE_PROB` SHOULD NOT BE A CONSTANT THING AND COMES FROM THE SPECIFIC CLASSIFIER
                 labels[ objName_i ] = 1.0-_CONFUSE_PROB*(Nclass-1)
             else:
                 labels[ objName_i ] = _CONFUSE_PROB
@@ -212,3 +229,109 @@ class ObjectBelief( SpatialNode ):
         self.labels = {}
         for i, name in enumerate( ordLbls ):
             self.labels[ name ] = updatB[i]
+
+
+
+class ObjectMemory:
+    """ Attempt to maintain recent and constistent object beliefs based on readings from the vision system """
+
+    def __init__( self ):
+        """ Set belief containers """
+        self.beliefs = []
+        self.last    = {}
+
+
+    def reset_beliefs( self ):
+        """ Remove all references to the beliefs, then erase the beliefs """
+        for bel in self.beliefs:
+            bel.remove_all_symbols()
+        self.beliefs = []
+
+
+    def belief_from_reading( self, objReading ):
+        """ Center a new belief on the incoming reading """
+        nuBelief = ObjectBelief()
+        nuBelief.labels = dict( objReading.labels )
+        nuBelief.pose   = np.array( objReading.pose )
+        return nuBelief
+    
+
+    def integrate_one_reading( self, objReading ):
+        """ Fuse this belief with the current beliefs """
+        # 1. Determine if this belief provides evidence for an existing belief
+        relevant = False
+        for belief in self.beliefs:
+            if belief.integrate_reading( objReading ):
+                relevant = True
+                belief.visited = True
+                # Assume that this is the only relevant match, break
+                break
+        # 2. If this evidence does not support an existing belief, it is a new belief
+        if not relevant:
+            self.beliefs.append( self.belief_from_reading( objReading ) )
+        return relevant
+    
+
+    def unvisit_beliefs( self ):
+        """ Set visited flag to False for all beliefs """
+        for belief in self.beliefs:
+            belief.visited = False
+
+
+    def erase_dead( self ):
+        """ Erase all beliefs and cached symbols that no longer have relevancy """
+        retain = []
+        for belief in self.beliefs:
+            if belief.labels[ _NULL_NAME ] < _NULL_THRESH:
+                retain.append( belief )
+            else:
+                belief.remove_all_symbols()
+                print( f"{str(belief)} DESTROYED!" )
+        self.beliefs = retain
+
+    
+    def decay_beliefs( self ):
+        """ Destroy beliefs that have accumulated too many negative indications """
+        for belief in self.beliefs:
+            if not belief.visited:
+                belief.integrate_null()
+        self.erase_dead()
+        self.unvisit_beliefs()
+
+    
+    def belief_update( self, objEvidence ):
+        """ Gather and aggregate evidence """
+
+        ## Integrate Beliefs ##
+        cNu = 0
+        cIn = 0
+        self.unvisit_beliefs()
+        for objEv in objEvidence:
+            if self.integrate_one_reading( objEv ):
+                cIn += 1
+            else:
+                cNu += 1
+        if (cNu or cIn):
+            print( f"\t{cNu} new object beliefs this iteration!" )
+            print( f"\t{cIn} object beliefs updated!" )
+        else:
+            print( f"\tNO belief update!" )
+        
+        self.decay_beliefs()
+        
+        print( f"Total Beliefs: {len(self.beliefs)}" )
+
+
+    def scan_max_likelihood( self, Nsample = 3 ):
+        """ Get a list of unique samples, Keep only the most likely version of a label """
+        smplSym = []
+        for _ in range( Nsample ):
+            smplSym.extend( [bel.sample_symbol() for bel in self.beliefs] )
+        uniqSym = {}
+        for sym in smplSym:
+            if sym.label != _NULL_NAME:
+                if sym.label not in uniqSym:
+                    uniqSym[ sym.label ] = sym
+                elif sym.prob() > uniqSym[ sym.label ].prob():
+                    uniqSym[ sym.label ] = sym
+        return list( uniqSym.values() )
