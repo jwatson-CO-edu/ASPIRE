@@ -9,7 +9,7 @@
         [Y] Replan, 2024-02-19: TAMP!
         [Y] Loop until done or iter limit reached, 2024-02-19: TAMP!
     [>] Time Tests
-        [>] Shortcutting Pose Update    
+        [Y] Shortcutting Pose Update, 2024-02-22: Tested!
             * I suspect the "Extensive Pose Update" version was causing long runtimes, so testing this one first
         [ ] Extensive Pose Update
         [ ] Other planning settings that were 15s @ Open Loop
