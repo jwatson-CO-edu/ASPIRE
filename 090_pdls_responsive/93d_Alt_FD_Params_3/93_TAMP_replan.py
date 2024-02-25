@@ -634,7 +634,7 @@ class ResponsiveExecutive:
         try:
             # 'ff-eager-pref': 20s
             # 'ff-ehc' : No Sol'n
-            # 'goal-lazy' : Very long
+                # 'goal-lazy' : Very long
             # 'dijkstra' : Very long
             # 'max-astar' : Very long
             # 'lmcut-astar' : No Sol'n
@@ -646,10 +646,10 @@ class ResponsiveExecutive:
             # 'ff-wastar5' : 10-15s, Fails sometimes
             # 'cea-wastar1' : Fails often
             # 'cea-wastar3' : 15-20s, Fails sometimes
-            # 'cea-wastar5' : Very long
+                # 'cea-wastar5' : Very long
             # 'ff-wastar3' : 7-15s
 
-            planner = 'ff-astar' #'ff-eager-pref' # 'add-random-lazy' # 'ff-eager-tiebreak' #'goal-lazy' #'ff-eager'
+            planner = 'cea-wastar4' #'ff-eager-pref' # 'add-random-lazy' # 'ff-eager-tiebreak' #'goal-lazy' #'ff-eager'
             solution = solve( 
                 self.task, 
                 algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
