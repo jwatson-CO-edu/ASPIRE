@@ -13,7 +13,7 @@ from utils import row_vec_to_pb_posn_ornt
 class BT_Runner:
     """ Run a BT with checks """
 
-    def __init__( self, root, world, tickHz = 4.0 ):
+    def __init__( self, root, world, tickHz = 4.0, limit_s = 20.0 ):
         """ Set root node and world reference """
         self.root   = root
         self.world  = world
@@ -21,6 +21,8 @@ class BT_Runner:
         self.freq   = tickHz
         self.Nstep  = int( max(1.0, math.ceil((1.0 / tickHz) / world.period)))
         self.msg    = ""
+        self.Nlim   = int( limit_s * tickHz )
+        self.i      = 0
 
     def setup_BT_for_running( self ):
         """ Connect the plan to world and robot """
@@ -41,6 +43,10 @@ class BT_Runner:
         if not self.p_ended():
             self.root.tick_once()
         self.status = self.root.status
+        self.i += 1
+        if (self.i >= self.Nlim) and (not self.p_ended()):
+            self.status = Status.FAILURE
+            self.msg    = "BT TIMEOUT"
         if self.p_ended():
             pass_msg_up( self.root )
             self.msg = self.root.msg
