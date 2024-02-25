@@ -2,24 +2,28 @@
 ### In which I entertain an obsession with Geometric Grammars without knowledge of its Ultimate Value
 
 # Design Principles && Slide Deck
-* Relying on `(On Block Table)` as your robot's description of a rich and continuous reality should fill you with profound disappointment and unrelenting anger!
+* The current, fastest route to a general purpose robot is **T**ask **A**nd **M**otion **P**lanning! (TAMP)
+* Relying on `(On Block Table)`, as TAMP does, for your robot's description of a rich and continuous reality should fill you with profound disappointment and unrelenting anger!
 * Presenting: A representation with desirable properties
+    - Desirable Properties, Clear and Correct representation of
+        * Continuous Pose
+        * Pose Uncert
+        * Continuous *Relationships*
+        * Relationship Uncert
     - Scene graphs are maps that robots can plan on
     - Probabilistic scene graphs are maps that robots can plan on probabilistically
-    - Desirable Properties, Clear and Correct representation of
-        * Pose
-        * Pose Uncert
-        * Relationships
-        * Relationship Uncert
 * Facts should be physical first, and semantic second, (Cats Don't Study Semantics)            
     - Symbols (concepts) can be fuzzy
     - Predicates (relationships) can be fuzzy
         * Partially met
         * Uncertain
+    - Symbols should have geometric properties that makes their evaluation lightweight, intuitive to humans, and relevant to solving physical problems.
+    - Composable graphs of geometric symbols can represent complex, context-sensitive relationships
 * How can a fact be physical? --> By expressing it geometrically!
     - When we can measure the degree to which a fact is true, We can optimize on degree 
         (Callback to degree of completion in Prelim)
     - When we can measure our confidence in the truth of a fact, We can optimize on confidence
+    - Scene graphs naturally model **context** with nested structure
 * PDDL -vs- PLOVER Showdown: What it is like to solve the same problem in both frameworks?
     - Compare symbols
     - Compare predicates
@@ -27,8 +31,8 @@
         * Solver: Running time, Success rate
         * Execution: Running time, Success rate
 * Explainability in Robot Plans
-    - Geometric expression of facts has a side effect of being able to *render* facts to a display
-    - If we can render facts, then we get visual explainability for (almost) free!
+    - Geometric expression of facts has a side effect of being able to *render facts* to a display
+    - If we can render facts, then we get *visual explainability* for (almost) free!
 * Render the Physical Facts, Intuitively
     - Show facts from 2-Arches, and how they change over time
     - Show facts from Fruit Picking, and how they change over time
@@ -44,16 +48,41 @@
 
 # `DEV PLAN`
 
-## Representation, Computation, and Planner
+## Development Strategy
+1. Build the system by solving the simplest problem(s) **first**!
+    * **Test** as you go.
+        1. 1-Arch
+        1. 2-Arch
+        1. Fruit Basket
+        1. ConMod
+    * Specific **first**, General _later_
+        - Serially solving specific problems with testable goals will _gradually_ reveal which generalities the system actually **needs**.
+        - Your initial impressions about universality will _limit_ your options more often than _expanding_ them
+1. **M**inimum **V**iable **P**rogram ONLY!
+    * Add features/complexity only where **absolutely necessary**!
+    * Discard approaches that are slowing you down.  
+    <u>Avoid</u>:
+        - Solving problems that _do not yet exist_
+        - Parallel programming
+1. Platform
+    1. Prototype in Python for ease. Python will drive adoption.
+    1. Stay *independent* of ROS, at least until it is applied to a physical robotics problem.
+    1. Only consider a compiled language if performance is a recurring bottleneck
+    
 
-* `[>]` Solve the 2-Arches problem in the 6-Block environemnt
+## Representation, Computation, and Planning
+
+* `[>]` Solve the 1-Arch problem in the 6-Block environemnt
     - `[Y]` Belief, 2024-02-24: Written (Ported)
         * `[Y]` Belief Samples, 2024-02-24: Written (Ported)
     - `[>]` Required Symbols and Predicates (w/ PyBullet tests)
-        * `[>]` Block class, Using PLOVER as a lib
+        * `[>]` Block representation, Using PLOVER as a lib, 
+            - 2024-02-25: Wrote function + lookup instead of a `class`.
+            - Should **not** have to write a class for every new object, as this burdens the practitioner and does not support flexibility
+            - Rather, provide the system with a way to associate labels with `Volume`s, whether it looks them up or constructs them from observation
         * `[ ]` Block beliefs @ PyBullet
             - `{?}` Render belief? Ellipsoid?
-        * `[ ]` Object @ Location predicate
+        * `[ ]` Object @ Location predicate, with _probability_
             - `[ ]` Indicate in PyBullet
         * `[ ]` Object On Object predicate
             - `[ ]` Object Above Object predicate
@@ -64,6 +93,7 @@
     - `[ ]` Action Components
         * `[ ]` Lightweight Pre-Image Volume
             - `[ ]` Start with convex hull, This is a simple problem with few obstructions
+                * This *might* not work with a gripper!
             - `{?}` Move to Minkowski Sums only if needed
             - `[ ]` Render preimage to PyBullet
         * `[ ]` Define and Project a presumptive future state
@@ -102,6 +132,10 @@
         * `[ ]` Demonstrate superiority over PDLS
     - `[ ]` Full MAGPIE Loop: MAGPIE and PLOVER are friends!
 
+* `[ ]` Solve the 2-Arch problem in the 6-Block environemnt
+    - `[ ]` Compare planner performance with current MAGPIE, per-action: {Success Rate, Computation Time}
+    - `[ ]` Compare execution performance with current MAGPIE: {Success Rate, Makespan}
+
 * `[ ]` Model the fruit picking problem: There are MANY questions to be answered!
     * Dream: System constructs a packed lattice of stacked interactions that allows fast planning on 
              single objects involving local interactions only
@@ -115,9 +149,11 @@
         * `[ ]` Q: Can the LLM suggest geo predicates?
 
 * `[ ]` Model the ConMod problem
-    - `[ ]` Q: What is the SIMPLEST way to model interaction with a granular medium?  Is sand an object?
+    - `[ ]` Q: What is the SIMPLEST way to model interaction with a granular medium?  Is sand an object? 
+        * `{?}` Idea: Terrain is a special object with a volumetric representation that expands with problem context 
 
 ## Show Them, Show Them All (They Called Me Mad)
+### You may not be able to convince your committee this is your Thesis!
 - `[ ]` Assess Graduation Risk
 - `[ ]` Refine PLOVER slide deck (above), **WARNING**: Having this as a backup proposal is mostly a distracting dream for entertainment!
 - `[ ]` **RECENT** References
@@ -129,6 +165,8 @@
 - `[ ]` Market PLOVER: Share what is exciting and true in a concise way
 
 # Cool Features (DANGER: NON-MVP)
+### Please, please do not attempt these if their pursuit would in any way jeopardize your education and/or career!  
+### They are **not** required for the most basic Minimum Viable Program implementation of the PLOVER concept!
 * `{?}` Render Predicates in 3D
 * `{?}` Render Plan in 3D
 * `{?}` Render Faults in 3D
@@ -136,6 +174,9 @@
     - `{?}` Q: How to be descriptive without containing ALL geo data?
     - `{?}` Predicates
     - `{?}` Actions
+* `{?}` Evaluate:
+    - `{?}` ROS package
+    - `{?}` MoveIt! integration
 * `[ ]` DANGER: Review the PLOVER `DEV PLAN` at https://github.com/jwatson-CO-edu/CogArch/blob/main/README.md#plover-rich-real-world-representation
     - `[ ]` Q: How to model unintended/unmodeled side effects?
         * `[ ]` Q: How to even identify them?
@@ -149,3 +190,12 @@
 * `{?}` Idea: Learn probabilistic relationships between classes of objects so that we can begin searching for missing items based on scene information that we are confident in
 * `{?}` Idea: Pair semantic regions with (likely) optimizers for "good" sampling in that region, e.g. Driving thru sandy terrain region should MP with kinodynamic RRT by default
 * `{?}` Idea: Suggest grasp planners for object types
+* `{?}` Idea: The system constructs label meshes from observation and interaction (from simple to complex)
+    - Visual Content:
+        1. Flat, Uniform color
+        1. Textured meshes
+    - Construction:
+        1. Specfic: 1 to 1 label to mesh mapping
+        1. Exemplar: Each label can be represented by any of a collection of meshes
+        1. Prototype: System can match observations to a parameterized model of the class of labels
+        1. Learned: Generative NN model of each label both classifies (and completes) observations
