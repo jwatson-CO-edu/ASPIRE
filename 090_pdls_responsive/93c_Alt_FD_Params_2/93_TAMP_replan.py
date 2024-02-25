@@ -649,7 +649,7 @@ class ResponsiveExecutive:
             # 'cea-wastar5' : Very long
             # 'ff-wastar3' : 7-15s
 
-            planner = 'goal-lazy' #'ff-eager-pref' # 'add-random-lazy' # 'ff-eager-tiebreak' #'goal-lazy' #'ff-eager'
+            planner = 'ff-eager-tiebreak' #'ff-eager-pref' # 'add-random-lazy' # 'ff-eager-tiebreak' #'goal-lazy' #'ff-eager'
             solution = solve( 
                 self.task, 
                 algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 

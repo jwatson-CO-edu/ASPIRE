@@ -15,6 +15,7 @@ class Object:
     num = count()
 
     def __init__( self, label, pose, ref = None  ):
+        """ Set all vars and connect to the parent belief """
         self.ref    = ref # - Belief from which this symbols was sampled
         self.label  = label # Sampled object label
         self.pose   = np.around( pose, _ROUND_PLACES ) #- Sampled object pose
@@ -53,8 +54,6 @@ class Object:
     def __repr__( self ):
         """ String representation, Including current symbol belief """
         return f"<{self.label} @ {self.pose}, P={self.prob() if (self.ref is not None) else None}>"
-    
-    
     
     
 class Path:
