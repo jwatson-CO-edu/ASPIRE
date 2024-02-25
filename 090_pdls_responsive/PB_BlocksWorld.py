@@ -238,6 +238,7 @@ class PB_BlocksWorld:
         except ValueError:
             return None
         
+        
     def full_scan_true( self ):
         """ Find all of the ROYGBV blocks, Fully Observable """
         rtnSym = []
