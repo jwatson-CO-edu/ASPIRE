@@ -323,13 +323,23 @@ class ObjectMemory:
                 if diff_norm( obj_i.pose[:3], obj_j.pose[:3] ) < _MIN_SEP:
                     return False
         return True
+    
+
+    def p_symbols_credible( self, objs ):
+        """ Return true only if our belief in every symbol is above the trash threshold """
+        for obj in objs:
+            if obj.prob() < _EXIST_THRESH:
+                return False
+        return True
+
 
 
     def scan_consistent( self ):
         """ Get the most likely samples that do not collide with one another """
         uniqSym = self.scan_max_likelihood()
-        while not self.p_noncolliding( uniqSym ):
+        while (not self.p_noncolliding( uniqSym )) or (not self.p_symbols_credible( uniqSym )):
             uniqSym = self.scan_max_likelihood()
+            print( "RESCAN!" ) # Warning that we are in an infinite loop
         return uniqSym
     
 

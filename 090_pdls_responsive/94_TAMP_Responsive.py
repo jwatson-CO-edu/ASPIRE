@@ -1,6 +1,5 @@
 ########## DEV PLAN ################################################################################
 """
-
 ##### Execution #####
 [>] Replanning Version
     [Y] Working Demo @ PyBullet
@@ -11,20 +10,45 @@
     [>] Time Tests
         [Y] Shortcutting Pose Update, 2024-02-22: Tested!
             * I suspect the "Extensive Pose Update" version was causing long runtimes, so testing this one first
-        [ ] Extensive Pose Update
-        [ ] Other planning settings that were 15s @ Open Loop
+        [Y] Extensive Pose Update, 2024-02-22: Tested!
+        [>] Other planning settings that weren't absolute trash
+            [Y] ff-wastar3, 2024-02-23: Tested!
+            [Y] ff-wastar4, 2024-02-23: Tested!
+            [ ] 
+            [ ] 
+            [ ] 
+            [ ] 
+            [ ] 
+            [ ] 
+            [ ] 
+            [ ] 
+            [ ] Default Solver w/ New Weights
     [ ] Experimental Data
         [Y] What do I need to create a Sankey Graph? Is there a prettier one than PLT?, 2024-02-19: Will has the link
         [ ] Sankey Graph of sequence incidents during each episode
             [ ] Makespan on X-axis?
-[ ] Responsive Version
-    [ ] Working Demo @ PyBullet
-        [ ] Goal check at the start of each symbolic phase --> Instantiate predicates
-        [ ] Test 1: Replan after every action
-        [ ] Test 2, if Test 1 results are poor: Replan ONLY after action FAILURES or crises of BELIEF
+[>] Responsive Version
+    [>] Working Demo @ PyBullet
+        [Y] Phase 1, 2024-02-23: Nice!
+            [Y] Remove memory reset, 2024-02-23: Removed!
+            [Y] Perform batch of updates, 2024-02-23: Already doing this!
+        [Y] Phase 2, 2024-02-23: Nice!
+            [Y] A consistent scan should not contain beliefs below trash threshold, 2024-02-23: Trash disposed!
+        [>] Phase 3
+            [>] Planner should add a plan to the queue
+            [ ] Recompute priority
+            [ ] Decide whether the curren plan is valid
+        [ ] Phase 4
+            [ ] Per Tick
+                [ ] Update beliefs
+                [ ] Check that the current plan is still valid
+                    [ ] If not, fail action
+            [ ] Continue acting if the placement occurred correctly
     [ ] Experimental Data
 [ ] Data Analysis
 [ ] PROPOSAL
+
+[ ] Trial-and-Error Rescheduling Responsive Version
 """
 
 
@@ -109,6 +133,7 @@ class ResponsiveExecutive:
         self.facts    = list()
         self.goal     = tuple()
         self.task     = None
+        self.plans    = [] # PriorityQueue()
         self.currPlan = None
         self.action   = None
 
@@ -702,6 +727,7 @@ class ResponsiveExecutive:
     def solve_task( self, maxIter = 100 ):
         """ Solve the goal """
         self.reset_state()
+        self.reset_beliefs() 
         i = 0
 
         print( "\n\n\n##### TAMP BEGIN #####\n" )
@@ -715,7 +741,7 @@ class ResponsiveExecutive:
             i += 1
 
             print( f"Phase 1, {self.status} ..." )
-            self.reset_beliefs() # WARNING: REMOVE FOR RESPONSIVE
+            
             self.phase_1_Perceive( 3*_N_POSE_UPDT+1 )
 
             print( f"Phase 2, {self.status} ..." )

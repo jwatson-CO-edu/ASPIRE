@@ -2,6 +2,9 @@
 """
 [ ] Simulate an event sequence
 [ ] Take symbol likelihood into account
+[ ] Frame the task-wide Trial-and-Error problem
+[ ] Q: How to plan for a specified likelihood of a pose distribution?
+
 [ ] Q: How do we use the projected duration and result?
     * Possible scenarios
         - Robot is given a time limit for a task
