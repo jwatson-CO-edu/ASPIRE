@@ -1,4 +1,7 @@
+import numpy as np
 from trimesh import Trimesh
+
+from geometry import origin_row_vec
 
 ########## COMPONENTS ##############################################################################
 
@@ -12,5 +15,6 @@ class Volume:
 class ObjectReading:
     """ Represents an object segmentation in space not yet integrated into the scene belief """
     def __init__( self, distribution = None, objPose = None ):
-        self.dstr = distribution if (distribution is not None) else {} # Current belief in each class
-        self.pose = objPose if isinstance(objPose, (list,np.ndarray)) else np.array([0,0,0,1,0,0,0]) # Object pose
+        self.dstr  = distribution if (distribution is not None) else {} # Current belief in each class
+        self.pose  = objPose if isinstance(objPose, (list,np.ndarray)) else origin_row_vec() # Object pose
+        self.label = ""
