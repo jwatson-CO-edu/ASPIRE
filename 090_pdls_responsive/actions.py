@@ -1,12 +1,14 @@
 import math
 from random import random
+from math import log, isnan
 
 import py_trees
 from py_trees.common import Status
 from py_trees.composites import Sequence
 
 from pb_BT import Move_Arm, Grasp, Ungrasp, connect_BT_to_robot_world, pass_msg_up
-from utils import row_vec_to_pb_posn_ornt
+from utils import row_vec_to_pb_posn_ornt, diff_norm
+from env_config import _NON_MOVE_COST, _LOG_PROB_FACTOR, _LOG_BASE
 
 ########## BT-PLANNER INTERFACE ####################################################################
 
@@ -68,14 +70,29 @@ class GroundedAction( Sequence ):
         self.ctrl   = robot # - Agent that executes
         self.world  = world  #- Simulation ref
         
+    def least_prob_precond( self ):
+        """ Get the least probability from all the preconditions """
+        leastProb = 1e9
+        for cond in self.preCs:
+            for elem in cond:
+                if hasattr( elem, "prob" ):
+                    prob_ij = elem.prob()
+                    leastProb = min( leastProb, prob_ij )
+        return leastProb
+    
+    def detach_symbols( self ):
+        """ Release symbols from their belief connections """
+        conds = self.preCs[:]
+        conds.extend( self.pstCs )
+        for cond in conds:
+            for elem in cond:
+                if hasattr( elem, "detach" ):
+                    elem.detach()
 
     def cost( self ):
         """ Return a cost for this action """
         raise NotImplementedError( f"{self.name} REQUIRES a `cost` implementation!" )
     
-    def score( self ):
-        """ Return a ranking number for this action """
-        raise NotImplementedError( f"{self.name} REQUIRES a `score` implementation!" )
     
     def __repr__( self ):
         """ Get the name, Assume child classes made it sufficiently descriptive """
@@ -101,6 +118,12 @@ class MoveFree( GroundedAction ):
                 Move_Arm( posn, ornt, name = name, ctrl = robot, world = world )
             )
 
+    def cost( self ):
+        """ Calc the movement cost of `MoveFree` """
+        return diff_norm( self.args['?obj1'].pose[:3], self.args['?obj2'].pose[:3] )
+        
+        
+
 
 class Pick( GroundedAction ):
     """ Add object to the gripper payload """
@@ -117,6 +140,10 @@ class Pick( GroundedAction ):
             # Grasp( label, name = name, ctrl = robot, world = world )
             Grasp( label, obj.pose, name = name, ctrl = robot, world = world )
         )
+
+    def cost( self ):
+        """ All non-movement actions have the same cost """
+        return _NON_MOVE_COST
 
 
 class MoveHolding( GroundedAction ):
@@ -138,6 +165,10 @@ class MoveHolding( GroundedAction ):
                 Move_Arm( posn, ornt, name = name, ctrl = robot, world = world )
             )
 
+    def cost( self ):
+        """ Calc the movement cost of `MoveFree` """
+        return diff_norm( self.args['?obj1'].pose[:3], self.args['?obj2'].pose[:3] )
+
 
 class Place( GroundedAction ):
     """ Let go of gripper payload """
@@ -154,6 +185,10 @@ class Place( GroundedAction ):
             Ungrasp( name = name, ctrl = robot, world = world )
         )
 
+    def cost( self ):
+        """ All non-movement actions have the same cost """
+        return _NON_MOVE_COST
+
 
 class Stack( GroundedAction ):
     """ Let go of gripper payload """
@@ -169,6 +204,10 @@ class Stack( GroundedAction ):
         self.add_child( 
             Ungrasp( name = name, ctrl = robot, world = world )
         )
+
+    def cost( self ):
+        """ All non-movement actions have the same cost """
+        return _NON_MOVE_COST
 
 
 
@@ -192,6 +231,10 @@ class Plan( Sequence ):
         """ Return the child at `idx` """
         return self.children[ idx ]
     
+    def __setitem__( self, idx, val ):
+        """ Set the child at `idx` """
+        self.children[ idx ] = val
+    
     def __len__( self ):
         """ Return the number of children """
         return len( self.children )
@@ -209,7 +252,7 @@ class Plan( Sequence ):
     
     def __repr__( self ):
         """ String representation of the plan """
-        return f"<MockPlan, Goal: {self.goal}, Status: {self.status}, Index: {self.idx}>"
+        return f"<Plan, Goal: {self.goal}, Status: {self.status}, Index: {self.idx}>"
 
     def get_goal_spec( self ):
         """ Get a fully specified goal for this plan """
@@ -218,6 +261,29 @@ class Plan( Sequence ):
         # for action in self:
         #     rtnGoal.append( Pose( None, action.objName, action.goal, _SUPPORT_NAME ) )
         # return rtnGoal
+    
+    def least_prob( self ):
+        """ Return the probability of the least likely action """
+        leastPr = 1e9
+        for action in self.children:
+            leastPr = min( leastPr, action.least_prob_precond() )
+        return leastPr
+    
+
+    def score( self ):
+        """ Return a ranking number for this action """
+        totCost = 0.0
+        leastPr = 1e9
+        for action in self.children:
+            totCost += action.cost()
+            leastPr = min( leastPr, action.least_prob_precond() )
+        return totCost - _LOG_PROB_FACTOR * log( leastPr, _LOG_BASE )
+    
+
+    def detach_symbols( self ):
+        """ Release symbols from their belief connections """
+        for action in self.children:
+            action.detach_symbols()
 
 
 def get_ith_BT_action_from_PDLS_plan( pdlsPlan, i, world ):

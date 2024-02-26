@@ -55,13 +55,7 @@
         [Y] Phase 2, 2024-02-23: Nice!
             [Y] A consistent scan should not contain beliefs below trash threshold, 2024-02-23: Trash disposed!
         [>] Phase 3
-            [>] Planner should add a plan to the queue
-            [ ] Recompute priority
-            [ ] Decide whether the current plan is valid
-                [ ] If not pop plan with least cost
-                [ ] For each action
-                    [ ] Check action postconditions
-                    [ ] Check action preconditions
+            * See Below
         [ ] Phase 4
             [ ] Per Tick
                 [ ] Update beliefs
@@ -86,6 +80,7 @@ import sys, time, math
 now = time.time
 from traceback import print_exc, format_exc
 from pprint import pprint
+from math import isnan
 
 ### Special ###
 import numpy as np
@@ -109,14 +104,15 @@ from utils import ( row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec, diff_norm,
                     DataLogger, )
 
 from env_config import ( _GRASP_VERT_OFFSET, _GRASP_ORNT_XYZW, _NULL_NAME, _ACTUAL_NAMES, _MIN_X_OFFSET,
-                         _NULL_THRESH, _BLOCK_SCALE, _CLOSEST_TO_BASE, _ACCEPT_POSN_ERR, _MIN_SEP, _Z_SAFE,
-                         _N_POSE_UPDT, _WP_NAME, _SAMPLE_DET )
+                         _BLOCK_SCALE, _CLOSEST_TO_BASE, _ACCEPT_POSN_ERR, _MIN_SEP, _Z_SAFE,
+                         _N_POSE_UPDT, _WP_NAME, _SAMPLE_DET, _PLAN_THRESH, _K_PLANS_RETAIN )
 
 from PB_BlocksWorld import PB_BlocksWorld
 from symbols import Object, Path
 
 from beliefs import ObjectMemory
-from actions import Plan, display_PDLS_plan, BT_Runner, get_ith_BT_action_from_PDLS_plan, Place, Stack
+from actions import ( Plan, display_PDLS_plan, BT_Runner, get_ith_BT_action_from_PDLS_plan, Place, Stack, 
+                      get_BT_plan_from_PDLS_plan, )
 from Cheap_PDDL_Parser import ( pddl_as_list, get_action_defn, get_action_param_names, 
                                 get_action_precond_list, get_action_postcond_list )
 
@@ -161,6 +157,7 @@ class ResponsiveExecutive:
         self.goal     = tuple()
         self.task     = None
         self.plans    = [] # PriorityQueue()
+        self.enquPlan = None
         self.currPlan = None
         self.action   = None
 
@@ -180,6 +177,7 @@ class ResponsiveExecutive:
         """ Get the PDDL for the specified action """
         return get_action_defn( self.domain, actionName )
     
+
     def gen_conds_from_plan( self, pdlsPlan ):
         """ Recover grounded pre and postconditions from the PDDLStream plan """
         planConds = list()
@@ -212,10 +210,21 @@ class ResponsiveExecutive:
                     else:
                         cond.append( elem )
                 actPstG.append( cond )
-            planConds.append( [actPreG, actPstG,] )
+            planConds.append( [argDict, actPreG, actPstG,] )
         return planConds
             
-    # FIXME, START HERE: POPULATE BT's WITH CONDITIONS ABOVE
+
+    def get_grounded_BT_from_PDLS_plan( self, pdlsPlan ):
+        """ Get a full BT plan, including pre and postconds, from the PDDLStream plan """
+        prePstLst = self.gen_conds_from_plan( pdlsPlan )
+        fullPlnBT = get_BT_plan_from_PDLS_plan( pdlsPlan, self.world )
+        for i, actionBT in enumerate( fullPlnBT ):
+            args_, preCs_, pstCs_ = prePstLst[i]
+            actionBT.args  = args_ # NOTE: This is a change from `list` to `dict`, NOT CLEAN
+            actionBT.preCs = preCs_
+            actionBT.pstCs = pstCs_
+        return fullPlnBT
+        
 
 
     ##### Stream Helpers ##################################################
@@ -718,6 +727,7 @@ class ResponsiveExecutive:
             self.facts.extend( self.get_met_goal_predicates_noisy( self.goal, self.symbols ) )
 
 
+
     def phase_3_Plan_Task( self ):
         """ Attempt to solve the symbolic problem """
 
@@ -771,16 +781,58 @@ class ResponsiveExecutive:
 
         plan, cost, evaluations = solution
         if (plan is not None) and len( plan ):
-            display_PDLS_plan( plan )
-            self.currPlan = plan
-            self.action   = get_BT_plan_until_block_change( plan, self.world )
+            self.enquPlan = plan
         else:
             self.logger.log_event( "NO SOLUTION" )
-            self.status = Status.FAILURE
 
         self.logger.log_event( "End Solver" )
 
-    def phase_4_Execute_Action( self ):
+
+    def phase_4_Prioritize( self ):
+        """ Recompute ranking for all plans in the queue and sort """
+        """
+        ### PHASE 4 DEV PLAN ###
+        [>] Planner should add a plan to the queue
+            [Y] Recompute all priorities, 2024-02-26: "87A" is the example
+            [ ] Decide whether the current plan is valid
+                [ ] If not pop plan with least cost
+                [ ] For each action
+                    [ ] Check action postconditions
+                    [ ] Check action preconditions
+        ### THESIS VERSION ###
+        [?] Plan plan probability should come from a rollout?
+        """
+
+        ##### Recompute All Priorities, Sort, and Cull #####
+
+        ## Grade Plans ##
+        savPln = []
+        # for m, plan in enumerate( self.plans ):
+        for plan in self.plans:
+            prob  = plan.least_prob() # WARNING: THIS SEEMS WRONG
+            score = plan.score()
+            plan.rank = score
+            # Destroy (Degraded Plans || Plans with NaN Priority) #
+            if (prob > _PLAN_THRESH) and (not isnan( score )):
+                savPln.append( plan )
+            else:
+                plan.detach_symbols()
+
+        ## Enqueue Plans ##    
+        savPln.sort()
+        self.plans = savPln[:_K_PLANS_RETAIN]
+        for badPlan in savPln[_K_PLANS_RETAIN:]:
+            badPlan.detach_symbols()
+
+        ##### Decide Whether the Current Plan is Valid #####
+        prob = self.currPlan.least_prob() # WARNING: THIS SEEMS WRONG
+        if prob < _PLAN_THRESH:
+            self.logger.log_event( "Current plan is unlikely", prob )
+            self.currPlan = None
+        if 
+
+
+    def phase_5_Execute_Action( self ):
         """ Attempt to execute the first action in the symbolic plan """
         
         btr = BT_Runner( self.action, self.world, 20.0 )
