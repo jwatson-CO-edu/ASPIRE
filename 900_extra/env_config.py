@@ -33,11 +33,13 @@ _BLOCK_SCALE  = 0.038
 _MIN_X_OFFSET = 0.400
 _ROUND_PLACES = 5
 _BLOCK_ALPHA  = 1.0
+_USE_GRAPHICS = True
 
 
 
 ########## UR5 ROBOT ###############################################################################
 
+_USE_ROBOT         = False
 _GRASP_VERT_OFFSET = _BLOCK_SCALE * 2.0
 _GRASP_ORNT_XYZW   = np.array( [0, 0.7070727, 0, 0.7071408,] )
 _Q_HOME            = [0, -math.pi/2, math.pi/2, -math.pi/2, -math.pi/2, 0]
@@ -52,6 +54,8 @@ _SAMPLE_DET   = False
 _N_POSE_UPDT  = 25
 _POSN_STDDEV  =  _BLOCK_SCALE / 4.0
 _ORNT_STDDEV  =  _BLOCK_SCALE / 8.0
+_PRIOR_POS_S  = _POSN_STDDEV * 2.0
+_PRIOR_ORN_S  = _ORNT_STDDEV * 2.0
 _NULL_THRESH  =  0.75
 _CONFUSE_PROB = 0.025
 _NEAR_PROB    = 0.75

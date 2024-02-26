@@ -1,3 +1,10 @@
+########## DEV PLAN ################################################################################
+"""
+Goal: Demonstrate and Illustrate Object Beliefs
+[ ] Gather N readings
+[ ] Compute stats on readings
+[ ] Render Beliefs vs Ground Truth
+"""
 ########## INIT ####################################################################################
 
 ##### Imports #####

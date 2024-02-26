@@ -12,9 +12,10 @@ import numpy as np
 from scipy.stats import chi2
 
 ### Local ###
-from env_config import _POSN_STDDEV, _ORNT_STDDEV, _NULL_NAME, _CONFUSE_PROB, _NULL_THRESH
+from env_config import _PRIOR_POS_S, _PRIOR_ORN_S, _NULL_NAME, _CONFUSE_PROB, _NULL_THRESH
 from utils import ( p_lst_has_nan, roll_outcome, row_vec_normd_ornt, get_confusion_matx,
                     multiclass_Bayesian_belief_update )
+from geometry import sample_pose
 
 
 
@@ -60,8 +61,8 @@ class ObjectBelief( SpatialNode ):
 
     def reset_pose_distrib( self ):
         """ Reset the pose distribution """
-        self.stddev = [_POSN_STDDEV for _ in range(3)] # Standard deviation of pose
-        self.stddev.extend( [_ORNT_STDDEV for _ in range(4)] )
+        self.stddev = [ _PRIOR_POS_S for _ in range(3)] # Standard deviation of pose
+        self.stddev.extend( [_PRIOR_ORN_S for _ in range(4)] )
 
 
     def __init__( self, label = "", pose = None, volume = None ):
@@ -98,14 +99,6 @@ class ObjectBelief( SpatialNode ):
 
     ##### Probability & Sampling ##########################################
         
-    def pose_covar( self ):
-        """ Get the pose covariance """
-        rtnArr = np.zeros( (7,7,) )
-        for i in range(7):
-            rtnArr[i,i] = (self.stddev[i])**2
-        return rtnArr
-    
-
     def prob_density( self, obj ):
         """ Return the probability that this object lies within the present distribution """
         x     = np.array( obj.pose )
@@ -127,14 +120,16 @@ class ObjectBelief( SpatialNode ):
     def sample_pose( self ):
         """ Sample a pose from the present distribution, Reset on failure """
         try:
-            posnSample = np.random.multivariate_normal( self.pose, self.pose_covar() ) 
+            # posnSample = np.random.multivariate_normal( self.pose, self.pose_covar() ) 
+            poseSample = sample_pose( self.pose, self.stddev ) 
         except (np.linalg.LinAlgError, RuntimeWarning,):
             self.reset_pose_distrib()
-            posnSample = np.random.multivariate_normal( self.pose, self.pose_covar() ) 
-        while p_lst_has_nan( posnSample ):
+            # posnSample = np.random.multivariate_normal( self.pose, self.pose_covar() ) 
+            poseSample = np.random.multivariate_normal( self.pose, self.stddev ) 
+        while p_lst_has_nan( poseSample ):
             self.reset_std_dev()
-            posnSample = np.random.multivariate_normal( self.pose, self.pose_covar() ) 
-        return row_vec_normd_ornt( posnSample )
+            poseSample = np.random.multivariate_normal( self.pose, self.stddev ) 
+        return poseSample
     
 
     def sample_symbol( self ):
