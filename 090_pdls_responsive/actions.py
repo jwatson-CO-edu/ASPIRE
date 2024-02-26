@@ -58,42 +58,24 @@ class GroundedAction( Sequence ):
     """ This is the parent class for all actions available to the planner """
 
     def __init__( self, args = None, goal = None, world = None, robot = None, name = "Grounded Sequence" ):
+        """ Init BT """
         super().__init__( name = name, memory = True )
-        self.args   = args if (args is not None) else list() # Prerequisites required by this action
-        self.goal   = goal if (goal is not None) else list() # Predicates satisfied by this action
+        self.args   = args if (args is not None) else list() # Symbols involved in this action
+        self.preCs  = list() #- Preconditions, Prerequisites required by this action
+        self.pstCs  = list() #- Postconditions, Predicates satisfied by this action
         self.symbol = None # -- Symbol on which this behavior relies
         self.msg    = "" # ---- Message: Reason this action failed -or- OTHER
         self.ctrl   = robot # - Agent that executes
         self.world  = world  #- Simulation ref
-
-    def get_grounded( self, symbol ):
-        """ Copy action with a symbol attached """
-        rtnAct = self.__class__( self.goal, self.world, self.ctrl, self.name )
-        rtnAct.symbol = symbol
-        symbol.action = rtnAct
-        return rtnAct
-    
-    def copy( self ):
-        """ Deep copy """
-        rtnObj = self.__class__( self.goal, self.world, self.ctrl, self.name )
-        rtnObj.status = self.status
-        rtnObj.symbol = self.symbol
-        return rtnObj
-    
-    def p_grounded( self ):
-        """ Return true if a symbol was assigned to this action """
-        return (self.symbol is not None)
-    
-    def set_ground( self, symbol ):
-        """ Attach symbol """
-        self.symbol   = symbol
-        symbol.action = self
+        
 
     def cost( self ):
+        """ Return a cost for this action """
         raise NotImplementedError( f"{self.name} REQUIRES a `cost` implementation!" )
-
-    def prep( self ):
-        raise NotImplementedError( f"{self.name} REQUIRES a `prep` implementation!" )
+    
+    def score( self ):
+        """ Return a ranking number for this action """
+        raise NotImplementedError( f"{self.name} REQUIRES a `score` implementation!" )
     
     def __repr__( self ):
         """ Get the name, Assume child classes made it sufficiently descriptive """

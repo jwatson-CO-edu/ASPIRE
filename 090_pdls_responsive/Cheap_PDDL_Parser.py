@@ -81,3 +81,26 @@ def get_action_defn( nestList, actName ):
                 if elem[1] == actName:
                     return elem[2:]
     return None
+
+def get_action_param_names( actList ):
+    """ Get the parameter names associated with this action """
+    if actList[0] == ":parameters":
+        return actList[1]
+    else:
+        return list()
+    
+def get_action_precond_list( actList ):
+    """ Get the abstract preconditions associated with this action """
+    # NOTE: This function assumes that the precondition syntax begins with the `and` keyword!
+    if actList[2] == ":precondition":
+        return actList[3][1:]
+    else:
+        return list()
+    
+def get_action_postcond_list( actList ):
+    """ Get the abstract postconditions associated with this action """
+    # NOTE: This function assumes that the precondition syntax begins with the `and` keyword!
+    if actList[4] == ":effect":
+        return actList[5][1:]
+    else:
+        return list()

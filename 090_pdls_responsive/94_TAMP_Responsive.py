@@ -12,17 +12,37 @@
             * I suspect the "Extensive Pose Update" version was causing long runtimes, so testing this one first
         [Y] Extensive Pose Update, 2024-02-22: Tested!
         [>] Other planning settings that weren't absolute trash
-            [Y] ff-wastar3, 2024-02-23: Tested!
-            [Y] ff-wastar4, 2024-02-23: Tested!
-            [ ] 
-            [ ] 
-            [ ] 
-            [ ] 
-            [ ] 
-            [ ] 
-            [ ] 
-            [ ] 
-            [ ] Default Solver w/ New Weights
+            [Y] Test w/ New Action Weights
+                [Y] ff-eager-tiebreak, 2024-02-25: Tested!
+                [Y] ff-astar, 2024-02-25: Tested!
+                [Y] ff-wastar3, 2024-02-25: Tested!
+                [Y] ff-eager-pref, 2024-02-25: Tested!
+                [Y] cea-wastar3, 2024-02-25: Tested!
+                [Y] cea-wastar1, 2024-02-25: Tested!
+                [Y] cea-wastar4, 2024-02-25: Tested!
+                [Y] ff-wastar1, 2024-02-25: Tested!
+                [Y] dijkstra, 2024-02-25: Tested!
+                [Y] ff-wastar4, 2024-02-25: Tested!
+                [Y] ff-eager, 2024-02-25: Tested!
+                [Y] cea-wastar2, 2024-02-25: Tested!
+                [Y] ff-ehc, 2024-02-25: Terrible!
+                [Y] max-astar, 2024-02-25: Terrible!
+                [Y] goal-lazy, 2024-02-25: Terrible!
+                [Y] Alternate Pose Update, 2024-02-25: Worse than shortcutting update!
+            [ ] Test w/ BT Timeout
+                [ ] Default Solver w/ New Weights
+                [ ] ff-eager-tiebreak
+                [ ] ff-astar
+                [ ] ff-wastar3
+                [ ] ff-eager-pref
+                [ ] cea-wastar3
+                [ ] cea-wastar1
+                [ ] cea-wastar4
+                [ ] ff-wastar1
+                [ ] dijkstra
+                [ ] ff-wastar4
+                [ ] ff-eager
+                [ ] cea-wastar2
     [ ] Experimental Data
         [Y] What do I need to create a Sankey Graph? Is there a prettier one than PLT?, 2024-02-19: Will has the link
         [ ] Sankey Graph of sequence incidents during each episode
@@ -37,7 +57,11 @@
         [>] Phase 3
             [>] Planner should add a plan to the queue
             [ ] Recompute priority
-            [ ] Decide whether the curren plan is valid
+            [ ] Decide whether the current plan is valid
+                [ ] If not pop plan with least cost
+                [ ] For each action
+                    [ ] Check action postconditions
+                    [ ] Check action preconditions
         [ ] Phase 4
             [ ] Per Tick
                 [ ] Update beliefs
@@ -93,7 +117,8 @@ from symbols import Object, Path
 
 from beliefs import ObjectMemory
 from actions import Plan, display_PDLS_plan, BT_Runner, get_ith_BT_action_from_PDLS_plan, Place, Stack
-
+from Cheap_PDDL_Parser import ( pddl_as_list, get_action_defn, get_action_param_names, 
+                                get_action_precond_list, get_action_postcond_list )
 
 
 ########## HELPER FUNCTIONS ########################################################################
@@ -112,6 +137,8 @@ def get_BT_plan_until_block_change( pdlsPlan, world ):
     rtnPlan = Plan()
     rtnPlan.add_children( rtnBTlst )
     return rtnPlan
+
+
 
 ########## EXECUTIVE (THE METHOD) ##################################################################
 
@@ -144,6 +171,51 @@ class ResponsiveExecutive:
         self.reset_beliefs()
         self.reset_state()
         self.logger = DataLogger()
+        self.domain = pddl_as_list( "domain.pddl" )
+
+
+    ##### PDDL ############################################################
+        
+    def get_action_pddl( self, actionName ):
+        """ Get the PDDL for the specified action """
+        return get_action_defn( self.domain, actionName )
+    
+    def gen_conds_from_plan( self, pdlsPlan ):
+        """ Recover grounded pre and postconditions from the PDDLStream plan """
+        planConds = list()
+        for action in pdlsPlan:
+            actName  = action.name
+            actArgs  = action.args
+            actPddl  = self.get_action_pddl( actName )
+            argNams  = get_action_param_names( actPddl )
+            argDict  = {}
+            for i, name in enumerate( argNams ):
+                argDict[ name ] = actArgs[i]
+
+            actPreC = get_action_precond_list( actPddl )
+            actPreG = list()
+            for preC in actPreC:
+                cond = list()
+                for elem in preC:
+                    if elem in argDict:
+                        cond.append( argDict[ elem ] )
+                    else:
+                        cond.append( elem )
+                actPreG.append( cond )
+            actPstC = get_action_postcond_list( actPddl )
+            actPstG = list()
+            for pstC in actPstC:
+                cond = list()
+                for elem in pstC:
+                    if elem in argDict:
+                        cond.append( argDict[ elem ] )
+                    else:
+                        cond.append( elem )
+                actPstG.append( cond )
+            planConds.append( [actPreG, actPstG,] )
+        return planConds
+            
+    # FIXME, START HERE: POPULATE BT's WITH CONDITIONS ABOVE
 
 
     ##### Stream Helpers ##################################################

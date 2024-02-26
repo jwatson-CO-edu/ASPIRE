@@ -103,11 +103,11 @@ class PB_BlocksWorld:
 
     ##### Init ############################################################
 
-    def __init__( self ):
+    def __init__( self, graphicsOverride = False ):
         """ Create objects """
         ## Init Sim ##
         self.period        = 1.0 / 240.0
-        if _USE_GRAPHICS:
+        if _USE_GRAPHICS or graphicsOverride:
             # self.physicsClient = pb.connect( pb.GUI ) # or p.DIRECT for non-graphical version
             self.physicsClient = bc.BulletClient( connection_mode = pb.GUI ) # or p.DIRECT for non-graphical version
         else:
