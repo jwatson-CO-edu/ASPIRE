@@ -657,7 +657,7 @@ class ResponsiveExecutive:
                 max_skeletons = 50,
                 max_time      = 80.0,
                 unit_costs   = True, 
-                unit_efforts = False,
+                unit_efforts = True,
                 effort_weight = 10.0, #200.0, #100.0, #50.0, #20.0, # 5.0, # 2.0 #10.0,
                 success_cost = 40,
                 initial_complexity = 1,
