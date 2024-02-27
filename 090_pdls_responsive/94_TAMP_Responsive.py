@@ -829,7 +829,7 @@ class ResponsiveExecutive:
         if prob < _PLAN_THRESH:
             self.logger.log_event( "Current plan is unlikely", prob )
             self.currPlan = None
-        if 
+        if # FIXME, START HERE: CHECK IF THE PLAN BT FAILED, DO NOT LOG, THAT HAPPENED LAST ITER
 
 
     def phase_5_Execute_Action( self ):
