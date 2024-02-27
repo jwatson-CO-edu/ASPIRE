@@ -661,7 +661,7 @@ class ResponsiveExecutive:
                 complexity_step = 1,
                 search_sample_ratio = 1/1000, #1/1500, #1/5, #1/1000, #1/750 # 1/1000, #1/2000 #500, #1/2, # 1/500, #1/200, #1/10, #2, # 25 #1/25
                 reorder = False, # Setting to false bare impacts sol'n time
-                # planner = planner
+                planner = planner
                 # stream_info = stream_info,
             )
             # print( "Solver has completed!\n\n\n" )

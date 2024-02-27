@@ -3,7 +3,7 @@
 ##### Imports #####
 
 ### Standard ###
-from uuid import uuid5
+from uuid import uuid4
 from random import random
 
 ### Special ###
@@ -12,10 +12,12 @@ import numpy as np
 from scipy.stats import chi2
 
 ### Local ###
-from env_config import _PRIOR_POS_S, _PRIOR_ORN_S, _NULL_NAME, _CONFUSE_PROB, _NULL_THRESH
-from utils import ( p_lst_has_nan, roll_outcome, row_vec_normd_ornt, get_confusion_matx,
+from env_config import ( _PRIOR_POS_S, _PRIOR_ORN_S, _NULL_NAME, _CONFUSE_PROB, _NULL_THRESH, 
+                         _EXIST_THRESH, _MIN_SEP, )
+from utils import ( p_lst_has_nan, roll_outcome, get_confusion_matx,
                     multiclass_Bayesian_belief_update )
-from geometry import sample_pose
+from components import Volume
+from geometry import sample_pose, diff_norm, pose_covar
 
 
 
@@ -27,7 +29,7 @@ class SpatialNode:
     # NOTE: This can also be used as a non-physical reference frame
 
     def __init__( self, label = "", pose = None, volume = None ):
-        self.ID       = uuid5() # --------------------------------------- Means for identifying an unique object
+        self.ID       = uuid4() # --------------------------------------- Means for identifying an unique object
         self.label    = label # ----------------------------------------- Text label, possibly non-unique
         self.pose     = pose if (pose is not None) else [0,0,0,1,0,0,0] # Absolute pose
         self.relPose  = [0,0,0,1,0,0,0] # ------------------------------- Relative pose
@@ -103,7 +105,7 @@ class ObjectBelief( SpatialNode ):
         """ Return the probability that this object lies within the present distribution """
         x     = np.array( obj.pose )
         mu    = np.array( self.pose )
-        sigma = self.pose_covar()
+        sigma = pose_covar( self.stddev )
         try:
             m_dist_x = np.dot((x-mu).transpose(),np.linalg.inv(sigma))
             m_dist_x = np.dot(m_dist_x, (x-mu))
@@ -330,3 +332,54 @@ class ObjectMemory:
                 elif sym.prob() > uniqSym[ sym.label ].prob():
                     uniqSym[ sym.label ] = sym
         return list( uniqSym.values() )
+    
+
+    def p_noncolliding( self, objs ):
+        """ Return True if no two `objs` are within `_MIN_SEP` of each other """
+        N = len( objs )
+        for i, obj_i in enumerate( objs ):
+            for obj_j in objs[(i+1):N]:
+                if diff_norm( obj_i.pose[:3], obj_j.pose[:3] ) < _MIN_SEP:
+                    return False
+        return True
+    
+
+    def p_symbols_credible( self, objs ):
+        """ Return true only if our belief in every symbol is above the trash threshold """
+        for obj in objs:
+            if obj.prob() < _EXIST_THRESH:
+                return False
+        return True
+
+
+
+    def scan_consistent( self ):
+        """ Get the most likely samples that do not collide with one another """
+        uniqSym = self.scan_max_likelihood()
+        while (not self.p_noncolliding( uniqSym )) or (not self.p_symbols_credible( uniqSym )):
+            uniqSym = self.scan_max_likelihood()
+            print( "RESCAN!" ) # Warning that we are in an infinite loop
+        return uniqSym
+    
+
+
+########## PROBABILISTIC LANGUAGE OVER VOLUMES for ENVIRONMENT REASONING ###########################
+    
+class PLOVER:
+    """ Representation + Solver + Planner """
+
+    def __init__( self ):
+        """ Instantiate memory and reasoning """
+        self.memory  = ObjectMemory() # Hybrid symbols with pose and class uncert
+        self.samples = list() # ------- Last snapshot of determinized symbols
+
+
+    def belief_update( self, objEvidence ):
+        """ Wrapper for memory update """
+        self.memory.belief_update( objEvidence )
+
+
+    def sample_all( self ):
+        """ Wrapper for a consistent scan (non-colliding, prob above thresh) of all objects in memory """
+        self.samples = self.memory.scan_consistent()
+        return list( self.samples )

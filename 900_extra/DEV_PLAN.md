@@ -81,6 +81,10 @@
             - Should **not** have to write a class for every new object, as this burdens the practitioner and does not support flexibility
             - Rather, provide the system with a way to associate labels with `Volume`s, whether it looks them up or constructs them from observation
         * `[>]` Block beliefs @ PyBullet
+            - 2024-02-27: I would like to avoid tight coupling with the world present in the current implementation of MAGPIE
+            - `[>]` Render Sample
+                * `[ ]` Transform mesh
+                * `[ ]` Draw with transparency
             - `[>]` Render belief
                 * `[>]` Position ellipsoid
                 * `[>]` Orientation sticks
