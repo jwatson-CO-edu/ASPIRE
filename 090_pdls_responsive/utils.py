@@ -2,7 +2,7 @@
 
 ##### Imports #####
 
-import pickle, math, time, datetime, copy
+import pickle, math, time, datetime, copy, os
 now = time.time
 
 from random import random
@@ -161,6 +161,23 @@ def p_list_duplicates( lst ):
     return (len( lst ) > len( s ))
 
 
+def get_paths_in_dir_with_prefix( directory, prefix ):
+    """ Get only paths in the `directory` that contain the `prefix` """
+    fPaths = [os.path.join(directory, f) for f in os.listdir( directory ) if os.path.isfile( os.path.join(directory, f))]
+    return [path for path in fPaths if (prefix in str(path))]
+
+
+def get_merged_logs_in_dir_with_prefix( directory, prefix ):
+    """ Merge all logs into one that can be analized easily """
+    pklPaths = get_paths_in_dir_with_prefix( directory, prefix )
+    logMain  = DataLogger()
+    for path in pklPaths:
+        log_i = DataLogger()
+        log_i.load( path )
+        # pprint( log_i.metrics )
+        # print( '\n' )
+        logMain.merge_from( log_i )
+    return logMain.get_snapshot()
 
 ########## EXPERIMENT STATISTICS ###################################################################
 
