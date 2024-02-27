@@ -649,13 +649,14 @@ class ResponsiveExecutive:
             # 'cea-wastar5' : Very long
             # 'ff-wastar3' : 7-15s
 
-            planner = 'cea-wastar4' #'ff-eager-pref' # 'add-random-lazy' # 'ff-eager-tiebreak' #'goal-lazy' #'ff-eager'
+            # planner = 'cea-wastar3' #'ff-eager-pref' # 'add-random-lazy' # 'ff-eager-tiebreak' #'goal-lazy' #'ff-eager'
+            # DEFAULT SOLVER
             solution = solve( 
                 self.task, 
                 algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
                 max_skeletons = 50,
                 max_time      = 80.0,
-                unit_costs   = False, 
+                unit_costs   = True, 
                 unit_efforts = False,
                 effort_weight = 10.0, #200.0, #100.0, #50.0, #20.0, # 5.0, # 2.0 #10.0,
                 success_cost = 40,
@@ -663,7 +664,7 @@ class ResponsiveExecutive:
                 complexity_step = 1,
                 search_sample_ratio = 1/1000, #1/1500, #1/5, #1/1000, #1/750 # 1/1000, #1/2000 #500, #1/2, # 1/500, #1/200, #1/10, #2, # 25 #1/25
                 reorder = False, # Setting to false bare impacts sol'n time
-                planner = planner
+                # planner = planner
                 # stream_info = stream_info,
             )
             # print( "Solver has completed!\n\n\n" )
@@ -689,7 +690,7 @@ class ResponsiveExecutive:
     def phase_4_Execute_Action( self ):
         """ Attempt to execute the first action in the symbolic plan """
         
-        btr = BT_Runner( self.action, self.world, 20.0 )
+        btr = BT_Runner( self.action, self.world, 20.0, 50.0 )
         btr.setup_BT_for_running()
 
         while not btr.p_ended():
