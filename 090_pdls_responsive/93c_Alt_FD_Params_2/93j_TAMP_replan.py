@@ -25,7 +25,7 @@ from py_trees.common import Status
 ### Local ###
 
 ## PDDLStream ##
-sys.path.append( "../pddlstream/" )
+sys.path.append( "../../pddlstream/" )
 from pddlstream.algorithms.meta import solve
 from pddlstream.language.generator import from_gen_fn, from_test
 from pddlstream.utils import read, INF, get_file_path
@@ -33,6 +33,7 @@ from pddlstream.language.constants import print_solution, PDDLProblem
 
 ## MAGPIE ##
 sys.path.append( "../" )
+sys.path.append( "../../" )
 # from magpie.poses import translation_diff
 
 from utils import ( row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec, diff_norm, closest_dist_Q_to_segment_AB,
@@ -548,8 +549,10 @@ class ResponsiveExecutive:
     def pddlstream_from_problem( self ):
         """ Set up a PDDLStream problem with the UR5 """
 
-        domain_pddl = read(get_file_path(__file__, 'domain.pddl'))
-        stream_pddl = read(get_file_path(__file__, 'stream.pddl'))
+        # domain_pddl = read(get_file_path(__file__, 'domain.pddl'))
+        # stream_pddl = read(get_file_path(__file__, 'stream.pddl'))
+        domain_pddl = read('../domain.pddl')
+        stream_pddl = read('../stream.pddl')
 
         constant_map = {}
     
@@ -646,7 +649,7 @@ class ResponsiveExecutive:
                 algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
                 max_skeletons = 50,
                 max_time      = 80.0,
-                unit_costs   = False, 
+                unit_costs   = True, 
                 unit_efforts = False,
                 effort_weight = 10.0, #200.0, #100.0, #50.0, #20.0, # 5.0, # 2.0 #10.0,
                 # success_cost = 40,

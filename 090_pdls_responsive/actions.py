@@ -49,6 +49,8 @@ class BT_Runner:
         if (self.i >= self.Nlim) and (not self.p_ended()):
             self.status = Status.FAILURE
             self.msg    = "BT TIMEOUT"
+            self.world.robot_release_all()
+            self.world.spin_for( 250 )
         if self.p_ended():
             pass_msg_up( self.root )
             self.msg = self.root.msg
