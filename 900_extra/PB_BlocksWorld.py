@@ -7,9 +7,8 @@ from pybullet_utils import bullet_client as bc
 import pybullet_data
 
 from UR5Sim import UR5Sim
-from utils import row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec
 from components import ObjectReading
-from geometry import sample_pose
+from geometry import sample_pose, row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec
 from env_config import ( _MIN_X_OFFSET, _BLOCK_SCALE, TABLE_URDF_PATH, _BLOCK_NAMES, 
                          _POSN_STDDEV, _ORNT_STDDEV, _USE_GRAPHICS, _ACCEPT_POSN_ERR, _ACTUAL_NAMES, 
                          _ONLY_RED, _ONLY_PRIMARY, _BLOCK_ALPHA, _CONFUSE_PROB, _USE_ROBOT )
@@ -275,7 +274,7 @@ class PB_BlocksWorld:
     def get_block_noisy( self, blockName, confuseProb = 0.10, poseStddev = _POSN_STDDEV ):
         """ Find one of the ROYGBV blocks, Partially Observable, Return None if the name is not in the world """
         try:
-            rtnObj = ObjectBelief()
+            rtnObj = ObjectReading()
             idx = _BLOCK_NAMES.index( blockName )
             blockPos, blockOrn = self.physicsClient.getBasePositionAndOrientation( self.blocks[idx] )
             blockPos = np.array( blockPos ) + np.array( [np.random.normal( 0.0, poseStddev/3.0 ) for _ in range(3)] )

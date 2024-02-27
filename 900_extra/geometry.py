@@ -87,3 +87,25 @@ def sample_pose( pose, stddev ):
     except (np.linalg.LinAlgError, RuntimeWarning,):
         return NaN_row_vec()
     return row_vec_normd_ornt( posnSample )
+
+
+def diff_norm( v1, v2 ):
+    """ Return the norm of the difference between the two vectors """
+    return np.linalg.norm( np.subtract( v1, v2 ) )
+
+
+def closest_dist_Q_to_segment_AB( Q, A, B, includeEnds = True ):
+    """ Return the closest distance of point Q to line segment AB """
+    l = diff_norm( B, A )
+    if l <= 0.0:
+        return diff_norm( Q, A )
+    D = np.subtract( B, A ) / l
+    V = np.subtract( Q, A )
+    t = V.dot( D )
+    if (t > l) or (t < 0.0):
+        if includeEnds:
+            return min( diff_norm( Q, A ), diff_norm( Q, B ) )
+        else:
+            return float("NaN")
+    P = np.add( A, D*t )
+    return diff_norm( P, Q ) 

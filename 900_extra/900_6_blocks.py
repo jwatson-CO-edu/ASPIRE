@@ -15,6 +15,8 @@ import trimesh
 ### Local ###
 from components import Volume
 from env_config import _BLOCK_SCALE
+from PLOVER import PLOVER
+from PB_BlocksWorld import PB_BlocksWorld
 
 
 
@@ -42,6 +44,7 @@ def get_color_cube_spawner( sideLen_m, color4i ):
 
 
 ########## OBJECT VOLUME LOOKUP ####################################################################
+
 meshLookup = { # Objects for the 6-block world
     'redBlock': get_color_cube_spawner( _BLOCK_SCALE, [255,  0,  0,255] ),
     'ylwBlock': get_color_cube_spawner( _BLOCK_SCALE, [255,255,  0,255] ),
@@ -58,3 +61,14 @@ def get_volume_by_label( label, lookup ):
     else:
         return Volume()
     
+
+########## MAIN ####################################################################################
+if __name__ == "__main__":
+
+    world  = PB_BlocksWorld()
+    plover = PLOVER()
+
+    for i in range( 50 ):
+        plover.belief_update( world.full_scan_noisy() )
+
+    objs = plover.sample_all()
