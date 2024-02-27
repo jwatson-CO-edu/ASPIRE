@@ -6,12 +6,12 @@ import pybullet as pb
 from pybullet_utils import bullet_client as bc
 import pybullet_data
 
-# from UR5Sim import UR5Sim
-from utils import row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec
+from UR5Sim import UR5Sim
 from components import ObjectReading
-from env_config import ( _MIN_X_OFFSET, _BLOCK_SCALE, TABLE_URDF_PATH, _BLOCK_NAMES, _POSN_STDDEV, 
-                         _USE_GRAPHICS, _ACCEPT_POSN_ERR, _ACTUAL_NAMES, _ONLY_RED, _ONLY_PRIMARY,
-                         _BLOCK_ALPHA, _CONFUSE_PROB )
+from geometry import sample_pose, row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec
+from env_config import ( _MIN_X_OFFSET, _BLOCK_SCALE, TABLE_URDF_PATH, _BLOCK_NAMES, 
+                         _POSN_STDDEV, _ORNT_STDDEV, _USE_GRAPHICS, _ACCEPT_POSN_ERR, _ACTUAL_NAMES, 
+                         _ONLY_RED, _ONLY_PRIMARY, _BLOCK_ALPHA, _CONFUSE_PROB, _USE_ROBOT )
 
 ##### Paths #####
 
@@ -23,10 +23,12 @@ class DummyBelief:
     def __init__( self, label ):
         self.labels = { label: 1.0 }
 
+
 def make_table( clientRef ):
     """ Load a table """
     # table = pb.loadURDF(TABLE_URDF_PATH, [0.5, 0, -0.6300], [0, 0, 0, 1])
     return clientRef.loadURDF(TABLE_URDF_PATH, [0.5, 0, -0.6300], [0, 0, 0, 1])
+
 
 def rand_table_pose():
     """ Return a random pose in the direct viscinity if the robot """
@@ -41,6 +43,7 @@ def banished_pose():
     """ Send it to the shadow realm """
     return [100,100,100], [0, 0, 0, 1]
 
+
 def make_block( clientRef ):
     """ Load a block at the correct scale, place it random, and return the int handle """
     posn, _ = rand_table_pose()
@@ -49,6 +52,7 @@ def make_block( clientRef ):
         posn,
         globalScaling = 0.25/4.0
     )
+
 
 def draw_cross( clientRef, position, scale, color, w = 2.0 ):
     """ Draw a static cross at the XYZ `position` with arms aligned with the lab axes """
@@ -70,16 +74,18 @@ def draw_cross( clientRef, position, scale, color, w = 2.0 ):
 class NoisyObjectSensor:
     """ A fake vision pipeline with simple discrete class error and Gaussian pose error """
 
-    def __init__( self, poseStddev = _POSN_STDDEV, confuseProb = _CONFUSE_PROB ):
-        self.pStdDev  = np.array( poseStddev ) 
+    def __init__( self, posnStddev = _POSN_STDDEV, orntStddev = _ORNT_STDDEV, confuseProb = _CONFUSE_PROB ):
+        self.stddev = [ posnStddev for _ in range(3)] # Standard deviation of pose
+        self.stddev.extend( [orntStddev for _ in range(4)] )
         self.confProb = confuseProb
 
     def noisy_reading_from_true( self, trueObj ):
         """ Add noise to the true reading and return it """
         rtnObj = ObjectReading()
-        blockPos, blockOrn = row_vec_to_pb_posn_ornt( trueObj.pose )
-        blockPos = np.array( blockPos ) + np.array( [np.random.normal( 0.0, self.pStdDev[i] ) for i in range(3)] )
-        rtnObj.pose = pb_posn_ornt_to_row_vec( blockPos, blockOrn )
+        # blockPos, blockOrn = row_vec_to_pb_posn_ornt( trueObj.pose )
+        # blockPos = np.array( blockPos ) + np.array( [np.random.normal( 0.0, self.pStdDev[i] ) for i in range(3)] )
+        rtnObj.pose = sample_pose( trueObj.pose, self.stddev )
+        # rtnObj.pose = pb_posn_ornt_to_row_vec( blockPos, blockOrn )
         for blkName_i in _BLOCK_NAMES:
             if blkName_i == trueObj.label:
                 rtnObj.dstr[ blkName_i ] = 1.0-self.confProb*(len( _BLOCK_NAMES )-1)
@@ -110,8 +116,8 @@ class PB_BlocksWorld:
 
         ## Instantiate Robot and Table ##
         self.table     = make_table( self.physicsClient )
-        self.robot     = UR5Sim()
-        self.robotName = "UR5e"
+        self.robot     = UR5Sim() if _USE_ROBOT else None
+        self.robotName = "UR5e" if _USE_ROBOT else ""
         self.grasp     = []
 
         ## Instantiate Blocks ##
@@ -156,19 +162,8 @@ class PB_BlocksWorld:
                 
     def robot_grasp_block( self, blockName ):
         """ Lock the block to the end effector """
-        hndl = self.get_handle( blockName )
-        symb = self.get_block_true( blockName )
-        bPsn, bOrn = row_vec_to_pb_posn_ornt( symb.pose )
-        ePsn, _    = self.robot.get_current_pose()
-        pDif = np.subtract( bPsn, ePsn )
-        self.grasp.append( (hndl,pDif,bOrn,) ) # Preserve the original orientation because I am lazy
-
-
-    def robot_grasp_at( self, graspPose ):
-        """ Lock the block to the end effector that is nearest the effector """
-        hndl = self.get_handle_at_pose( graspPose, 2.0*_ACCEPT_POSN_ERR )
-        if hndl is not None:
-            blockName = self.get_handle_name( hndl )
+        if _USE_ROBOT: # Else no effect
+            hndl = self.get_handle( blockName )
             symb = self.get_block_true( blockName )
             bPsn, bOrn = row_vec_to_pb_posn_ornt( symb.pose )
             ePsn, _    = self.robot.get_current_pose()
@@ -176,9 +171,23 @@ class PB_BlocksWorld:
             self.grasp.append( (hndl,pDif,bOrn,) ) # Preserve the original orientation because I am lazy
 
 
+    def robot_grasp_at( self, graspPose ):
+        """ Lock the block to the end effector that is nearest the effector """
+        if _USE_ROBOT: # Else no effect
+            hndl = self.get_handle_at_pose( graspPose, 2.0*_ACCEPT_POSN_ERR )
+            if hndl is not None:
+                blockName = self.get_handle_name( hndl )
+                symb = self.get_block_true( blockName )
+                bPsn, bOrn = row_vec_to_pb_posn_ornt( symb.pose )
+                ePsn, _    = self.robot.get_current_pose()
+                pDif = np.subtract( bPsn, ePsn )
+                self.grasp.append( (hndl,pDif,bOrn,) ) # Preserve the original orientation because I am lazy
+
+
     def robot_release_all( self ):
         """ Unlock all objects from end effector """
-        self.grasp = list()
+        if _USE_ROBOT: # Else no effect
+            self.grasp = list()
 
 
     ##### Block Queries ###################################################
@@ -218,14 +227,15 @@ class PB_BlocksWorld:
 
     def get_block_true( self, blockName ):
         """ Find one of the ROYGBV blocks, Fully Observable, Return None if the name is not in the world """
+        # FIXME, START HERE: USE A `ObjectReading`
         try:
             idx = _BLOCK_NAMES.index( blockName )
             blockPos, blockOrn = self.physicsClient.getBasePositionAndOrientation( self.blocks[idx] )
             # blockPos = np.array( blockPos )
-            return Object( 
-                blockName, 
-                pb_posn_ornt_to_row_vec( blockPos, blockOrn ),
-                DummyBelief( blockName ), 
+            return ObjectReading( 
+                # blockName, 
+                # pb_posn_ornt_to_row_vec( blockPos, blockOrn ),
+                # DummyBelief( blockName ), 
             )
         except ValueError:
             return None
@@ -244,9 +254,10 @@ class PB_BlocksWorld:
         """ Advance one step and sleep """
         self.physicsClient.stepSimulation()
         time.sleep( self.period )
-        ePsn, _    = self.robot.get_current_pose()
-        for obj in self.grasp:
-            self.physicsClient.resetBasePositionAndOrientation( obj[0], np.add( obj[1], ePsn ), obj[2] )
+        if _USE_ROBOT: # Else no effect
+            ePsn, _    = self.robot.get_current_pose()
+            for obj in self.grasp:
+                self.physicsClient.resetBasePositionAndOrientation( obj[0], np.add( obj[1], ePsn ), obj[2] )
 
     def spin_for( self, N = 1000 ):
         """ Run for `N` steps """
@@ -263,7 +274,7 @@ class PB_BlocksWorld:
     def get_block_noisy( self, blockName, confuseProb = 0.10, poseStddev = _POSN_STDDEV ):
         """ Find one of the ROYGBV blocks, Partially Observable, Return None if the name is not in the world """
         try:
-            rtnObj = ObjectBelief()
+            rtnObj = ObjectReading()
             idx = _BLOCK_NAMES.index( blockName )
             blockPos, blockOrn = self.physicsClient.getBasePositionAndOrientation( self.blocks[idx] )
             blockPos = np.array( blockPos ) + np.array( [np.random.normal( 0.0, poseStddev/3.0 ) for _ in range(3)] )

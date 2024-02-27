@@ -76,15 +76,21 @@
     - `[Y]` Belief, 2024-02-24: Written (Ported)
         * `[Y]` Belief Samples, 2024-02-24: Written (Ported)
     - `[>]` Required Symbols and Predicates (w/ PyBullet tests)
-        * `[>]` Block representation, Using PLOVER as a lib, 
+        * `[Y]` Block representation, Using PLOVER as a lib, 2024-02-26: Pose sampling is now sane!
             - 2024-02-25: Wrote function + lookup instead of a `class`.
             - Should **not** have to write a class for every new object, as this burdens the practitioner and does not support flexibility
             - Rather, provide the system with a way to associate labels with `Volume`s, whether it looks them up or constructs them from observation
-        * `[ ]` Block beliefs @ PyBullet
-            - `{?}` Render belief? Ellipsoid?
+        * `[>]` Block beliefs @ PyBullet
+            - 2024-02-27: I would like to avoid tight coupling with the world present in the current implementation of MAGPIE
+            - `[>]` Render Sample
+                * `[ ]` Transform mesh
+                * `[ ]` Draw with transparency
+            - `[>]` Render belief
+                * `[>]` Position ellipsoid
+                * `[>]` Orientation sticks
         * `[ ]` Object @ Location predicate, with _probability_
             - `[ ]` Indicate in PyBullet
-        * `[ ]` Object On Object predicate
+        * `[ ]` Object On Object predicate, with _probability_
             - `[ ]` Object Above Object predicate
             - `[ ]` Object Touching Object predicate
             - `[ ]` Execute handmade actions and allow system to identify all

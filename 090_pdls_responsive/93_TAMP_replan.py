@@ -646,13 +646,14 @@ class ResponsiveExecutive:
             # 'cea-wastar5' : Very long
             # 'ff-wastar3' : 7-15s
 
-            planner = 'ff-wastar1' #'ff-eager-pref' # 'add-random-lazy' # 'ff-eager-tiebreak' #'goal-lazy' #'ff-eager'
+            # planner = 'ff-eager-pref' #'ff-eager-pref' # 'add-random-lazy' # 'ff-eager-tiebreak' #'goal-lazy' #'ff-eager'
+            # DEFAULT SOLVER
             solution = solve( 
                 self.task, 
                 algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
                 max_skeletons = 50,
                 max_time      = 80.0,
-                unit_costs   = False, 
+                unit_costs   = True, 
                 unit_efforts = False,
                 effort_weight = 10.0, #200.0, #100.0, #50.0, #20.0, # 5.0, # 2.0 #10.0,
                 success_cost = 40,
