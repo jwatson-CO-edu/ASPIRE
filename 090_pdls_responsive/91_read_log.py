@@ -44,7 +44,7 @@ def plot_pass_fail_histo( msPass, msFail, Nbins, plotName ):
 
 
 if __name__ == "__main__":
-    drctry = "./93d_Alt_FD_Params_3/data/cea-wastar1_bt-short"
+    drctry = "./93f_Alt_FD_Params_5/data/default_bt-50-new-new-weights"
     prefix = "TAMP-Loop__2024-02-2"
     data   = get_merged_logs_in_dir_with_prefix( drctry, prefix )
     print( f"There are {data['N']} trials." )

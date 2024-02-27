@@ -69,3 +69,4 @@ _Z_SAFE          =  8.0*_BLOCK_SCALE
 _MIN_SEP         =  0.75*_BLOCK_SCALE # 0.40
 _NON_MOVE_COST   =  0.070
 _K_PLANS_RETAIN  =  5
+_ONE_SAMPLE_SOLN = True
