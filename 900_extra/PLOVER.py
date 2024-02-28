@@ -3,12 +3,14 @@
 ##### Imports #####
 
 ### Standard ###
+import time
 from uuid import uuid4
 from random import random
+from math import isnan
 
 ### Special ###
 import numpy as np
-
+from trimesh.viewer.windowed import SceneViewer
 from scipy.stats import chi2
 
 ### Local ###
@@ -19,7 +21,8 @@ from utils import ( p_lst_has_nan, roll_outcome, get_confusion_matx,
 from components import Volume
 from geometry import sample_pose, diff_norm, pose_covar
 
-
+##### Settings #####
+np.set_printoptions( precision = 5 )
 
 ########## SCENE GRAPH #############################################################################
 
@@ -37,9 +40,36 @@ class SpatialNode:
         self.data     = {} # -------------------------------------------- TBD
         self.incoming = {} # -------------------------------------------- Upstream 
         self.outgoing = {} # -------------------------------------------- Downstream
+        self.t_create = time.time() # ----------------------------------- Time when this object instantiated
+        self.dead     = False # ----------------------------------------- Item not relevant, Mark for cleaning
         # TDB: Give nodes a lifespan so that we avoid collisions with them when sequencing actions?
         # BEGIN TIME?
         # END TIME?
+
+    def add_below( self, objOrListOrDict ):
+        """ Add an object, or a collection of objects, as outgoing nodes, return number added """
+        if isinstance( objOrListOrDict, list ):
+            for obj in objOrListOrDict:
+                self.outgoing[ obj.ID ] = obj
+            return len( objOrListOrDict )
+        if isinstance( objOrListOrDict, dict ):
+            self.outgoing.update( objOrListOrDict )
+            return len( objOrListOrDict )
+        self.outgoing[ objOrListOrDict.ID ] = objOrListOrDict
+        return 1
+
+    # 2024-02-28: For now, allow Python to take care of the actual garbage collection of orphan node memory.
+    #             Avoid GC terminology so as not to confuse users.
+    
+    def clean_downstream( self ):
+        """ Erase all `dead` objects downstream of this node, recursively """
+        delIDs = []
+        for nID, node in self.outgoing.items():
+            node.clean_downstream()
+            if node.dead:
+                delIDs.append( nID )
+        for dID in delIDs:
+            del self.outgoing[ dID ]
         
 
 
@@ -50,6 +80,27 @@ class Object( SpatialNode ):
         """ Set pose Gaussian and geo info """
         super().__init__( label, pose, volume )
         self.ref = ref
+
+    def p_ref( self ):
+        """ Is this symbol connected to the belief that spawned it? """
+        return (self.ref is not None)
+
+    def prob( self ):
+        """ Query the parent belief to calc the current likelihood of this symbol """
+        if self.p_ref():
+            # Calc the joint prob of pose and label, given the current dist of belief that spawned self
+            try:
+                pr = self.ref.prob_density( self ) * self.ref.labels[ self.label ]
+            except Exception as e:
+                print(e)
+                return 0.0
+            return pr
+        else:
+            return 0.0
+        
+    def __repr__( self ):
+        """ Symbol <OBJ@LOC,P> """
+        return f"<Object {self.label} @ {self.pose}, Pr={self.prob()}>"
 
 
 
@@ -283,6 +334,7 @@ class ObjectMemory:
                 retain.append( belief )
             else:
                 belief.remove_all_symbols()
+                belief.dead = True
                 print( f"{str(belief)} DESTROYED!" )
         self.beliefs = retain
 
@@ -370,8 +422,8 @@ class PLOVER:
 
     def __init__( self ):
         """ Instantiate memory and reasoning """
-        self.memory  = ObjectMemory() # Hybrid symbols with pose and class uncert
-        self.samples = list() # ------- Last snapshot of determinized symbols
+        self.memory  = ObjectMemory() # ---------- Hybrid symbols with pose and class uncert
+        self.graph   = SpatialNode( "LabFrame" ) # Root node for global probabilistic scene graph
 
 
     def belief_update( self, objEvidence ):
@@ -383,3 +435,8 @@ class PLOVER:
         """ Wrapper for a consistent scan (non-colliding, prob above thresh) of all objects in memory """
         self.samples = self.memory.scan_consistent()
         return list( self.samples )
+
+
+
+########## GRAPHICS OUTPUT #########################################################################
+

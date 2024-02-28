@@ -1,6 +1,7 @@
 import numpy as np
 from trimesh import Trimesh
 
+
 from geometry import origin_row_vec, row_vec_to_homog
 
 ########## COMPONENTS ##############################################################################
