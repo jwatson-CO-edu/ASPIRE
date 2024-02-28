@@ -205,3 +205,6 @@
         1. Exemplar: Each label can be represented by any of a collection of meshes
         1. Prototype: System can match observations to a parameterized model of the class of labels
         1. Learned: Generative NN model of each label both classifies (and completes) observations
+* `{?}` Idea: Allow disjoint scene graphs
+    - As a temporary solution to the Kidnapped Robot Problem. Can be merged later through exploration?
+    - To allow the solver to work on multiple problems?

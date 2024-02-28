@@ -68,7 +68,9 @@ if __name__ == "__main__":
     world  = PB_BlocksWorld()
     plover = PLOVER()
 
-    for i in range( 50 ):
+    for i in range( 100 ):
         plover.belief_update( world.full_scan_noisy() )
 
     objs = plover.sample_all()
+    for obj in objs:
+        print( obj )
