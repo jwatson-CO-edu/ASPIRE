@@ -645,7 +645,7 @@ class ResponsiveExecutive:
                 self.task, 
                 algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
                 max_skeletons = 50,
-                max_time      = 80.0,
+                max_time      = 40.0,
                 unit_costs   = False, 
                 unit_efforts = False,
                 effort_weight = 10.0, #200.0, #100.0, #50.0, #20.0, # 5.0, # 2.0 #10.0,

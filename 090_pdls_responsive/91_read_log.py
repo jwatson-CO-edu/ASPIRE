@@ -44,8 +44,8 @@ def plot_pass_fail_histo( msPass, msFail, Nbins, plotName ):
 
 
 if __name__ == "__main__":
-    drctry = "./93f_Alt_FD_Params_5/data/default_bt-50-new-new-weights"
-    prefix = "TAMP-Loop__2024-02-2"
+    drctry = "./93d_Alt_FD_Params_3/data/default_bt-30-solv-40-unit-unit"
+    prefix = "TAMP-Loop"
     data   = get_merged_logs_in_dir_with_prefix( drctry, prefix )
     print( f"There are {data['N']} trials." )
     print( f"Success Rate: {data['pass']/data['N']}" )
