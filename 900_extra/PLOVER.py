@@ -1,3 +1,11 @@
+"""
+PLOVER.py
+[P]robabilistic [L]anguage [O]ver [V]olumes for [E]nvironment [R]easoning: Representation + Solver + Planner
+James Watson
+Version 2024-03
+Please see "DEV_PLAN.md" for information, design approach, and suggested applications.
+This software comes with no guarantee or warranty of correctness or functionality; neither explicit nor implied!
+"""
 ########## INIT ####################################################################################
 
 ##### Imports #####
@@ -10,7 +18,8 @@ from math import isnan
 
 ### Special ###
 import numpy as np
-from trimesh.viewer.windowed import SceneViewer
+import trimesh
+# from trimesh.viewer.windowed import SceneViewer
 from scipy.stats import chi2
 
 ### Local ###
@@ -416,6 +425,7 @@ class ObjectMemory:
 
 
 ########## PROBABILISTIC LANGUAGE OVER VOLUMES for ENVIRONMENT REASONING ###########################
+# Please see "DEV_PLAN.md" for information, design approach, and applications
     
 class PLOVER:
     """ Representation + Solver + Planner """
@@ -431,12 +441,28 @@ class PLOVER:
         self.memory.belief_update( objEvidence )
 
 
-    def sample_all( self ):
+    def sample_all( self, eraseOld = True ):
         """ Wrapper for a consistent scan (non-colliding, prob above thresh) of all objects in memory """
         self.samples = self.memory.scan_consistent()
+        # FIXME: ERASE OLD BELIEFS AND SYMBOLS FROM THE SCENE GRAPH, ADD NEW AT LAB FRAME
         return list( self.samples )
 
 
 
 ########## GRAPHICS OUTPUT #########################################################################
 
+class VolumeScene:
+    """ Render PLOVER beliefs and facts to the screen """
+
+    def __init__( self ):
+        """ Set up graphics for the scene graph """
+        self.scene = trimesh.Scene()
+
+    def add_node( self, node ):
+        """ Add the determinized/mean volume to the scene to be rendered """
+        self.scene.add_geometry( node.volume )
+
+    def show( self ):
+        """ Create a `trimesh` window and render the scene """
+        # https://gist.github.com/wkentaro/a2e92f6e52c418080c00ef8992c46e37
+        # FIXME, START HERE: SHOW

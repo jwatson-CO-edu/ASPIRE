@@ -1,3 +1,5 @@
+from random import random
+
 import numpy as np
 from trimesh import Trimesh
 
@@ -17,6 +19,13 @@ class Volume:
     def set_pose( self, rowVec ):
         """ Set the pose of the mesh """
         self.mesh.apply_transform( row_vec_to_homog( rowVec ) )
+
+
+    def solid_color( self, colorFloatVec ):
+        """ Color the mesh a uniform color """
+        if not isinstance( colorFloatVec, (list, np.ndarray,) ):
+            colorFloatVec = [random() for _ in range(3)]
+        self.mesh.visual.face_colors( colorFloatVec )
 
 
 class ObjectReading:

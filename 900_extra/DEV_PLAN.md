@@ -171,7 +171,7 @@
 - `[ ]` Market PLOVER: Share what is exciting and true in a concise way
 
 # Cool Features (DANGER: NON-MVP)
-### Please, please do not attempt these if their pursuit would in any way jeopardize your education and/or career!  
+### Please, please do not attempt these! It is likely their pursuit would jeopardize your education and/or career!  
 ### They are **not** required for the most basic Minimum Viable Program implementation of the PLOVER concept!
 * `{?}` Render Predicates in 3D
 * `{?}` Render Plan in 3D
@@ -193,6 +193,12 @@
     - Multiple robots
     - Lazy, hierarchical planning at increasing granularity, planned in parallel
     - Assign entire dynamic regions of space their own planning process and/or robot
+* `{?}` Idea: Allow disjoint scene graphs
+    - As a temporary solution to the Kidnapped Robot Problem. Can be merged later through exploration?
+    - To allow the solver to work on multiple problems?
+
+# Future Work (EXTREME DANGER: CAREER THREATS)
+* How to integrate Configuration Space representations?
 * `{?}` Idea: Learn probabilistic relationships between classes of objects so that we can begin searching for missing items based on scene information that we are confident in
 * `{?}` Idea: Pair semantic regions with (likely) optimizers for "good" sampling in that region, e.g. Driving thru sandy terrain region should MP with kinodynamic RRT by default
 * `{?}` Idea: Suggest grasp planners for object types
@@ -205,6 +211,5 @@
         1. Exemplar: Each label can be represented by any of a collection of meshes
         1. Prototype: System can match observations to a parameterized model of the class of labels
         1. Learned: Generative NN model of each label both classifies (and completes) observations
-* `{?}` Idea: Allow disjoint scene graphs
-    - As a temporary solution to the Kidnapped Robot Problem. Can be merged later through exploration?
-    - To allow the solver to work on multiple problems?
+* `{?}` Idea: Optimize samples in the context of the current problem as background process(es), Cache results
+    - Robot motion roadmap as a network of scored configs
