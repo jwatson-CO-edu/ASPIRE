@@ -21,8 +21,8 @@ class Volume:
         self.mesh.apply_transform( row_vec_to_homog( rowVec ) )
 
 
-    def solid_color( self, colorFloatVec ):
-        """ Color the mesh a uniform color """
+    def set_color( self, colorFloatVec ):
+        """ Color the mesh a uniform color, NOTE: Both 3 and 4 length (alpha) arrays are accepted """
         if not isinstance( colorFloatVec, (list, np.ndarray,) ):
             colorFloatVec = [random() for _ in range(3)]
         self.mesh.visual.face_colors( colorFloatVec )

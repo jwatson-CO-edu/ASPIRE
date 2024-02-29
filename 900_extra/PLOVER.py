@@ -444,12 +444,17 @@ class PLOVER:
     def sample_all( self, eraseOld = True ):
         """ Wrapper for a consistent scan (non-colliding, prob above thresh) of all objects in memory """
         self.samples = self.memory.scan_consistent()
-        # FIXME: ERASE OLD BELIEFS AND SYMBOLS FROM THE SCENE GRAPH, ADD NEW AT LAB FRAME
+        if eraseOld:
+            self.graph.clean_downstream()
         return list( self.samples )
 
 
 
 ########## GRAPHICS OUTPUT #########################################################################
+"""
+##### Sources #####
+* https://gist.github.com/wkentaro/a2e92f6e52c418080c00ef8992c46e37
+"""
 
 class VolumeScene:
     """ Render PLOVER beliefs and facts to the screen """
@@ -457,6 +462,7 @@ class VolumeScene:
     def __init__( self ):
         """ Set up graphics for the scene graph """
         self.scene = trimesh.Scene()
+        self.scene.add_geometry( trimesh.creation.axis() )
 
     def add_node( self, node ):
         """ Add the determinized/mean volume to the scene to be rendered """
@@ -464,5 +470,7 @@ class VolumeScene:
 
     def show( self ):
         """ Create a `trimesh` window and render the scene """
-        # https://gist.github.com/wkentaro/a2e92f6e52c418080c00ef8992c46e37
-        # FIXME, START HERE: SHOW
+        self.scene.show()
+
+    def add_object_pose_belief( self, objBelief ):
+        """ Display a transparent ellipsoid representing a distribution of poses """
