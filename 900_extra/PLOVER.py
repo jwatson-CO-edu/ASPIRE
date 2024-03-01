@@ -49,6 +49,7 @@ class SpatialNode:
         self.data     = {} # -------------------------------------------- TBD
         self.incoming = {} # -------------------------------------------- Upstream 
         self.outgoing = {} # -------------------------------------------- Downstream
+        self.samples  = [] # -------------------------------------------- Collection of samples pertinent to this context
         self.t_create = time.time() # ----------------------------------- Time when this object instantiated
         self.dead     = False # ----------------------------------------- Item not relevant, Mark for cleaning
         # TDB: Give nodes a lifespan so that we avoid collisions with them when sequencing actions?
@@ -454,7 +455,18 @@ class PLOVER:
 """
 ##### Sources #####
 * https://gist.github.com/wkentaro/a2e92f6e52c418080c00ef8992c46e37
+* https://www.flexcompute.com/tidy3d/examples/notebooks/CreatingGeometryUsingTrimesh/
 """
+
+
+def get_ellipsoid_mesh( xRad, yRad, zRad ):
+    """ Deform an icosphere to form an ellipsoid """
+    rtnMesh = trimesh.creation.icosphere( radius = 1.0 )
+    for vertex in rtnMesh.vertices:
+        print( vertex )
+        # FIXME, START HERE: https://github.com/jwatson-CO-edu/nanoverse/blob/main/C%2B%2B/Raylib/32_ellipsoid.cpp#L41
+
+
 
 class VolumeScene:
     """ Render PLOVER beliefs and facts to the screen """
@@ -474,3 +486,4 @@ class VolumeScene:
 
     def add_object_pose_belief( self, objBelief ):
         """ Display a transparent ellipsoid representing a distribution of poses """
+        belMesh = create_ellipsoid(a=1.3, b=0.4, c=0.3, u_segments=25, v_segments=25)
