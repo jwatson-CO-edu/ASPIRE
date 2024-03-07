@@ -25,7 +25,7 @@ class Volume:
         """ Color the mesh a uniform color, NOTE: Both 3 and 4 length (alpha) arrays are accepted """
         if not isinstance( colorFloatVec, (list, np.ndarray,) ):
             colorFloatVec = [random() for _ in range(3)]
-        self.mesh.visual.face_colors( colorFloatVec )
+        self.mesh.visual.face_colors = colorFloatVec
 
 
 class ObjectReading:

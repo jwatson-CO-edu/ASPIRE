@@ -462,10 +462,20 @@ class PLOVER:
 def get_ellipsoid_mesh( xRad, yRad, zRad ):
     """ Deform an icosphere to form an ellipsoid """
     rtnMesh = trimesh.creation.icosphere( radius = 1.0 )
-    for vertex in rtnMesh.vertices:
-        print( vertex )
-        # FIXME, START HERE: https://github.com/jwatson-CO-edu/nanoverse/blob/main/C%2B%2B/Raylib/32_ellipsoid.cpp#L41
-
+    nuVerts = np.zeros( rtnMesh.vertices.shape )
+    for i, vertex in enumerate( rtnMesh.vertices ):
+        x = vertex[0]
+        y = vertex[1]
+        z = vertex[2]
+        phi   = np.arctan2( np.sqrt( x**2 + y**2 ), z )
+        elScl = np.sin( phi )
+        zScl  = np.cos( phi )
+        # Get the angle in the XY-plane
+        theta = np.arctan2( y, x )
+        nuVerts[i,:] = [ elScl*xRad*np.cos( theta ), elScl*yRad*np.sin( theta ), zScl*zRad ]
+        # nuVerts[i,:] = [ elScl*xRad*x, elScl*yRad*y, zScl*z ]
+    rtnMesh.vertices = nuVerts
+    return rtnMesh
 
 
 class VolumeScene:
@@ -484,6 +494,15 @@ class VolumeScene:
         """ Create a `trimesh` window and render the scene """
         self.scene.show()
 
-    def add_object_pose_belief( self, objBelief ):
-        """ Display a transparent ellipsoid representing a distribution of poses """
-        belMesh = create_ellipsoid(a=1.3, b=0.4, c=0.3, u_segments=25, v_segments=25)
+    # def add_object_pose_belief( self, objBelief ):
+    #     """ Display a transparent ellipsoid representing a distribution of poses """
+    #     belMesh = create_ellipsoid(a=1.3, b=0.4, c=0.3, u_segments=25, v_segments=25)
+        
+########## MAIN ####################################################################################
+if __name__ == "__main__":
+    scene = trimesh.Scene()
+    scene.add_geometry( trimesh.creation.axis() )
+    mesh = get_ellipsoid_mesh(1,2,3)
+    mesh.visual.face_colors = [0,0,1,0.45]
+    scene.add_geometry( mesh )
+    scene.show()
