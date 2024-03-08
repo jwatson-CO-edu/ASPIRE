@@ -28,7 +28,7 @@ from env_config import ( _PRIOR_POS_S, _PRIOR_ORN_S, _NULL_NAME, _CONFUSE_PROB, 
 from utils import ( p_lst_has_nan, roll_outcome, get_confusion_matx,
                     multiclass_Bayesian_belief_update )
 from components import Volume
-from geometry import sample_pose, diff_norm, pose_covar
+from geometry import sample_pose, diff_norm, pose_covar, row_vec_to_homog
 
 ##### Settings #####
 np.set_printoptions( precision = 5 )
@@ -81,6 +81,9 @@ class SpatialNode:
         for dID in delIDs:
             del self.outgoing[ dID ]
         
+    def update_volume_pose( self ):
+        """ Update the `Volume` pose to match current object pose """
+        self.volume.mesh.apply_transform( row_vec_to_homog( self.pose ) )
 
 
 class Object( SpatialNode ):
@@ -494,9 +497,18 @@ class VolumeScene:
         """ Create a `trimesh` window and render the scene """
         self.scene.show()
 
-    # def add_object_pose_belief( self, objBelief ):
-    #     """ Display a transparent ellipsoid representing a distribution of poses """
-    #     belMesh = create_ellipsoid(a=1.3, b=0.4, c=0.3, u_segments=25, v_segments=25)
+    def add_symbol( self, obj ):
+        """ Add a determinized object to the scene """
+        self.scene.add_geometry( obj.volume.mesh )
+
+    def add_object_pose_belief( self, objBelief ):
+        """ Display a transparent ellipsoid representing a distribution of poses """
+        belMesh = get_ellipsoid_mesh( objBelief.stddev[0], objBelief.stddev[1], objBelief.stddev[2] )
+        faceClr = list( objBelief.volume.mesh.visual.face_colors[:] )
+        faceClr[-1] = 0.5
+        belMesh.visual.face_colors = faceClr
+        self.scene.add_geometry( belMesh )
+
         
 ########## MAIN ####################################################################################
 if __name__ == "__main__":
