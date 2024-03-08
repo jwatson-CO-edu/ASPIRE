@@ -1,7 +1,7 @@
 ########## DEV PLAN ################################################################################
 """
 ##### Repair #####
-[ ] Begin with some alternate setdown poses populated
+[N] Begin with some alternate setdown poses populated, 2024-03-08: Did NOT result in better performance
 [ ] NEEDED: A way to detect when the solver has gone braindead!
 """
 
@@ -514,10 +514,10 @@ class ResponsiveExecutive:
         for body in _ACTUAL_NAMES:
             self.facts.append( ('Graspable', body) )
 
-        ## Populate some Open Spots ##
-        spots = self.get_N_open_spots( 3 )
-        for spot in spots:
-            self.facts.append( ('Waypoint', self.object_from_label_pose( _WP_NAME, spot ),) )
+        # ## Populate some Open Spots ##
+        # spots = self.get_N_open_spots( 3 )
+        # for spot in spots:
+        #     self.facts.append( ('Waypoint', self.object_from_label_pose( _WP_NAME, spot ),) )
 
         print( f"### Initial Symbols ###" )
         for sym in self.facts:
