@@ -15,7 +15,7 @@ import trimesh
 ### Local ###
 from components import Volume
 from env_config import _BLOCK_SCALE
-from PLOVER import PLOVER
+from PLOVER import PLOVER, VolumeScene
 from PB_BlocksWorld import PB_BlocksWorld
 
 
@@ -67,10 +67,15 @@ if __name__ == "__main__":
 
     world  = PB_BlocksWorld()
     plover = PLOVER()
+    scene  = VolumeScene()
 
     for i in range( 100 ):
         plover.belief_update( world.full_scan_noisy() )
 
     objs = plover.sample_all()
     for obj in objs:
-        print( obj )
+        obj.volume = get_volume_by_label( obj.label, meshLookup )
+
+    
+
+    scene.show()
