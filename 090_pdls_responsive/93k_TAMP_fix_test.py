@@ -682,6 +682,10 @@ class ResponsiveExecutive:
         plan, cost, evaluations = solution
         if (plan is not None) and len( plan ):
             display_PDLS_plan( plan )
+            print( type( plan ) )
+            print( type( cost ) )
+            print( type( evaluations ) )
+            exit()
             self.currPlan = plan
             self.action   = get_BT_plan_until_block_change( plan, self.world )
         else:
