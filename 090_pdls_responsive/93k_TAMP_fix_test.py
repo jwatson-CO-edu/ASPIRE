@@ -97,6 +97,9 @@ class ResponsiveExecutive:
         self.reset_beliefs()
         self.reset_state()
         self.logger = DataLogger()
+        # DEATH MONITOR
+        self.noSoln =  0
+        self.nonLim = 10
 
 
     ##### Stream Helpers ##################################################
@@ -677,19 +680,20 @@ class ResponsiveExecutive:
             self.status = Status.FAILURE
             print_exc()
             solution = (None, None, None)
-            # print( "\n\n\n" )
+            self.noSoln += 1 # DEATH MONITOR
 
         plan, cost, evaluations = solution
         if (plan is not None) and len( plan ):
             display_PDLS_plan( plan )
-            print( type( plan ) )
-            print( type( cost ) )
-            print( type( evaluations ) )
-            print( dir( evaluations ) )
-            exit()
+            # print( type( plan ) )
+            # print( type( cost ) )
+            # print( type( evaluations ) )
+            # exit()
             self.currPlan = plan
             self.action   = get_BT_plan_until_block_change( plan, self.world )
+            self.noSoln = 0 # DEATH MONITOR
         else:
+            self.noSoln += 1 # DEATH MONITOR
             self.logger.log_event( "NO SOLUTION" )
             self.status = Status.FAILURE
 
@@ -739,6 +743,11 @@ class ResponsiveExecutive:
 
             print( f"Phase 3, {self.status} ..." )
             self.phase_3_Plan_Task()
+
+            # DEATH MONITOR
+            if self.noSoln >= self.nonLim:
+                self.logger.log_event( "SOLVER BRAINDEATH", f"Iteration {i+1}: Solver has failed {self.noSoln} time in a row!" )
+                break
 
             if self.p_failed():
                 print( f"LOOP, {self.status} ..." )
