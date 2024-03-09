@@ -685,6 +685,7 @@ class ResponsiveExecutive:
             print( type( plan ) )
             print( type( cost ) )
             print( type( evaluations ) )
+            print( dir( evaluations ) )
             exit()
             self.currPlan = plan
             self.action   = get_BT_plan_until_block_change( plan, self.world )
