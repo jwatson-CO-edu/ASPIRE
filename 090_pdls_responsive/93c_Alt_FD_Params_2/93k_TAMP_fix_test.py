@@ -1,77 +1,8 @@
 ########## DEV PLAN ################################################################################
 """
-##### Execution #####
-[>] Replanning Version
-    [Y] Working Demo @ PyBullet
-        [Y] Plan open loop, 2024-02-19: TAMP!
-        [Y] Execute one action, 2024-02-19: Execute 3 actions open loop to achieve a block state change
-        [Y] Replan, 2024-02-19: TAMP!
-        [Y] Loop until done or iter limit reached, 2024-02-19: TAMP!
-    [>] Time Tests
-        [Y] Shortcutting Pose Update, 2024-02-22: Tested!
-            * I suspect the "Extensive Pose Update" version was causing long runtimes, so testing this one first
-        [Y] Extensive Pose Update, 2024-02-22: Tested!
-        [>] Other planning settings that weren't absolute trash
-            [Y] Test w/ New Action Weights
-                [Y] ff-eager-tiebreak, 2024-02-25: Tested!
-                [Y] ff-astar, 2024-02-25: Tested!
-                [Y] ff-wastar3, 2024-02-25: Tested!
-                [Y] ff-eager-pref, 2024-02-25: Tested!
-                [Y] cea-wastar3, 2024-02-25: Tested!
-                [Y] cea-wastar1, 2024-02-25: Tested!
-                [Y] cea-wastar4, 2024-02-25: Tested!
-                [Y] ff-wastar1, 2024-02-25: Tested!
-                [Y] dijkstra, 2024-02-25: Tested!
-                [Y] ff-wastar4, 2024-02-25: Tested!
-                [Y] ff-eager, 2024-02-25: Tested!
-                [Y] cea-wastar2, 2024-02-25: Tested!
-                [Y] ff-ehc, 2024-02-25: Terrible!
-                [Y] max-astar, 2024-02-25: Terrible!
-                [Y] goal-lazy, 2024-02-25: Terrible!
-                [Y] Alternate Pose Update, 2024-02-25: Worse than shortcutting update!
-            [ ] Test w/ BT Timeout
-                [ ] Default Solver w/ New Weights
-                [ ] ff-eager-tiebreak
-                [ ] ff-astar
-                [ ] ff-wastar3
-                [ ] ff-eager-pref
-                [ ] cea-wastar3
-                [ ] cea-wastar1
-                [ ] cea-wastar4
-                [ ] ff-wastar1
-                [ ] dijkstra
-                [ ] ff-wastar4
-                [ ] ff-eager
-                [ ] cea-wastar2
-    [ ] Experimental Data
-        [Y] What do I need to create a Sankey Graph? Is there a prettier one than PLT?, 2024-02-19: Will has the link
-        [ ] Sankey Graph of sequence incidents during each episode
-            [ ] Makespan on X-axis?
-[>] Responsive Version
-    [>] Working Demo @ PyBullet
-        [Y] Phase 1, 2024-02-23: Nice!
-            [Y] Remove memory reset, 2024-02-23: Removed!
-            [Y] Perform batch of updates, 2024-02-23: Already doing this!
-        [Y] Phase 2, 2024-02-23: Nice!
-            [Y] A consistent scan should not contain beliefs below trash threshold, 2024-02-23: Trash disposed!
-        [>] Phase 3
-            * See Below
-        [ ] Phase 4
-            [ ] Per Tick
-                [ ] Update beliefs
-                [ ] Check that the current plan is still valid
-                    [ ] If not, fail action
-            [ ] Continue acting if the placement occurred correctly
-    [ ] Experimental Data
-[ ] Data Analysis
-[ ] PROPOSAL
-
-[ ] Improvements
-    [ ] Monitor for solver braindeath and give up
-    [ ] Seed workspace with some alt placements
-
-
-[ ] Trial-and-Error Rescheduling Responsive Version
+##### Repair #####
+[N] Begin with some alternate setdown poses populated, 2024-03-08: Did NOT result in better performance
+[ ] NEEDED: A way to detect when the solver has gone braindead!
 """
 
 
@@ -85,7 +16,6 @@ import sys, time, math
 now = time.time
 from traceback import print_exc, format_exc
 from pprint import pprint
-from math import isnan
 
 ### Special ###
 import numpy as np
@@ -95,7 +25,8 @@ from py_trees.common import Status
 ### Local ###
 
 ## PDDLStream ##
-sys.path.append( "../pddlstream/" )
+# sys.path.append( "../pddlstream/" )
+sys.path.append( "../../pddlstream/" )
 from pddlstream.algorithms.meta import solve
 from pddlstream.language.generator import from_gen_fn, from_test
 from pddlstream.utils import read, INF, get_file_path
@@ -103,23 +34,22 @@ from pddlstream.language.constants import print_solution, PDDLProblem
 
 ## MAGPIE ##
 sys.path.append( "../" )
+sys.path.append( "../../" )
 # from magpie.poses import translation_diff
 
 from utils import ( row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec, diff_norm, closest_dist_Q_to_segment_AB,
                     DataLogger, )
 
 from env_config import ( _GRASP_VERT_OFFSET, _GRASP_ORNT_XYZW, _NULL_NAME, _ACTUAL_NAMES, _MIN_X_OFFSET,
-                         _BLOCK_SCALE, _CLOSEST_TO_BASE, _ACCEPT_POSN_ERR, _MIN_SEP, _Z_SAFE,
-                         _N_POSE_UPDT, _WP_NAME, _SAMPLE_DET, _PLAN_THRESH, _K_PLANS_RETAIN )
+                         _NULL_THRESH, _BLOCK_SCALE, _CLOSEST_TO_BASE, _ACCEPT_POSN_ERR, _MIN_SEP, _Z_SAFE,
+                         _N_POSE_UPDT, _WP_NAME, _SAMPLE_DET )
 
-from PB_BlocksWorld import PB_BlocksWorld
+from PB_BlocksWorld import PB_BlocksWorld, rand_table_pose
 from symbols import Object, Path
 
 from beliefs import ObjectMemory
-from actions import ( Plan, display_PDLS_plan, BT_Runner, get_ith_BT_action_from_PDLS_plan, Place, Stack, 
-                      get_BT_plan_from_PDLS_plan, )
-from Cheap_PDDL_Parser import ( pddl_as_list, get_action_defn, get_action_param_names, 
-                                get_action_precond_list, get_action_postcond_list )
+from actions import Plan, display_PDLS_plan, BT_Runner, get_ith_BT_action_from_PDLS_plan, Place, Stack
+
 
 
 ########## HELPER FUNCTIONS ########################################################################
@@ -138,8 +68,6 @@ def get_BT_plan_until_block_change( pdlsPlan, world ):
     rtnPlan = Plan()
     rtnPlan.add_children( rtnBTlst )
     return rtnPlan
-
-
 
 ########## EXECUTIVE (THE METHOD) ##################################################################
 
@@ -161,8 +89,6 @@ class ResponsiveExecutive:
         self.facts    = list()
         self.goal     = tuple()
         self.task     = None
-        self.plans    = [] # PriorityQueue()
-        self.enquPlan = None
         self.currPlan = None
         self.action   = None
 
@@ -173,63 +99,9 @@ class ResponsiveExecutive:
         self.reset_beliefs()
         self.reset_state()
         self.logger = DataLogger()
-        self.domain = pddl_as_list( "domain.pddl" )
-
-
-    ##### PDDL ############################################################
-        
-    def get_action_pddl( self, actionName ):
-        """ Get the PDDL for the specified action """
-        return get_action_defn( self.domain, actionName )
-    
-
-    def gen_conds_from_plan( self, pdlsPlan ):
-        """ Recover grounded pre and postconditions from the PDDLStream plan """
-        planConds = list()
-        for action in pdlsPlan:
-            actName  = action.name
-            actArgs  = action.args
-            actPddl  = self.get_action_pddl( actName )
-            argNams  = get_action_param_names( actPddl )
-            argDict  = {}
-            for i, name in enumerate( argNams ):
-                argDict[ name ] = actArgs[i]
-
-            actPreC = get_action_precond_list( actPddl )
-            actPreG = list()
-            for preC in actPreC:
-                cond = list()
-                for elem in preC:
-                    if elem in argDict:
-                        cond.append( argDict[ elem ] )
-                    else:
-                        cond.append( elem )
-                actPreG.append( cond )
-            actPstC = get_action_postcond_list( actPddl )
-            actPstG = list()
-            for pstC in actPstC:
-                cond = list()
-                for elem in pstC:
-                    if elem in argDict:
-                        cond.append( argDict[ elem ] )
-                    else:
-                        cond.append( elem )
-                actPstG.append( cond )
-            planConds.append( [argDict, actPreG, actPstG,] )
-        return planConds
-            
-
-    def get_grounded_BT_from_PDLS_plan( self, pdlsPlan ):
-        """ Get a full BT plan, including pre and postconds, from the PDDLStream plan """
-        prePstLst = self.gen_conds_from_plan( pdlsPlan )
-        fullPlnBT = get_BT_plan_from_PDLS_plan( pdlsPlan, self.world )
-        for i, actionBT in enumerate( fullPlnBT ):
-            args_, preCs_, pstCs_ = prePstLst[i]
-            actionBT.args  = args_ # NOTE: This is a change from `list` to `dict`, NOT CLEAN
-            actionBT.preCs = preCs_
-            actionBT.pstCs = pstCs_
-        return fullPlnBT
-        
+        # DEATH MONITOR
+        self.noSoln =  0
+        self.nonLim = 10
 
 
     ##### Stream Helpers ##################################################
@@ -598,6 +470,29 @@ class ResponsiveExecutive:
                     return True
         return False
     
+    def p_open_true( self, pose ):
+        posn , _    = row_vec_to_pb_posn_ornt( pose )
+        nuSym = self.world.full_scan_true()
+        for sym in nuSym:
+            symPosn, _ = row_vec_to_pb_posn_ornt( sym.pose )
+            if diff_norm( posn, symPosn ) < ( _MIN_SEP ):
+                return False
+        return True
+    
+
+    def get_N_open_spots( self, N ):
+        """ Find N spots on the table where we are free to place blocks """
+        spots = []
+        for _ in range(N):
+            posn, ornt = rand_table_pose()
+            pose = pb_posn_ornt_to_row_vec( posn, ornt )
+            while not self.p_open_true( pose ):
+                posn, ornt = rand_table_pose()
+                pose = pb_posn_ornt_to_row_vec( posn, ornt )
+            spots.append( pose )
+        return spots
+
+    
     def get_init_predicates( self ):
         """ Get the goal predicates and the predicates that are known before runtime """
 
@@ -623,6 +518,11 @@ class ResponsiveExecutive:
 
         for body in _ACTUAL_NAMES:
             self.facts.append( ('Graspable', body) )
+
+        # ## Populate some Open Spots ##
+        # spots = self.get_N_open_spots( 3 )
+        # for spot in spots:
+        #     self.facts.append( ('Waypoint', self.object_from_label_pose( _WP_NAME, spot ),) )
 
         print( f"### Initial Symbols ###" )
         for sym in self.facts:
@@ -666,8 +566,10 @@ class ResponsiveExecutive:
     def pddlstream_from_problem( self ):
         """ Set up a PDDLStream problem with the UR5 """
 
-        domain_pddl = read(get_file_path(__file__, 'domain.pddl'))
-        stream_pddl = read(get_file_path(__file__, 'stream.pddl'))
+        # domain_pddl = read(get_file_path(__file__, 'domain.pddl'))
+        # stream_pddl = read(get_file_path(__file__, 'stream.pddl'))
+        domain_pddl = read('../domain.pddl')
+        stream_pddl = read('../stream.pddl')
 
         constant_map = {}
     
@@ -732,7 +634,6 @@ class ResponsiveExecutive:
             self.facts.extend( self.get_met_goal_predicates_noisy( self.goal, self.symbols ) )
 
 
-
     def phase_3_Plan_Task( self ):
         """ Attempt to solve the symbolic problem """
 
@@ -758,21 +659,22 @@ class ResponsiveExecutive:
             # 'cea-wastar5' : Very long
             # 'ff-wastar3' : 7-15s
 
-            planner = 'ff-eager-pref' #'ff-eager-pref' # 'add-random-lazy' # 'ff-eager-tiebreak' #'goal-lazy' #'ff-eager'
+            # planner = 'ff-eager-pref' #'ff-eager-pref' # 'add-random-lazy' # 'ff-eager-tiebreak' #'goal-lazy' #'ff-eager'
+            # DEFAULT SOLVER
             solution = solve( 
                 self.task, 
                 algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
                 max_skeletons = 50,
                 max_time      = 80.0,
-                unit_costs   = False, 
-                unit_efforts = False,
+                unit_costs   = True, 
+                unit_efforts = True,
                 effort_weight = 10.0, #200.0, #100.0, #50.0, #20.0, # 5.0, # 2.0 #10.0,
                 success_cost = 40,
                 initial_complexity = 1,
                 complexity_step = 1,
                 search_sample_ratio = 1/1000, #1/1500, #1/5, #1/1000, #1/750 # 1/1000, #1/2000 #500, #1/2, # 1/500, #1/200, #1/10, #2, # 25 #1/25
                 reorder = False, # Setting to false bare impacts sol'n time
-                planner = planner
+                # planner = planner
                 # stream_info = stream_info,
             )
             # print( "Solver has completed!\n\n\n" )
@@ -782,67 +684,29 @@ class ResponsiveExecutive:
             self.status = Status.FAILURE
             print_exc()
             solution = (None, None, None)
-            # print( "\n\n\n" )
+            self.noSoln += 1 # DEATH MONITOR
 
         plan, cost, evaluations = solution
         if (plan is not None) and len( plan ):
-            self.enquPlan = plan
+            display_PDLS_plan( plan )
+            # print( type( plan ) )
+            # print( type( cost ) )
+            # print( type( evaluations ) )
+            # exit()
+            self.currPlan = plan
+            self.action   = get_BT_plan_until_block_change( plan, self.world )
+            self.noSoln = 0 # DEATH MONITOR
         else:
+            self.noSoln += 1 # DEATH MONITOR
             self.logger.log_event( "NO SOLUTION" )
+            self.status = Status.FAILURE
 
         self.logger.log_event( "End Solver" )
 
-
-    def phase_4_Prioritize( self ):
-        """ Recompute ranking for all plans in the queue and sort """
-        
-        """
-        ### PHASE 4 DEV PLAN ###
-        [>] Planner should add a plan to the queue
-            [Y] Recompute all priorities, 2024-02-26: "87A" is the example
-            [ ] Decide whether the current plan is valid
-                [ ] If not pop plan with least cost
-                [ ] For each action
-                    [ ] Check action postconditions
-                    [ ] Check action preconditions
-        
-        ### THESIS VERSION ###
-        [?] Plan probability should come from a rollout?
-        """
-
-        ##### Recompute All Priorities, Sort, and Cull #####
-
-        ## Grade Plans ##
-        savPln = []
-        # for m, plan in enumerate( self.plans ):
-        for plan in self.plans:
-            prob  = plan.least_prob() # WARNING: THIS SEEMS WRONG
-            score = plan.score()
-            plan.rank = score
-            # Destroy (Degraded Plans || Plans with NaN Priority) #
-            if (prob > _PLAN_THRESH) and (not isnan( score )):
-                savPln.append( plan )
-            else:
-                plan.detach_symbols()
-
-        ## Enqueue Plans ##    
-        savPln.sort()
-        self.plans = savPln[:_K_PLANS_RETAIN]
-        for badPlan in savPln[_K_PLANS_RETAIN:]:
-            badPlan.detach_symbols()
-
-        ##### Decide Whether the Current Plan is Valid #####
-        prob = self.currPlan.least_prob() # WARNING: THIS SEEMS WRONG
-        if prob < _PLAN_THRESH:
-            self.logger.log_event( "Current plan is unlikely", prob )
-            self.currPlan = None
-        if # FIXME, START HERE: CHECK IF THE PLAN BT FAILED, DO NOT LOG, THAT HAPPENED LAST ITER
-
-
-    def phase_5_Execute_Action( self ):
+    def phase_4_Execute_Action( self ):
         """ Attempt to execute the first action in the symbolic plan """
         
-        btr = BT_Runner( self.action, self.world, 20.0 )
+        btr = BT_Runner( self.action, self.world, 20.0, 30.0 )
         btr.setup_BT_for_running()
 
         while not btr.p_ended():
@@ -858,7 +722,6 @@ class ResponsiveExecutive:
     def solve_task( self, maxIter = 100 ):
         """ Solve the goal """
         self.reset_state()
-        self.reset_beliefs() 
         i = 0
 
         print( "\n\n\n##### TAMP BEGIN #####\n" )
@@ -872,7 +735,7 @@ class ResponsiveExecutive:
             i += 1
 
             print( f"Phase 1, {self.status} ..." )
-            
+            self.reset_beliefs() # WARNING: REMOVE FOR RESPONSIVE
             self.phase_1_Perceive( 3*_N_POSE_UPDT+1 )
 
             print( f"Phase 2, {self.status} ..." )
@@ -884,6 +747,11 @@ class ResponsiveExecutive:
 
             print( f"Phase 3, {self.status} ..." )
             self.phase_3_Plan_Task()
+
+            # DEATH MONITOR
+            if self.noSoln >= self.nonLim:
+                self.logger.log_event( "SOLVER BRAINDEATH", f"Iteration {i+1}: Solver has failed {self.noSoln} time in a row!" )
+                break
 
             if self.p_failed():
                 print( f"LOOP, {self.status} ..." )
