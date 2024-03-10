@@ -72,10 +72,14 @@ if __name__ == "__main__":
     for i in range( 100 ):
         plover.belief_update( world.full_scan_noisy() )
 
-    objs = plover.sample_all()
-    for obj in objs:
-        obj.volume = get_volume_by_label( obj.label, meshLookup )
+    # objs = plover.sample_all()
+    # for obj in objs:
+    #     obj.volume = get_volume_by_label( obj.label, meshLookup )
+    #     obj.update_volume_pose()
+    #     scene.add_symbol( obj )
 
-    
+    for bel in plover.memory.beliefs:
+        bel.volume = get_volume_by_label( bel.most_likely_label(), meshLookup )
+        scene.add_object_pose_belief( bel )
 
     scene.show()

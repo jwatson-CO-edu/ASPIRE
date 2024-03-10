@@ -84,8 +84,9 @@
             - 2024-02-27: I would like to avoid tight coupling with the world present in the current implementation of MAGPIE
             - `[>]` Render Sample
                 * `[ ]` Transform mesh
-                * `[ ]` Draw with transparency
+                * `[ ]` Render meshes from a complete scan
             - `[>]` Render belief
+                * `[ ]` Draw with transparency
                 * `[>]` Position ellipsoid
                 * `[>]` Orientation sticks
         * `[ ]` Object @ Location predicate, with _probability_
@@ -158,7 +159,7 @@
     - `[ ]` Q: What is the SIMPLEST way to model interaction with a granular medium?  Is sand an object? 
         * `{?}` Idea: Terrain is a special object with a volumetric representation that expands with problem context 
 
-## Show Them, Show Them All (They Called Me Mad)
+## Demo (SUSPENDED)
 ### You may not be able to convince your committee this is your Thesis!
 - `[ ]` Assess Graduation Risk
 - `[ ]` Refine PLOVER slide deck (above), **WARNING**: Having this as a backup proposal is mostly a distracting dream for entertainment!
