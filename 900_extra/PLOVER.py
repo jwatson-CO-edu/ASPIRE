@@ -24,7 +24,7 @@ from scipy.stats import chi2
 
 ### Local ###
 from env_config import ( _PRIOR_POS_S, _PRIOR_ORN_S, _NULL_NAME, _CONFUSE_PROB, _NULL_THRESH, 
-                         _EXIST_THRESH, _MIN_SEP, )
+                         _EXIST_THRESH, _MIN_SEP, _NULL_NAME, )
 from utils import ( p_lst_has_nan, roll_outcome, get_confusion_matx,
                     multiclass_Bayesian_belief_update )
 from components import Volume
@@ -292,6 +292,16 @@ class ObjectBelief( SpatialNode ):
             self.labels[ name ] = updatB[i]
 
 
+    def most_likely_label( self ):
+        """ Return the label that is currently most likely """
+        rtnLbl = _NULL_NAME
+        probMx = 0.0
+        for label, prob in self.labels.items():
+            if prob > probMx:
+                rtnLbl = label
+        return rtnLbl
+
+########## UPDATES && BOOKKEEPPING #################################################################
 
 class ObjectMemory:
     """ Attempt to maintain recent and constistent object beliefs based on readings from the vision system """
@@ -487,7 +497,10 @@ class VolumeScene:
     def __init__( self ):
         """ Set up graphics for the scene graph """
         self.scene = trimesh.Scene()
-        self.scene.add_geometry( trimesh.creation.axis() )
+        self.scene.add_geometry( trimesh.creation.axis(
+            origin_size = 0.010,
+            axis_length = 0.030
+        ) )
 
     def add_node( self, node ):
         """ Add the determinized/mean volume to the scene to be rendered """
@@ -503,10 +516,14 @@ class VolumeScene:
 
     def add_object_pose_belief( self, objBelief ):
         """ Display a transparent ellipsoid representing a distribution of poses """
+        print( f"Ellipsoid Scale: {[objBelief.stddev[0], objBelief.stddev[1], objBelief.stddev[2]]}" )
         belMesh = get_ellipsoid_mesh( objBelief.stddev[0], objBelief.stddev[1], objBelief.stddev[2] )
-        faceClr = list( objBelief.volume.mesh.visual.face_colors[:] )
+        faceClr = list( objBelief.volume.mesh.visual.face_colors[0][:] )
         faceClr[-1] = 0.5
+        print( f"Color: {faceClr}" )
         belMesh.visual.face_colors = faceClr
+        belMesh.apply_transform( row_vec_to_homog( objBelief.pose ) )
+        print( f"Pose: {objBelief.pose}" )
         self.scene.add_geometry( belMesh )
 
         
