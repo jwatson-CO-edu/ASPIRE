@@ -82,4 +82,9 @@ if __name__ == "__main__":
         bel.volume = get_volume_by_label( bel.most_likely_label(), meshLookup )
         scene.add_object_pose_belief( bel )
 
+    print( f"There are {len( plover.memory.beliefs )} beliefs!" )
+
+    print( scene.scene.bounds )
+    print( scene.scene.is_valid )
+
     scene.show()

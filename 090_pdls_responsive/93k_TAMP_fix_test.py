@@ -660,16 +660,18 @@ class ResponsiveExecutive:
             solution = solve( 
                 self.task, 
                 algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
-                max_skeletons = 50,
-                max_time      = 80.0,
+
+                # max_skeletons = 50,
+                # max_time      = 80.0,
                 unit_costs   = True, 
                 unit_efforts = True,
-                effort_weight = 10.0, #200.0, #100.0, #50.0, #20.0, # 5.0, # 2.0 #10.0,
-                success_cost = 40,
-                initial_complexity = 1,
-                complexity_step = 1,
-                search_sample_ratio = 1/1000, #1/1500, #1/5, #1/1000, #1/750 # 1/1000, #1/2000 #500, #1/2, # 1/500, #1/200, #1/10, #2, # 25 #1/25
-                reorder = False, # Setting to false bare impacts sol'n time
+                # effort_weight = 10.0, #200.0, #100.0, #50.0, #20.0, # 5.0, # 2.0 #10.0,
+                # success_cost = 40,
+                # initial_complexity = 1,
+                # complexity_step = 1,
+                search_sample_ratio = 1/500, #1/1500, #1/5, #1/1000, #1/750 # 1/1000, #1/2000 #500, #1/2, # 1/500, #1/200, #1/10, #2, # 25 #1/25
+                # reorder = False, # Setting to false bare impacts sol'n time
+
                 # planner = planner
                 # stream_info = stream_info,
             )
