@@ -299,6 +299,7 @@ class ObjectBelief( SpatialNode ):
         for label, prob in self.labels.items():
             if prob > probMx:
                 rtnLbl = label
+                probMx = prob
         return rtnLbl
 
 ########## UPDATES && BOOKKEEPPING #################################################################
@@ -501,6 +502,7 @@ class VolumeScene:
             origin_size = 0.010,
             axis_length = 0.030
         ) )
+        # self.drawMem = [] # Keeps things in scope?
 
     def add_node( self, node ):
         """ Add the determinized/mean volume to the scene to be rendered """
@@ -519,12 +521,13 @@ class VolumeScene:
         print( f"Ellipsoid Scale: {[objBelief.stddev[0], objBelief.stddev[1], objBelief.stddev[2]]}" )
         belMesh = get_ellipsoid_mesh( objBelief.stddev[0], objBelief.stddev[1], objBelief.stddev[2] )
         faceClr = list( objBelief.volume.mesh.visual.face_colors[0][:] )
-        faceClr[-1] = 1.0
+        faceClr[-1] = 128
         print( f"Color: {faceClr}" )
         belMesh.visual.face_colors = list( faceClr )
         belMesh.apply_transform( row_vec_to_homog( objBelief.pose ) )
         print( row_vec_to_homog( objBelief.pose ) )
         print( f"Pose: {objBelief.pose}" )
+        # self.drawMem.append( belMesh )
         self.scene.add_geometry( belMesh )
         print( belMesh.bounds )
         print( type( belMesh ) )
@@ -535,6 +538,6 @@ if __name__ == "__main__":
     scene = trimesh.Scene()
     scene.add_geometry( trimesh.creation.axis() )
     mesh = get_ellipsoid_mesh(0.5,1.0,1.5)
-    mesh.visual.face_colors = [0,0,1,0.45]
+    mesh.visual.face_colors = [0,0,255,128]
     scene.add_geometry( mesh )
     scene.show()

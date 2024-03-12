@@ -75,20 +75,22 @@
 * `[>]` Solve the 1-Arch problem in the 6-Block environemnt
     - `[Y]` Belief, 2024-02-24: Written (Ported)
         * `[Y]` Belief Samples, 2024-02-24: Written (Ported)
-    - `[>]` Required Symbols and Predicates (w/ PyBullet tests)
+    - `[Y]` Required Symbols (w/ PyBullet tests), 2024-03-12: Colors are INTS on [0,255]
         * `[Y]` Block representation, Using PLOVER as a lib, 2024-02-26: Pose sampling is now sane!
             - 2024-02-25: Wrote function + lookup instead of a `class`.
             - Should **not** have to write a class for every new object, as this burdens the practitioner and does not support flexibility
             - Rather, provide the system with a way to associate labels with `Volume`s, whether it looks them up or constructs them from observation
-        * `[>]` Block beliefs @ PyBullet
+        * `[Y]` Block beliefs @ PyBullet, 2024-03-12: Colors are INTS on [0,255]
             - 2024-02-27: I would like to avoid tight coupling with the world present in the current implementation of MAGPIE
-            - `[>]` Render Sample
-                * `[ ]` Transform mesh
-                * `[ ]` Render meshes from a complete scan
-            - `[>]` Render belief
-                * `[ ]` Draw with transparency
-                * `[>]` Position ellipsoid
-                * `[>]` Orientation sticks
+            - `[Y]` Render Sample, 2024-03-12: Colors are INTS on [0,255]
+                * `[Y]` Transform mesh, 2024-03-12: Colors are INTS on [0,255]
+                * `[Y]` Render meshes from a complete scan, 2024-03-12: Colors are INTS on [0,255]
+            - `[Y]` Render belief, 2024-03-12: Colors are INTS on [0,255]
+                * `[Y]` Draw with transparency, 2024-03-12: Colors are INTS on [0,255]
+                * `[Y]` Position ellipsoid, 2024-03-12: Colors are INTS on [0,255]
+                * `[Y]` Orientation sticks, 2024-03-12: Colors are INTS on [0,255]
+    - `[>]` Required Predicates
+        * `[>]` Predicate Base Class
         * `[ ]` Object @ Location predicate, with _probability_
             - `[ ]` Indicate in PyBullet
         * `[ ]` Object On Object predicate, with _probability_

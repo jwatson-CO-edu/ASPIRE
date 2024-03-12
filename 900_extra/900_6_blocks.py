@@ -72,13 +72,14 @@ if __name__ == "__main__":
     for i in range( 100 ):
         plover.belief_update( world.full_scan_noisy() )
 
-    # objs = plover.sample_all()
-    # for obj in objs:
-    #     obj.volume = get_volume_by_label( obj.label, meshLookup )
-    #     obj.update_volume_pose()
-    #     scene.add_symbol( obj )
+    objs = plover.sample_all()
+    for obj in objs:
+        obj.volume = get_volume_by_label( obj.label, meshLookup )
+        obj.update_volume_pose()
+        scene.add_symbol( obj )
 
     for bel in plover.memory.beliefs:
+        print( bel.most_likely_label() )
         bel.volume = get_volume_by_label( bel.most_likely_label(), meshLookup )
         scene.add_object_pose_belief( bel )
 
@@ -86,5 +87,15 @@ if __name__ == "__main__":
 
     print( scene.scene.bounds )
     print( scene.scene.is_valid )
+    # for elem in scene.drawMem:
+    #     print( elem )
+
+    print()
+
+    # print( dir( scene.drawMem[0] ) )
+    # print( scene.drawMem[0].visual.face_colors )
+    # print( scene.drawMem[0].is_watertight )
+
+    print()
 
     scene.show()
