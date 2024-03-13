@@ -33,6 +33,9 @@ from geometry import sample_pose, diff_norm, pose_covar, row_vec_to_homog
 ##### Settings #####
 np.set_printoptions( precision = 5 )
 
+##### Constants #####
+_ROOT_NAME = "ROOT"
+
 ########## SCENE GRAPH #############################################################################
 
 
@@ -41,20 +44,28 @@ class SpatialNode:
     # NOTE: This can also be used as a non-physical reference frame
 
     def __init__( self, label = "", pose = None, volume = None ):
-        self.ID       = uuid4() # --------------------------------------- Means for identifying an unique object
-        self.label    = label # ----------------------------------------- Text label, possibly non-unique
-        self.pose     = pose if (pose is not None) else [0,0,0,1,0,0,0] # Absolute pose
-        self.relPose  = [0,0,0,1,0,0,0] # ------------------------------- Relative pose
-        self.volume   = volume if (volume is not None) else Volume() # -- Defining volume in space
-        self.data     = {} # -------------------------------------------- TBD
-        self.incoming = {} # -------------------------------------------- Upstream 
-        self.outgoing = {} # -------------------------------------------- Downstream
-        self.samples  = [] # -------------------------------------------- Collection of samples pertinent to this context
-        self.t_create = time.time() # ----------------------------------- Time when this object instantiated
-        self.dead     = False # ----------------------------------------- Item not relevant, Mark for cleaning
+        self.ID        = uuid4() # --------------------------------------- Means for identifying an unique object
+        self.label     = label # ----------------------------------------- Text label, possibly non-unique
+        self.pose      = pose if (pose is not None) else [0,0,0,1,0,0,0] # Absolute pose
+        self.relPose   = [0,0,0,1,0,0,0] # ------------------------------- Relative pose
+        self.volume    = volume if (volume is not None) else Volume() # -- Defining volume in space
+        self.data      = {} # -------------------------------------------- TBD
+        self.root      = None
+        self.neighbors = {} # -------------------------------------------- Upstream 
+        self.outgoing  = {} # -------------------------------------------- Downstream
+        self.samples   = [] # -------------------------------------------- Collection of samples pertinent to this context
+        self.t_create  = time.time() # ----------------------------------- Time when this object instantiated
+        self.dead      = False # ----------------------------------------- Item not relevant, Mark for cleaning
+        self.visited   = False # ----------------------------------------- Flag for search
         # TDB: Give nodes a lifespan so that we avoid collisions with them when sequencing actions?
         # BEGIN TIME?
         # END TIME?
+
+    def get_root( self ):
+        """ Return the ancestor with no parents """
+        # FIXME, START HERE: IMPLEMENT BFS, IN A MIXED GRAPH THE ROOT MUST HAVE A UNIQUE NAME!
+        pass
+
 
     def add_below( self, objOrListOrDict ):
         """ Add an object, or a collection of objects, as outgoing nodes, return number added """
@@ -84,6 +95,17 @@ class SpatialNode:
     def update_volume_pose( self ):
         """ Update the `Volume` pose to match current object pose """
         self.volume.mesh.apply_transform( row_vec_to_homog( self.pose ) )
+
+
+    def find_objects_by_label( self, qLabel, refs = None ):
+        """ Recursively search for all objects named `qLabel` at this node and below, then return a list of refs """
+        if refs is None:
+            refs = list()
+        if self.label == qLabel:
+            refs.append( self )
+        for child in self.outgoing.values():
+            child.find_objects_by_label( qLabel, refs )
+        return refs
 
 
 class Object( SpatialNode ):
@@ -439,6 +461,28 @@ class ObjectMemory:
     
 
 
+########## FACTS / PREDICATES / PROBABILISTIC REASONING ############################################
+    
+class Predicate( SpatialNode ):
+    """ Base class for probabilistic facts about the environment """
+
+    def __init__( self, label = "", pose = None, volume = None ):
+        """ Set basic components """
+        super().__init__( label = label, pose = pose, volume = volume )
+        self.support = None
+
+    def eval_prob( self ):
+        """ VIRTUAL: Return the probability that this fact is true """
+        raise NotImplementedError( f"`eval_prob` has not been implemented for {self.__class__.__name__}!" )
+    
+    
+
+    
+
+class ObjectAtLocation( Predicate ):
+    pass
+
+
 ########## PROBABILISTIC LANGUAGE OVER VOLUMES for ENVIRONMENT REASONING ###########################
 # Please see "DEV_PLAN.md" for information, design approach, and applications
     
@@ -448,7 +492,7 @@ class PLOVER:
     def __init__( self ):
         """ Instantiate memory and reasoning """
         self.memory  = ObjectMemory() # ---------- Hybrid symbols with pose and class uncert
-        self.graph   = SpatialNode( "LabFrame" ) # Root node for global probabilistic scene graph
+        self.graph   = SpatialNode( _ROOT_NAME ) # Root node for global probabilistic scene graph
 
 
     def belief_update( self, objEvidence ):

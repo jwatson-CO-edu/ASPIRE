@@ -89,6 +89,7 @@
                 * `[Y]` Draw with transparency, 2024-03-12: Colors are INTS on [0,255]
                 * `[Y]` Position ellipsoid, 2024-03-12: Colors are INTS on [0,255]
                 * `[Y]` Orientation sticks, 2024-03-12: Colors are INTS on [0,255]
+    - `[>]` Beliefs are part of the scene graph
     - `[>]` Required Predicates
         * `[>]` Predicate Base Class
         * `[ ]` Object @ Location predicate, with _probability_
