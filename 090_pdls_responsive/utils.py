@@ -9,6 +9,7 @@ from random import random
 
 import numpy as np
 
+from spatialmath import Quaternion
 from spatialmath.quaternion import UnitQuaternion
 from spatialmath.base import r2q
 
@@ -25,9 +26,26 @@ def p_lst_has_nan( lst ):
             return True
     return False
 
+
 def origin_row_vec():
     """ Return a row vector representing the origin pose as a Position and Orientation --> [Px,Py,Pz,Ow,Ox,Oy,Oz] """
     return [0,0,0,1,0,0,0]
+
+
+def NaN_row_vec():
+    """ Return a row vector representing an error in pose calculation """
+    return [float("nan") for _ in range(7)]
+
+
+def row_vec_normd_ornt( V ):
+    """ Normalize the orientation of the [Px,Py,Pz,Ow,Ox,Oy,Oz] pose """
+    rtnV = [v_i for v_i in V[:3]]
+    q   = Quaternion( s = V[3], v = V[4:] )
+    qN  = q.unit()
+    rtnV.append( qN.s )
+    rtnV.extend( qN.v.tolist() )
+    return np.array( rtnV )
+
 
 def pb_posn_ornt_to_homog( posn, ornt ):
     """ Express the PyBullet position and orientation as homogeneous coords """
@@ -63,6 +81,7 @@ def homog_to_row_vec( homog ):
     V[3]   = Q.s
     V[4:7] = Q.v[:]
     return np.array(V)
+
 
 def row_vec_to_homog( V ):
     """ Express [Px,Py,Pz,Ow,Ox,Oy,Oz] as homogeneous coordinates """

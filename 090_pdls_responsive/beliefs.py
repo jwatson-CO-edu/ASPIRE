@@ -7,13 +7,32 @@ import numpy as np
 from scipy.stats import chi2
 
 from utils import ( roll_outcome, get_confusion_matx, multiclass_Bayesian_belief_update, p_lst_has_nan, 
-                    diff_norm, pb_posn_ornt_to_row_vec )
+                    diff_norm, pb_posn_ornt_to_row_vec, NaN_row_vec, row_vec_normd_ornt )
 
 from env_config import ( _POSN_STDDEV, _BLOCK_NAMES, _NULL_NAME, _N_POSE_UPDT, _NEAR_PROB, _CONFUSE_PROB, 
-                         _NULL_THRESH, _MIN_SEP, _EXIST_THRESH )
+                         _NULL_THRESH, _MIN_SEP, _EXIST_THRESH, _PRIOR_POS_S, _PRIOR_ORN_S )
 
 from symbols import Object
 
+
+
+########## HELPER FUNCTIONS ########################################################################
+
+def pose_covar( stddev ):
+    """ Get the pose covariance """
+    rtnArr = np.zeros( (7,7,) )
+    for i in range(7):
+        rtnArr[i,i] = (stddev[i])**2
+    return rtnArr
+
+
+def sample_pose( pose, stddev ):
+    """ Sample a pose from the present distribution, Reset on failure """
+    try:
+        posnSample = np.random.multivariate_normal( pose, pose_covar( stddev ) ) 
+    except (np.linalg.LinAlgError, RuntimeWarning,):
+        return NaN_row_vec()
+    return row_vec_normd_ornt( posnSample )
 
 
 ########## HYBRID BELIEFS ##########################################################################
@@ -22,17 +41,17 @@ class ObjectBelief:
     """ Hybrid belief: A discrete distribution of classes that may exist at a continuous distribution of poses """
 
 
-    def reset_std_dev( self ):
-        self.pStdDev = np.array([self.iStdDev for _ in range( 3 )]) 
+    def reset_pose_distrib( self ):
+        """ Reset the pose distribution """
+        self.stddev = [ _PRIOR_POS_S for _ in range(3)] # Standard deviation of pose
+        self.stddev.extend( [_PRIOR_ORN_S for _ in range(4)] )
 
 
-    def __init__( self, initStddev = _POSN_STDDEV, nearThresh = _NEAR_PROB ):
+    def __init__( self, pose = None, nearThresh = _NEAR_PROB ):
         """ Initialize with origin poses and uniform, independent variance """
-        self.labels  = {} # ---------------------- Current belief in each class
-        self.mean    = np.array([0,0,0,]) # Mean pose
-        self.ornt    = np.array([0,0,0,1,])
-        self.iStdDev = initStddev
-        self.reset_std_dev()# Position stddev
+        self.labels = {} # ---------------------- Current belief in each class
+        self.pose   = pose if (pose is not None) else [0,0,0,1,0,0,0] # Absolute pose
+        self.reset_pose_distrib()
         self.pHist   = [] # ---------------------- Recent history of poses
         self.pThresh = nearThresh # --------------------- Minimum prob density at which a nearby pose is relevant
         self.visited = False
@@ -103,14 +122,16 @@ class ObjectBelief:
     def sample_pose( self ):
         """ Sample a pose from the present distribution, Reset on failure """
         try:
-            posnSample = np.random.multivariate_normal( self.posn(), self.posn_covar() ) 
+            # posnSample = np.random.multivariate_normal( self.pose, self.pose_covar() ) 
+            poseSample = sample_pose( self.pose, self.stddev ) 
         except (np.linalg.LinAlgError, RuntimeWarning,):
-            self.reset_std_dev()
-            posnSample = np.random.multivariate_normal( self.posn(), self.posn_covar() ) 
-        while p_lst_has_nan( posnSample ):
-            self.reset_std_dev()
-            posnSample = np.random.multivariate_normal( self.posn(), self.posn_covar() ) 
-        return pb_posn_ornt_to_row_vec( posnSample, self.ornt )
+            self.reset_pose_distrib()
+            # posnSample = np.random.multivariate_normal( self.pose, self.pose_covar() ) 
+            poseSample = np.random.multivariate_normal( self.pose, self.stddev ) 
+        while p_lst_has_nan( poseSample ):
+            self.reset_pose_distrib()
+            poseSample = np.random.multivariate_normal( self.pose, self.stddev ) 
+        return poseSample
 
 
     def sample_symbol( self ):
@@ -125,22 +146,22 @@ class ObjectBelief:
         return self.spawn_object( _NULL_NAME, np.array( self.mean ) )
     
         
-    def get_posn_history( self ):
-        """ Get the positions of all pose history readings """
-        hist = np.zeros( (len(self.pHist),3,) )
+    def get_pose_history( self ):
+        """ Get all pose history readings as a 2D matrix where each row is a reading """
+        hist = np.zeros( (len(self.pHist),7,) )
         for i, row in enumerate( self.pHist ):
-            hist[i,:] = row[:3]
+            hist[i,:] = row
         return hist
 
 
     def update_pose_dist( self ):
         """ Update the pose distribution from the history of observations """
         self.fresh   = True
-        posnHist     = self.get_posn_history()
+        poseHist     = self.get_pose_history()
         q_1_Hat      = np.array( self.mean )
-        q_2_Hat      = np.mean( posnHist, axis = 0 )
-        nuStdDev     = np.std(  posnHist, axis = 0 )
-        omegaSqr_1   = np.dot( self.pStdDev, self.pStdDev )
+        q_2_Hat      = np.mean( poseHist, axis = 0 )
+        nuStdDev     = np.std(  poseHist, axis = 0 )
+        omegaSqr_1   = np.dot( self.stddev, self.stddev )
         omegaSqr_2   = np.dot( nuStdDev    , nuStdDev     )
         self.pHist   = []
         try:
@@ -152,7 +173,7 @@ class ObjectBelief:
         except:
             print( "WARNING: Covariance reset due to overflow!" )
             self.mean = q_1_Hat
-            self.reset_std_dev()
+            self.reset_pose_distrib()
 
 
     def sorted_labels( self ):

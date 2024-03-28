@@ -215,7 +215,7 @@ class ObjectBelief( SpatialNode ):
             # posnSample = np.random.multivariate_normal( self.pose, self.pose_covar() ) 
             poseSample = np.random.multivariate_normal( self.pose, self.stddev ) 
         while p_lst_has_nan( poseSample ):
-            self.reset_std_dev()
+            self.reset_pose_distrib()
             poseSample = np.random.multivariate_normal( self.pose, self.stddev ) 
         return poseSample
     
