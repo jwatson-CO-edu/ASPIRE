@@ -26,10 +26,12 @@ def pose_covar( stddev ):
     return rtnArr
 
 
-def sample_pose( pose, stddev ):
+def sample_pose( pose, stddev, suppressOrnt = True ):
     """ Sample a pose from the present distribution, Reset on failure """
     try:
         posnSample = np.random.multivariate_normal( pose, pose_covar( stddev ) ) 
+        if suppressOrnt:
+            posnSample[3:7] = [1,0,0,0]
     except (np.linalg.LinAlgError, RuntimeWarning,):
         return NaN_row_vec()
     return row_vec_normd_ornt( posnSample )
@@ -90,22 +92,23 @@ class ObjectBelief:
 
     def posn( self ):
         """ Get the position """
-        return np.array( self.mean[:3] )
+        return np.array( self.pose[:3] )
 
 
     def posn_covar( self ):
         """ Get the pose covariance """
         rtnArr = np.zeros( (3,3,) )
         for i in range(3):
-            rtnArr[i,i] = (self.pStdDev[i])**2
+            rtnArr[i,i] = (self.stddev[i])**2
         return rtnArr
 
 
     def prob_density( self, obj ):
         """ Return the probability that this object lies within the present distribution """
-        x     = np.array( obj.pose[:3] )
-        mu    = self.posn()
-        sigma = self.posn_covar()
+        x     = np.array( obj.pose )
+        mu    = np.array( self.pose )
+        sigma = pose_covar( self.stddev )
+        # print( x, mu, sigma )
         try:
             m_dist_x = np.dot((x-mu).transpose(),np.linalg.inv(sigma))
             m_dist_x = np.dot(m_dist_x, (x-mu))
@@ -116,6 +119,7 @@ class ObjectBelief:
 
     def p_reading_relevant( self, obj ):
         """ Roll die to determine if a nearby pose is relevant """
+        # print( f"Prob Density: {self.prob_density( obj )}" )
         return ( random() <= self.prob_density( obj ) )
     
 
@@ -143,7 +147,7 @@ class ObjectBelief:
     
     def sample_null( self ):
         """ Empty Pose """
-        return self.spawn_object( _NULL_NAME, np.array( self.mean ) )
+        return self.spawn_object( _NULL_NAME, np.array( self.pose ) )
     
         
     def get_pose_history( self ):
@@ -158,21 +162,21 @@ class ObjectBelief:
         """ Update the pose distribution from the history of observations """
         self.fresh   = True
         poseHist     = self.get_pose_history()
-        q_1_Hat      = np.array( self.mean )
+        q_1_Hat      = np.array( self.pose )
         q_2_Hat      = np.mean( poseHist, axis = 0 )
         nuStdDev     = np.std(  poseHist, axis = 0 )
         omegaSqr_1   = np.dot( self.stddev, self.stddev )
         omegaSqr_2   = np.dot( nuStdDev    , nuStdDev     )
         self.pHist   = []
         try:
-            self.mean    = q_1_Hat + omegaSqr_1 / ( omegaSqr_1 + omegaSqr_2 ).dot( q_2_Hat - q_1_Hat )
-            self.pStdDev = np.sqrt( np.reciprocal( np.add(
+            self.pose    = q_1_Hat + omegaSqr_1 / ( omegaSqr_1 + omegaSqr_2 ).dot( q_2_Hat - q_1_Hat )
+            self.stddev = np.sqrt( np.reciprocal( np.add(
                 np.reciprocal( omegaSqr_1 ),
                 np.reciprocal( omegaSqr_2 ),
             ) ) )
         except:
             print( "WARNING: Covariance reset due to overflow!" )
-            self.mean = q_1_Hat
+            self.pose = q_1_Hat
             self.reset_pose_distrib()
 
 
@@ -203,6 +207,7 @@ class ObjectBelief:
         else:
             return False
         
+
     def integrate_null( self ):
         """ Accrue a non-observation """
         Nclass = len( _BLOCK_NAMES )
@@ -244,7 +249,7 @@ class ObjectMemory:
         """ Center a new belief on the incoming reading """
         nuBelief = ObjectBelief()
         nuBelief.labels = dict( objReading.labels )
-        nuBelief.mean   = np.array( objReading.pose )
+        nuBelief.pose   = np.array( objReading.pose )
         return nuBelief
 
 

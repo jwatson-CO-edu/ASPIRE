@@ -1,12 +1,3 @@
-########## DEV PLAN ################################################################################
-"""
-##### Repair #####
-[N] Begin with some alternate setdown poses populated, 2024-03-08: Did NOT result in better performance
-[ ] NEEDED: A way to detect when the solver has gone braindead!
-"""
-
-
-
 ########## INIT ####################################################################################
 
 ##### Imports #####
@@ -368,6 +359,7 @@ class ResponsiveExecutive:
             print( f"UNSUPPORTED predicate check!: {pTyp}" )
             return False
     
+
     def validate_goal_true( self, goal ):
         """ Check if the goal is met """
         if goal[0] == 'and':
@@ -434,6 +426,7 @@ class ResponsiveExecutive:
             print( f"UNSUPPORTED predicate check!: {pTyp}" )
             return False
 
+
     def validate_goal_noisy( self, goal, objs ):
         """ Check if the goal is met """
         if goal[0] == 'and':
@@ -444,6 +437,7 @@ class ResponsiveExecutive:
         else:
             raise ValueError( f"Unexpected goal format!: {goal}" )
         
+
     def get_met_goal_predicates_noisy( self, goal, objs ):
         """ Return a list of goal predicates that have already been met """
         rtnPred = []
@@ -468,6 +462,7 @@ class ResponsiveExecutive:
                     return True
         return False
     
+
     def p_open_true( self, pose ):
         posn , _    = row_vec_to_pb_posn_ornt( pose )
         nuSym = self.world.full_scan_true()

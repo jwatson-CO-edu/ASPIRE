@@ -64,32 +64,36 @@ class GroundedAction( Sequence ):
     def __init__( self, args = None, goal = None, world = None, robot = None, name = "Grounded Sequence" ):
         """ Init BT """
         super().__init__( name = name, memory = True )
-        self.args   = args if (args is not None) else list() # Symbols involved in this action
-        self.preCs  = list() #- Preconditions, Prerequisites required by this action
-        self.pstCs  = list() #- Postconditions, Predicates satisfied by this action
-        self.symbol = None # -- Symbol on which this behavior relies
-        self.msg    = "" # ---- Message: Reason this action failed -or- OTHER
-        self.ctrl   = robot # - Agent that executes
-        self.world  = world  #- Simulation ref
+        self.args    = args if (args is not None) else list() # Symbols involved in this action
+        self.symbols = list() # -- Symbol on which this behavior relies
+        self.msg     = "" # ---- Message: Reason this action failed -or- OTHER
+        self.ctrl    = robot # - Agent that executes
+        self.world   = world  #- Simulation ref
+        self.extract_symbols()
         
-    def least_prob_precond( self ):
+
+    def extract_symbols( self ):
+        """ Search the args for symbols connected to object beliefs """
+        for arg_i in self.args:
+            if hasattr( arg_i, "prob" ):
+                self.symbols.append( arg_i )
+        print( f"{self.name} is associated with {len(self.symbols)} symbols!" )
+
+
+    def least_prob_symbol( self ):
         """ Get the least probability from all the preconditions """
         leastProb = 1e9
-        for cond in self.preCs:
-            for elem in cond:
-                if hasattr( elem, "prob" ):
-                    prob_ij = elem.prob()
-                    leastProb = min( leastProb, prob_ij )
+        for sym in self.symbols:
+            prob_ij   = sym.prob()
+            leastProb = min( leastProb, prob_ij )
         return leastProb
     
+
     def detach_symbols( self ):
         """ Release symbols from their belief connections """
-        conds = self.preCs[:]
-        conds.extend( self.pstCs )
-        for cond in conds:
-            for elem in cond:
-                if hasattr( elem, "detach" ):
-                    elem.detach()
+        for sym in self.symbols:
+            sym.detach()
+
 
     def cost( self ):
         """ Return a cost for this action """

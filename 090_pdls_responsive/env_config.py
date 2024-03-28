@@ -48,7 +48,7 @@ _USE_GRAPHICS      = False
 
 ########## BELIEFS #################################################################################
 
-_SAMPLE_DET   = False
+_SAMPLE_DET   = True
 _N_POSE_UPDT  = 25
 _POSN_STDDEV  = _BLOCK_SCALE / 4.0
 _ORNT_STDDEV  = _BLOCK_SCALE / 8.0
