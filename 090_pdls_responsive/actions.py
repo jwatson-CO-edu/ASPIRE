@@ -8,7 +8,7 @@ from py_trees.composites import Sequence
 
 from pb_BT import Move_Arm, Grasp, Ungrasp, connect_BT_to_robot_world, pass_msg_up
 from utils import row_vec_to_pb_posn_ornt, diff_norm
-from env_config import _NON_MOVE_COST, _LOG_PROB_FACTOR, _LOG_BASE
+from env_config import _NON_MOVE_COST, _LOG_PROB_FACTOR, _LOG_BASE, _PLAN_THRESH
 
 ########## BT-PLANNER INTERFACE ####################################################################
 
@@ -38,19 +38,24 @@ class BT_Runner:
     def p_ended( self ):
         """ Has the BT ended? """
         return self.status in ( Status.FAILURE, Status.SUCCESS )
+    
+    def set_fail( self, msg = "DEFAULT MSG: STOPPED" ):
+        self.status = Status.FAILURE
+        self.msg    = msg
+        self.world.robot_release_all()
+        self.world.spin_for( 250 )
 
     def tick_once( self ):
         """ Run one simulation step """
         self.world.spin_for( self.Nstep )
+        if hasattr( self.root, "least_prob_symbol" ) and ( self.root.least_prob_symbol() <  _PLAN_THRESH):
+            self.set_fail( "CONFUSION ERROR" )
         if not self.p_ended():
             self.root.tick_once()
         self.status = self.root.status
         self.i += 1
         if (self.i >= self.Nlim) and (not self.p_ended()):
-            self.status = Status.FAILURE
-            self.msg    = "BT TIMEOUT"
-            self.world.robot_release_all()
-            self.world.spin_for( 250 )
+            self.set_fail( "BT TIMEOUT" )
         if self.p_ended():
             pass_msg_up( self.root )
             self.msg = self.root.msg
@@ -75,9 +80,11 @@ class GroundedAction( Sequence ):
     def extract_symbols( self ):
         """ Search the args for symbols connected to object beliefs """
         for arg_i in self.args:
-            if hasattr( arg_i, "prob" ):
+            if hasattr( arg_i, "prob" ) and (arg_i.prob() >= _PLAN_THRESH):
                 self.symbols.append( arg_i )
         print( f"{self.name} is associated with {len(self.symbols)} symbols!" )
+        for sym in self.symbols:
+            print( f"\t{sym}\t{sym.prob()}" )
 
 
     def least_prob_symbol( self ):

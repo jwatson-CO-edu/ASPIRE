@@ -287,7 +287,7 @@ class ObjectMemory:
                 print( f"{str(belief)} DESTROYED!" )
         self.beliefs = retain
         delNam = []
-        for k, v in self.last:
+        for k, v in self.last.items():
             if v.prob() < _EXIST_THRESH:
                 delNam.append( k )
         for name in delNam:

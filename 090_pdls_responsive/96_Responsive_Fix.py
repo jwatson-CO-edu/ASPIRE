@@ -1,12 +1,3 @@
-########## DEV PLAN ################################################################################
-"""
-##### Repair #####
-[N] Begin with some alternate setdown poses populated, 2024-03-08: Did NOT result in better performance
-[ ] NEEDED: A way to detect when the solver has gone braindead!
-"""
-
-
-
 ########## INIT ####################################################################################
 
 ##### Imports #####
@@ -708,6 +699,10 @@ class ResponsiveExecutive:
         btr.setup_BT_for_running()
 
         while not btr.p_ended():
+
+            # WARNING: RESPONSIVE
+            self.memory.belief_update( self.world.full_scan_noisy() )
+            
             btr.tick_once()
             if (btr.status == Status.FAILURE):
                 self.status = Status.FAILURE
