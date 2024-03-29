@@ -5,6 +5,8 @@ from pprint import pprint
 
 import numpy as np
 from scipy.stats import chi2
+from scipy.stats import norm
+from scipy.stats import multivariate_normal as mvn
 
 from utils import ( roll_outcome, get_confusion_matx, multiclass_Bayesian_belief_update, p_lst_has_nan, 
                     diff_norm, pb_posn_ornt_to_row_vec, NaN_row_vec, row_vec_normd_ornt )
@@ -47,6 +49,7 @@ class ObjectBelief:
         """ Reset the pose distribution """
         self.stddev = [ _PRIOR_POS_S for _ in range(3)] # Standard deviation of pose
         self.stddev.extend( [_PRIOR_ORN_S for _ in range(4)] )
+        # print( self.stddev )
 
 
     def __init__( self, pose = None, nearThresh = _NEAR_PROB ):
@@ -105,14 +108,21 @@ class ObjectBelief:
 
     def prob_density( self, obj ):
         """ Return the probability that this object lies within the present distribution """
-        x     = np.array( obj.pose )
-        mu    = np.array( self.pose )
-        sigma = pose_covar( self.stddev )
+        x     = np.array( obj.pose )[0:3]
+        mu    = np.array( self.pose )[0:3]
+        sigma = pose_covar( self.stddev )[0:3,0:3]
+        # print( sigma )
         # print( x, mu, sigma )
         try:
-            m_dist_x = np.dot((x-mu).transpose(),np.linalg.inv(sigma))
-            m_dist_x = np.dot(m_dist_x, (x-mu))
-            return 1-chi2.cdf( m_dist_x, 3 )
+            # print( norm( mu, np.array( self.stddev ) ).cdf( x ) )
+            # return norm( mu, np.array( self.stddev ) ).cdf( x )
+            # print( mvn( mean = mu, cov = sigma ).cdf( x ) )
+            # return mvn( mean = mu, cov = sigma ).cdf( x )
+            # print( mvn.cdf( x, mean = mu, cov = sigma ) )
+            return 1.0 - mvn.cdf( x, mean = mu, cov = sigma )
+            # m_dist_x = np.dot((x-mu).transpose(),np.linalg.inv(sigma))
+            # m_dist_x = np.dot(m_dist_x, (x-mu))
+            # return 1-chi2.cdf( m_dist_x, 3 )
         except np.linalg.LinAlgError:
             return 0.0
 
