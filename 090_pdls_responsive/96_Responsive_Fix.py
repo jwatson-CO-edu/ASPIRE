@@ -728,7 +728,9 @@ class ResponsiveExecutive:
             i += 1
 
             print( f"Phase 1, {self.status} ..." )
-            self.reset_beliefs() # WARNING: REMOVE FOR RESPONSIVE
+
+            # self.reset_beliefs() # WARNING: REMOVE FOR RESPONSIVE
+            
             self.phase_1_Perceive( 3*_N_POSE_UPDT+1 )
 
             print( f"Phase 2, {self.status} ..." )

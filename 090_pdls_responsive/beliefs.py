@@ -119,7 +119,8 @@ class ObjectBelief:
             # print( mvn( mean = mu, cov = sigma ).cdf( x ) )
             # return mvn( mean = mu, cov = sigma ).cdf( x )
             # print( mvn.cdf( x, mean = mu, cov = sigma ) )
-            return 1.0 - mvn.cdf( x, mean = mu, cov = sigma )
+            # return 1.0 - mvn.cdf( x, mean = mu, cov = sigma )
+            return mvn.cdf( x, mean = mu, cov = sigma )
             # m_dist_x = np.dot((x-mu).transpose(),np.linalg.inv(sigma))
             # m_dist_x = np.dot(m_dist_x, (x-mu))
             # return 1-chi2.cdf( m_dist_x, 3 )
@@ -129,7 +130,9 @@ class ObjectBelief:
 
     def p_reading_relevant( self, obj ):
         """ Roll die to determine if a nearby pose is relevant """
-        # print( f"Prob Density: {self.prob_density( obj )}" )
+        # x     = np.array( obj.pose )[0:3]
+        # mu    = np.array( self.pose )[0:3]
+        # print( f" Distance: {np.linalg.norm(x-mu)}, Prob Density: {self.prob_density( obj )}" )
         return ( random() <= self.prob_density( obj ) )
     
 
