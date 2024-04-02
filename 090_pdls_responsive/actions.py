@@ -58,7 +58,8 @@ class BT_Runner:
             self.set_fail( "BT TIMEOUT" )
         if self.p_ended():
             pass_msg_up( self.root )
-            self.msg = self.root.msg
+            if len( self.msg ) == 0:
+                self.msg = self.root.msg
             self.display_BT() 
 
 ########## ACTIONS #################################################################################

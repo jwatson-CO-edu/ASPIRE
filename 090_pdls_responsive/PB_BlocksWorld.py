@@ -269,13 +269,17 @@ class PB_BlocksWorld:
 
     ##### Pose Sampling ###################################################
 
-    def get_block_noisy( self, blockName, confuseProb = 0.10, poseStddev = _POSN_STDDEV ):
+    def get_block_noisy( self, blockName, confuseProb = _CONFUSE_PROB, poseStddev = _POSN_STDDEV ):
         """ Find one of the ROYGBV blocks, Partially Observable, Return None if the name is not in the world """
         try:
             rtnObj = ObjectBelief()
             idx = _BLOCK_NAMES.index( blockName )
             blockPos, blockOrn = self.physicsClient.getBasePositionAndOrientation( self.blocks[idx] )
             blockPos = np.array( blockPos ) + np.array( [np.random.normal( 0.0, poseStddev/3.0 ) for _ in range(3)] )
+            
+            # HACK: DO NOT SAMPLE BELOW THE TABLE
+            blockPos[2] = max( blockPos[2], _BLOCK_SCALE )
+            
             rtnObj.pose = pb_posn_ornt_to_row_vec( blockPos, blockOrn )
             for i in range( len( _BLOCK_NAMES ) ):
                 blkName_i = _BLOCK_NAMES[i]
@@ -288,7 +292,7 @@ class PB_BlocksWorld:
             return None
         
 
-    def full_scan_noisy( self, confuseProb = 0.10, poseStddev = _POSN_STDDEV ):
+    def full_scan_noisy( self, confuseProb = _CONFUSE_PROB, poseStddev = _POSN_STDDEV ):
         """ Find all of the ROYGBV blocks, Partially Observable """
         rtnBel = []
         for name in _ACTUAL_NAMES:

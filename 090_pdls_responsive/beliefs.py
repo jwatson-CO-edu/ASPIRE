@@ -11,7 +11,7 @@ from scipy.stats import multivariate_normal as mvn
 from utils import ( roll_outcome, get_confusion_matx, multiclass_Bayesian_belief_update, p_lst_has_nan, 
                     diff_norm, pb_posn_ornt_to_row_vec, NaN_row_vec, row_vec_normd_ornt )
 
-from env_config import ( _POSN_STDDEV, _BLOCK_NAMES, _NULL_NAME, _N_POSE_UPDT, _NEAR_PROB, _CONFUSE_PROB, 
+from env_config import ( _BLOCK_SCALE, _BLOCK_NAMES, _NULL_NAME, _N_POSE_UPDT, _NEAR_PROB, _CONFUSE_PROB, 
                          _NULL_THRESH, _MIN_SEP, _EXIST_THRESH, _PRIOR_POS_S, _PRIOR_ORN_S )
 
 from symbols import Object
@@ -155,6 +155,10 @@ class ObjectBelief:
         """ Sample a determinized symbol from the hybrid distribution """
         label = roll_outcome( self.labels )
         pose  = self.sample_pose()
+
+        # HACK: DO NOT SAMPLE BELOW THE TABLE
+        pose[2] = max( pose[2], _BLOCK_SCALE )
+
         return self.spawn_object( label, pose )
     
     
@@ -261,8 +265,9 @@ class ObjectMemory:
     def belief_from_reading( self, objReading ):
         """ Center a new belief on the incoming reading """
         nuBelief = ObjectBelief()
-        nuBelief.labels = dict( objReading.labels )
-        nuBelief.pose   = np.array( objReading.pose )
+        nuBelief.labels  = dict( objReading.labels )
+        nuBelief.pose    = np.array( objReading.pose )
+        nuBelief.visited = True
         return nuBelief
 
 

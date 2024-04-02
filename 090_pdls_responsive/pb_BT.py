@@ -20,19 +20,26 @@ from utils import *
 
 
 
-########## BASE CLASS ##############################################################################
+########## HELPER FUNCTIONS ########################################################################
 
-
-def pass_msg_up( bt ):
+def pass_msg_up( bt, failBelow = False ):
     if bt.parent is not None:
-        setattr( bt.parent, "msg", bt.msg )
-        pass_msg_up( bt.parent )
+        if bt.status == Status.FAILURE:
+            if (bt.parent.status != Status.FAILURE) or (len( bt.parent.msg ) == 0):
+                setattr( bt.parent, "msg", bt.msg )
+                pass_msg_up( bt.parent, True )
+            else:
+                pass_msg_up( bt.parent )
+        elif failBelow:
+            setattr( bt.parent, "msg", bt.msg )
+            pass_msg_up( bt.parent, True )
 
 
+
+########## BASE CLASS ##############################################################################
 
 class BasicBehavior( Behaviour ):
     """ Abstract class for repetitive housekeeping """
-    
     
     def __init__( self, name = None, ctrl = None, world = None ):
         """ Set name to the child class name unless otherwise specified """
