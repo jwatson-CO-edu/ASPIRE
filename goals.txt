@@ -1,0 +1,6 @@
+Goals
+1. Re-write code outside 'magpie' repository to consolidate the relevant parts.
+2. Determine how to integrate haptic sensing, which involves the force applied to the gripper.
+3. Find out how to collect image and haptic data from the robot as it is manipulated.
+    - Perhaps this just involves taking a static image, moving the robot to the appropriate configuration.
+    - Applying a certain algorithm to drop the box and grab onto it, lifting it up.
