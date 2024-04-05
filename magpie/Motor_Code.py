@@ -48,7 +48,6 @@ class Motors:
     def position(self, delta_theta):
         Motor1_theta = -delta_theta + self.Motor1theta_90
         Motor2_theta = delta_theta + self.Motor2theta_90
-        print(Motor1_theta, Motor2_theta)
         desiredPosition1 = int(Motor1_theta*1023/(300))
         desiredPosition2 = int(Motor2_theta*1023/(300))
         self.Motor1.set_goal_position(desiredPosition1)
