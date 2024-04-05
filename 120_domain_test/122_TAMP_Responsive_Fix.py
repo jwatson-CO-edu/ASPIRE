@@ -126,6 +126,12 @@ class ResponsiveExecutive:
             return None
         
 
+    def calc_fk( self, armConfig ):
+        """ Helper function for free path planner """
+        posn, ornt = self.world.robot.fk_posn_ornt( armConfig )
+        return pb_posn_ornt_to_row_vec( posn, ornt )
+        
+
     def object_from_label_pose( self, objcName, objcPose ):
         """ Load a Waypoint with relevant data """
         grspPose = self.calc_grasp( objcPose )
@@ -144,7 +150,7 @@ class ResponsiveExecutive:
 
     ##### MIT Stream Creators #############################################
 
-    def get_pose_stream( self ):
+    def get_pose_stream_alt( self ):
         """ Return a function that returns poses """
 
         def stream_func( *args ):
@@ -171,9 +177,59 @@ class ResponsiveExecutive:
                     break
 
             if not collides:
+                print( f"POSE (MIT) SUCCESS: Found a collision-free setdown pose!: {randPose}" )
                 yield (randPose,)
 
         return stream_func
+    
+
+    def get_grasp_stream_alt( self ):
+        """ Return a function that returns grasps """
+
+        def stream_func( *args ):
+            """ A function that returns grasps """
+
+            print( f"\nEvaluate GRASP (MIT) stream with args: {args}\n" )
+
+            q_o = args[0]
+            q_g = self.calc_grasp( q_o.pose )
+
+            print( f"GRASP (MIT) SUCCESS: Found a grasp {q_g} for pose {q_o.pose}" )
+            yield (q_g,)
+
+        return stream_func
+    
+
+    def get_IK_stream_alt( self ):
+        """ Return a function that returns IK sol'ns """
+
+        def stream_func( *args ):
+            """ A function that returns IK sol'ns """
+
+            print( f"\nEvaluate IK (MIT) stream with args: {args}\n" )
+
+            q_o, q_p, q_g = args
+
+            q_q = self.calc_ik( q_g )
+
+            print( f"IK (MIT) SUCCESS: Found an IK sol'n {q_q} for grasp {q_g}" )
+
+            yield (q_q,None,)
+
+        return stream_func
+    
+
+    def get_free_motion_stream_alt( self ):
+        """ Return a function that returns a free motion path """
+
+        def stream_func( *args ):
+            """ A function that returns a free motion path """
+
+            print( f"\nEvaluate FREE MOTION (MIT) stream with args: {args}\n" )
+
+            q_q1, q_q2 = args
+
+            # FIXME, START HERE: PLAN A FREE PATH BETWEEN THE CONFIGS?
 
     ##### Stream Creators #################################################
 
