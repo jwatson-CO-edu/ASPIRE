@@ -142,6 +142,39 @@ class ResponsiveExecutive:
         obj.config = self.calc_ik( obj.grasp )
     
 
+    ##### MIT Stream Creators #############################################
+
+    def get_pose_stream( self ):
+        """ Return a function that returns poses """
+
+        def stream_func( *args ):
+            """ A function that returns poses """
+
+            print( f"\nEvaluate POSE (MIT) stream with args: {args}\n" )
+
+            ## Get a random pose ##
+            randPose = rand_table_pose()
+            randPosn = randPose[:3]
+
+            ## Sample Symbols ##
+            if _SAMPLE_DET:
+                nuSym = self.world.full_scan_true()
+            else:
+                nuSym = self.memory.scan_consistent_fresh()
+
+            ## Test for collision with an existing object ##
+            collides = False
+            for sym in nuSym:
+                symbPosn = sym.pose[:3]
+                if diff_norm( randPosn, symbPosn ) < _MIN_SEP:
+                    collides = True
+                    break
+
+            if not collides:
+                yield (randPose,)
+
+        return stream_func
+
     ##### Stream Creators #################################################
 
     def get_object_stream( self ):

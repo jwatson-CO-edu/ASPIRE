@@ -1,139 +1,122 @@
 (define (domain pick-and-place)
-  (:requirements :strips )
-
-  ;;;;;;;;;; PREDICATES ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
+  (:requirements :strips :equality :negative-preconditions :derived-predicates)
   (:predicates
+    ; (Stackable ?o ?r)
+    ; (Sink ?r)
+    ; (Stove ?r)
 
-    ;;; Objects ;;;
-    (GraspObj ?label ?obj) ; The concept of a named object at a pose
-    (SafeMotion ?obj1 ?obj2 ?traj) ; Safe path from pose 1 to pose 2
-    (SafeCarry ?label ?obj1 ?obj2 ?traj) ; Safe path for object from pose 1 to pose 2
-    (StackPlace ?objUp ?objDn1 ?objDn2) ; A pose that forms an arch
+    (Pose ?o ?p)
+    (Grasp ?o ?g)
+    (Kin ?o ?p ?g ?q ?t)
+    (FreeMotion ?q1 ?t ?q2)
+    (HoldingMotion ?q1 ?t ?q2 ?o ?g)
+    (Supported ?o ?p ?r)
+    (Traj ?t)
 
-    ;;; Domains ;;;
-    (Graspable ?label); Name of a real object we can grasp
-    (Waypoint ?obj) ; Model of any object we can go to in the world, real or not
-  
-    ;;; Conditions ;;;
-    (AtObj ?obj) ; The effector is at a grasp for this pose
-    (Holding ?label) ; The label of the held object
-    (HandEmpty) ; Is the robot hand empty?
-    (Supported ?labelUp ?labelDn) ; Is the "up" object on top of the "down" object?
+    ; (TrajCollision ?t ?o2 ?p2)
+    (CFreePosePose ?o ?p ?o2 ?p2)
+    (CFreeApproachPose ?o ?p ?g ?o2 ?p2)
+    (CFreeTrajPose ?t ?o2 ?p2)
 
-    ;;; Checks ;;;
-    (FreePlacement ?label ?obj) ; Is there an open spot for placement?
+    (AtPose ?o ?p)
+    (AtGrasp ?o ?g)
+    (HandEmpty)
+    (AtConf ?q)
+    (CanMove)
+    ; (Cleaned ?o)
+    ; (Cooked ?o)
+
+    (On ?o ?r)
+    (Holding ?o)
+
+    (UnsafePose ?o ?p)
+    (UnsafeApproach ?o ?p ?g)
+    (UnsafeTraj ?t)
   )
 
-  ;;;;;;;;;; FUNCTIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-  ; (:functions
-  ;   (MoveCost ?traj)
-  ; )
-
-  ;;;;;;;;;; ACTIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
   (:action move_free
-    :parameters (?obj1 ?obj2 ?traj)
-    :precondition (and 
-                    ;; Knowns ;;
-                    (AtObj ?obj1)
-                    (HandEmpty)
-                    ;; Requirements ;;
-                    (Waypoint ?obj1)
-                    (Waypoint ?obj2)
-                    (SafeMotion ?obj1 ?obj2 ?traj)
+    :parameters (?q1 ?q2 ?t)
+    :precondition (and (FreeMotion ?q1 ?t ?q2)
+                       (AtConf ?q1) (HandEmpty) (CanMove)
+                       ;(not (UnsafeTraj ?t))
                   )
-    :effect (and (AtObj ?obj2)
-                 (not (AtObj ?obj1))
-                 (increase (total-cost) 2)
-            ) 
+    :effect (and (AtConf ?q2)
+                 (not (AtConf ?q1)) (not (CanMove)))
+  )
+
+  (:action move_holding
+    :parameters (?q1 ?q2 ?o ?g ?t)
+    :precondition (and (HoldingMotion ?q1 ?t ?q2 ?o ?g)
+                       (AtConf ?q1) (AtGrasp ?o ?g) (CanMove)
+                       ;(not (UnsafeTraj ?t))
+                  )
+    :effect (and (AtConf ?q2)
+                 (not (AtConf ?q1)) (not (CanMove)))
   )
 
   (:action pick
-    :parameters (?label ?obj)
-    :precondition (and 
-                    ;; Knowns ;;
-                    (GraspObj ?label ?obj)
-                    (AtObj ?obj)
-                    (HandEmpty)
-                    ;; Requirements ;;
-                    (Graspable ?label)
-                    (Waypoint ?obj)
-                    (FreePlacement ?label ?obj) ; This is silly but the solver REQUIRES it!
+    :parameters (?o ?p ?g ?q ?t)
+    :precondition (and (Kin ?o ?p ?g ?q ?t)
+                       (AtPose ?o ?p) (HandEmpty) (AtConf ?q)
+                       (not (UnsafeApproach ?o ?p ?g))
+                       (not (UnsafeTraj ?t))
                   )
-    :effect (and (Holding ?label) 
-                 (not (HandEmpty))
-                 (increase (total-cost) 0.5)
-            )
-    )
-
-  (:action move_holding
-    :parameters (?label ?obj1 ?obj2 ?traj)
-    :precondition (and 
-                    ;; Knowns ;;
-                    (Holding ?label)
-                    (AtObj ?obj1)
-                    ;; Requirements ;;
-                    (Waypoint ?obj1)
-                    (Waypoint ?obj2)
-                    (Graspable ?label)
-                    (GraspObj ?label ?obj1)
-                    (SafeCarry ?label ?obj1 ?obj2 ?traj)
-                  )
-    :effect (and (GraspObj ?label ?obj2)
-                 (not (GraspObj ?label ?obj1))
-                 (AtObj ?obj2)
-                 (not (AtObj ?obj1))
-                 (increase (total-cost) 1)
-            )
+    :effect (and (AtGrasp ?o ?g) (CanMove)
+                 (not (AtPose ?o ?p)) (not (HandEmpty)))
   )
 
   (:action place
-    :parameters (?label ?obj)
-    :precondition (and 
-                    ;; Knowns ;;
-                    (AtObj ?obj)
-                    (Holding ?label)
-                    ;; Requirements ;;
-                    (Waypoint ?obj)
-                    (Graspable ?label)
-                    (FreePlacement ?label ?obj)
+    :parameters (?o ?p ?g ?q ?t)
+    :precondition (and (Kin ?o ?p ?g ?q ?t)
+                       (AtGrasp ?o ?g) (AtConf ?q)
+                       (not (UnsafePose ?o ?p))
+                       (not (UnsafeApproach ?o ?p ?g))
+                       (not (UnsafeTraj ?t))
                   )
-    :effect (and (HandEmpty) 
-                 (not (Holding ?label)) 
-                 (not (FreePlacement ?label ?obj))
-                ;  (not (Waypoint ?obj))
-                 (increase (total-cost) 0.5)
-            )
+    :effect (and (AtPose ?o ?p) (HandEmpty) (CanMove)
+                 (not (AtGrasp ?o ?g)))
+  )
+
+  ; (:action clean
+  ;   :parameters (?o ?r)
+  ;   :precondition (and (Stackable ?o ?r) (Sink ?r)
+  ;                      (On ?o ?r))
+  ;   :effect (Cleaned ?o)
+  ; )
+  ; (:action cook
+  ;   :parameters (?o ?r)
+  ;   :precondition (and (Stackable ?o ?r) (Stove ?r)
+  ;                      (On ?o ?r) (Cleaned ?o))
+  ;   :effect (and (Cooked ?o)
+  ;                (not (Cleaned ?o)))
+  ; )
+
+  (:derived (On ?o ?r)
+    (exists (?p) (and (Supported ?o ?p ?r)
+                      (AtPose ?o ?p)))
+  )
+
+  (:derived (Holding ?o)
+    (exists (?g) (and (Grasp ?o ?g)
+                      (AtGrasp ?o ?g)))
+  )
+
+  (:derived (UnsafePose ?o ?p)
+    (exists (?o2 ?p2) (and (Pose ?o ?p) (Pose ?o2 ?p2) (not (= ?o ?o2))
+                           (not (CFreePosePose ?o ?p ?o2 ?p2))
+                           (AtPose ?o2 ?p2)))
+  )
+
+  (:derived (UnsafeApproach ?o ?p ?g)
+    (exists (?o2 ?p2) (and (Pose ?o ?p) (Grasp ?o ?g) (Pose ?o2 ?p2) (not (= ?o ?o2))
+                           (not (CFreeApproachPose ?o ?p ?g ?o2 ?p2))
+                           (AtPose ?o2 ?p2)))
   )
   
-
-  (:action stack
-    :parameters (?labelUp ?labelDn1 ?labelDn2 ?objUp ?objDn1 ?objDn2)
-    :precondition (and 
-                    ;; Knowns ;;
-                    (AtObj ?objUp)
-                    (Holding ?labelUp)
-                    ;; Requirements ;;
-                    (Waypoint ?objUp)
-                    (Waypoint ?objDn1)
-                    (Waypoint ?objDn2)
-                    (Graspable ?labelUp)
-                    (Graspable ?labelDn1)
-                    (Graspable ?labelDn2)
-                    (FreePlacement ?labelUp ?objUp)
-                    (GraspObj ?labelDn1 ?objDn1)
-                    (GraspObj ?labelDn2 ?objDn2)
-                    (StackPlace ?objUp ?objDn1 ?objDn2)
-                  )
-    :effect (and (HandEmpty) 
-                 (not (Holding ?labelUp))
-                 (Supported ?labelUp ?labelDn1)
-                 (Supported ?labelUp ?labelDn2)
-                 (not (FreePlacement ?labelUp ?objUp)) ; Planner does dumb things if this isn't here
-                ;  (not (Waypoint ?objUp))
-                 (increase (total-cost) 0)
-            )
+  (:derived (UnsafeTraj ?t)
+    (exists (?o2 ?p2) (and (Traj ?t) (Pose ?o2 ?p2)
+                           (not (CFreeTrajPose ?t ?o2 ?p2))
+                           ; (TrajCollision ?t ?o2 ?p2)
+                           (AtPose ?o2 ?p2)))
   )
-)  
+)

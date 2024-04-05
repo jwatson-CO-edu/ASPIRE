@@ -1,8 +1,14 @@
 # `DEV PLAN`
-* `[>]` Belief updates per tick
-    - `[ ]` Associate symbols with the behavior tree
-    - `[ ]` Check for least likely symbol associated with the tree every tick
-    - `[ ]` Fail if below the threshold
-* `[ ]` Plan prioritization
-* `[ ]` Change the pose update to match the 900 file, 2024-03-28: No errors!
-    - `[ ]` Test pose update && fix errors, 2024-03-28: No errors!
+* `[ ]` Domain Test
+    - `[ ]` Write Samplers
+        * `[ ], sample-pose`: Sample open spots to place things
+        * `[ ], sample-grasp`: Sample a grasp for the object (always the same for each pose)
+        * `[ ], inverse-kinematics`: Sample an IK sol'n for the object (always the same for each pose)
+        * `[ ], plan-free-motion`: Get robot motion with nothing in the gripper
+        * `[ ], plan-holding-motion`: Get robot motion with object in the gripper
+        * `[ ], test-cfree-pose-pose`: Check that both poses are collision free
+        * `[ ], test-cfree-approach-pose`: Test that the space above an object is collision free?
+        * `[ ], test-cfree-traj-pose`: Test that the trajectory is collision free
+    - `[ ]` Begin the problem with object locations
+    - `[ ]` Simple problem test
+    
