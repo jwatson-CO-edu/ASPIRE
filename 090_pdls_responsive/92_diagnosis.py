@@ -20,6 +20,7 @@ if __name__ == "__main__":
 
     confCount = 0
     msngCount = 0
+    dethCount = 0
     # confFound = False
 
     for trial in data['trials']:
@@ -32,8 +33,14 @@ if __name__ == "__main__":
                 confCount += 1
             if ("missing" in evn) or ("missing" in msg):
                 msngCount += 1
+            if ("BRAINDEATH" in evn) or ("BRAINDEATH" in msg):
+                dethCount += 1
         # print( '\n' )
+
+    for event in data['trials'][50]['events']:
+        print( f"\t{event}" )
                     
     print( f"Counted {confCount} confusion events in {data['N']} trials, Average: {confCount/data['N']}" )
     print( f"Counted {msngCount} missing events in {data['N']} trials, Average: {msngCount/data['N']}" )
+    print( f"Counted {dethCount} braindeath events in {data['N']} trials, Average: {dethCount/data['N']}" )
     
