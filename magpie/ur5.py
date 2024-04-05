@@ -124,12 +124,14 @@ class UR5_Interface:
         """ Computes the servo angles needed for the jaws to be width mm apart """
         # Sends command over serial to the gripper to hold those angles
         self.gripper.position( self.gripper.distance2theta( width * 1000.0 ) )
-        
+    
+    def set_gripper_angles( self, angle1, angle2):
+        """ Sets the servo angles directly. """
+        self.gripper.position_angles( angle1, angle2 )
         
     def close_gripper( self ):
         """ Set the gripper fingers to near-zero gap """
         self.set_gripper( self.gripClos_m )
-        
         
     def align_tcp( self, lock_roll = False, lock_pitch = False, lock_yaw = False ):
         """

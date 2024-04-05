@@ -48,6 +48,13 @@ class Motors:
     def position(self, delta_theta):
         Motor1_theta = -delta_theta + self.Motor1theta_90
         Motor2_theta = delta_theta + self.Motor2theta_90
+        print(Motor1_theta, Motor2_theta)
+        desiredPosition1 = int(Motor1_theta*1023/(300))
+        desiredPosition2 = int(Motor2_theta*1023/(300))
+        self.Motor1.set_goal_position(desiredPosition1)
+        self.Motor2.set_goal_position(desiredPosition2)
+    
+    def position_angles(self, Motor1_theta, Motor2_theta):
         desiredPosition1 = int(Motor1_theta*1023/(300))
         desiredPosition2 = int(Motor2_theta*1023/(300))
         self.Motor1.set_goal_position(desiredPosition1)
@@ -81,7 +88,7 @@ class Motors:
     
     def distanceFromRef(self, delta_theta):
         delta_Z = self.Crank*math.cos(math.radians(delta_theta)) - 14 + 81.32 + self.Camera2Ref
-        return deltaZ
+        return delta_Z
 
     def getPosition(self):
         self.Motor1.get_present_position()
