@@ -357,6 +357,11 @@ class ObjectMemory:
                 elif sym.prob() > uniqSym[ sym.label ].prob():
                     uniqSym[ sym.label ] = sym
         return list( uniqSym.values() )
+    
+
+    def scan_most_likely_class_gt_pose( self, k = 1 ):
+        """ Get the `k` most likely combinations of object classes with ground truth poses """
+        
 
 
     def p_noncolliding( self, objs ):
