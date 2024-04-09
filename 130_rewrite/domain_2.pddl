@@ -1,6 +1,6 @@
 ; https://planning.wiki/ref/pddl/domain
 
-; GOAL: Stack 3 Blocks, No Robot, No Motion
+; GOAL: Stack 2x towers of 3x Blocks, No Motion
 
 (define (domain pick-place-and-stack)
   (:requirements :strips :negative-preconditions)
@@ -22,9 +22,28 @@
     (Blocked ?label) ; This object cannot be lifted
     (Free ?pose) ; This pose is free of objects, therefore we can place something here without collision
 
+    ;;; Robot State ;;;
+    (HandEmpty)
+    (Holding ?label)
+
   )
 
   ;;;;;;;;;; ACTIONS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+    (:action pick
+      :parameters (?label ?pose)
+      :precondition (and
+        ;; Current State ;;
+        (GraspObj ?label ?pose)
+        ;; Robot State ;;
+        (HandEmpty)
+      )
+      :effect (and
+        ;; Robot State ;;
+        (Holding ?label)
+        (not (HandEmpty))
+      )
+    )
 
     (:action stack
         :parameters (?labelUp ?poseUp ?labelDn ?prevPose ?prevSupport)
@@ -39,6 +58,8 @@
                         (not (Blocked ?labelUp))
                         (Supported ?labelUp ?prevSupport)
                         (PoseAbove ?poseUp ?labelDn)
+                        ;; Robot State ;;
+                        (Holding ?labelUp)
                         )
         :effect (and (Supported ?labelUp ?labelDn)
                      (not (Supported ?labelUp ?prevSupport))
@@ -46,6 +67,9 @@
                      (not (GraspObj ?labelUp ?prevPose)) ; Movement SUBSTITUTE
                      (GraspObj ?labelUp ?poseUp) ; Movement SUBSTITUTE
                      (not (Free ?poseUp))
+                     ;; Robot State ;;
+                    (HandEmpty)
+                    (not (Holding ?labelUp))
                 )
     )
 )
