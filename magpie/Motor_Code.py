@@ -98,14 +98,59 @@ class Motors:
         open2 = int((self.Motor2theta_max-4)*1023/300)
         self.Motor1.set_goal_position(open1)
         self.Motor2.set_goal_position(open2)
+    
+    def get_force(self, finger='both'):
+        load = self.get_load(finger=finger)
+        if finger=='both':
+            return [self.load_to_N(load[0]), self.load_to_N(load[1])]
+        else:
+            return self.load_to_N(load)
+    
+    def get_load(self, finger='both'):
+        return self.apply_to_fingers('get_load', None, finger=finger, noarg=True)
+    
+    def apply_to_fingers(self, action_func_name, arg, finger='both', noarg=False):
+        arg = () if noarg else (arg)
+        if finger == 'both':
+            if noarg:
+                return [getattr(self.Motor1, action_func_name)(),
+                        getattr(self.Motor2, action_func_name)()]
+            else:
+                return [getattr(self.Motor1, action_func_name)(arg),
+                        getattr(self.Motor2, action_func_name)(arg)]
+        elif finger == 'left':
+            if noarg:
+                return getattr(self.Motor1, action_func_name)()
+            else:
+                return getattr(self.Motor1, action_func_name)(arg)
+        elif finger == 'right':
+            if noarg:
+                return getattr(self.Motor2, action_func_name)()
+            else:
+                return getattr(self.Motor2, action_func_name)(arg)
+    
+    # convert unitless load values to force normal load at gripper contact point
+    def load_to_N(self, load):
+        '''
+        @param load: unitless load value in bits, 0-2048. 0-1023 represents CW load, 1024-2047 represents CCW load
+        '''
+        # derived by Stephen Otto empirically
+        # see eqn on p17, figure 14 on p18 of: https://www.proquest.com/docview/2868478510?%20
+        if load > 1023:
+            load = load - 1023
+        N = -0.00001889 * load**2 + 0.038399 * load - 3.4073
+        if load < 100:
+            # made up polynomial to approximate the low load region
+            N = 0.0025 * load - 0.0000007 * load**2
+        return N
 
     def Temp(self):
         self.Motor1.get_temperature()
         self.Motor2.get_temperature()
         
-    def Load(self):
-        self.Motor1.get_load()
-        self.Motor2.get_load()
+    # def Load(self):
+    #     self.Motor1.get_load()
+    #     self.Motor2.get_load()
 
 if __name__ == "__main__":
     #Initializes everything

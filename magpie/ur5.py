@@ -52,7 +52,7 @@ def get_USB_port_with_desc( descStr ):
 class UR5_Interface:
     """ Interface class to `ur_rtde` """
     
-    def __init__( self, robotIP = "192.168.0.6" ):
+    def __init__( self, robotIP = "192.168.0.4" ):
         """ Store connection params and useful constants """
         self.robotIP    = robotIP # IP address of the robot
         self.ctrl       = None # -- `RTDEControlInterface` object 
@@ -132,6 +132,9 @@ class UR5_Interface:
     def close_gripper( self ):
         """ Set the gripper fingers to near-zero gap """
         self.set_gripper( self.gripClos_m )
+    
+    def get_gripper_force( self ):
+        return self.gripper.get_force()
         
     def align_tcp( self, lock_roll = False, lock_pitch = False, lock_yaw = False ):
         """
