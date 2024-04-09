@@ -63,12 +63,6 @@
         (PoseAbove pose08 grn)
         (PoseAbove pose09 orn)
 
-        ; (Free pose00)
-        ; (Free pose01)
-        ; (Free pose02)
-        ; (Free pose03)
-        ; (Free pose04)
-        ; (Free pose05)
         (Free pose06)
         (Free pose07)
         (Free pose08)
