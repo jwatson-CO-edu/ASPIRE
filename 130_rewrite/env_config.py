@@ -14,7 +14,7 @@ TABLE_URDF_PATH = os.path.join( pybullet_data.getDataPath(), "table/table.urdf" 
 
 ########## PYBULLET ################################################################################
 
-_USE_GRAPHICS = False
+_USE_GRAPHICS = True
 _BLOCK_ALPHA  = 1.0
 
 
@@ -42,3 +42,12 @@ _MIN_X_OFFSET = 0.400
 ########## BELIEFS #################################################################################
 
 _CONFUSE_PROB = 0.025
+
+
+
+########## MEASUREMENTS ############################################################################
+
+_ACCEPT_POSN_ERR =  1.00*_BLOCK_SCALE # 0.65 # 0.75 # 0.85
+_Z_SAFE          =  8.0*_BLOCK_SCALE
+_MIN_SEP         =  0.75*_BLOCK_SCALE # 0.40
+
