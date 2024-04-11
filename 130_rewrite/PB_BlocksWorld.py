@@ -7,7 +7,7 @@ import pybullet as pb
 from pybullet_utils import bullet_client as bc
 import pybullet_data
 
-from symbols import GraspObj
+from symbols import GraspObj, ObjectReading
 from utils import row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec
 from env_config import ( TABLE_URDF_PATH, _MIN_X_OFFSET, _BLOCK_SCALE, _CONFUSE_PROB, _BLOCK_NAMES,
                          _USE_GRAPHICS, _BLOCK_ALPHA, _ONLY_PRIMARY, _ONLY_RED, _ACCEPT_POSN_ERR,
@@ -63,20 +63,6 @@ def draw_cross( clientRef, position, scale, color, w = 2.0 ):
 
 
 ########## SIMULATED VISION ########################################################################
-
-class ObjectReading( GraspObj ):
-    """ Represents a signal coming from the vision pipeline """
-
-    def __init__( self, labels = None, pose = None ):
-        """ Init distribution and  """
-        super().__init__( None, pose )
-        self.labels = labels if (labels is not None) else {} # Current belief in each class
-
-
-    def __repr__( self ):
-        """ Text representation of noisy reading """
-        return f"<GraspObj@{self.pose}, Class: {str(self.labels)}>"
-
 
 class NoisyObjectSensor:
     """ A fake vision pipeline with simple discrete class error and Gaussian pose error """
