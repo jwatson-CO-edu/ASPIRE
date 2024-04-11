@@ -5,10 +5,11 @@ import pybullet_data
 
 
 
-########## PATHS ###################################################################################
+########## SETTINGS ################################################################################
 
 ROBOT_URDF_PATH = os.path.expanduser( "~/MAGPIE/090_pdls_responsive/ur_e_description/urdf/ur5e.urdf" )
 TABLE_URDF_PATH = os.path.join( pybullet_data.getDataPath(), "table/table.urdf" )
+_VERBOSE        = True
 
 
 
@@ -34,6 +35,7 @@ else:
 
 _POSE_DIM     = 7
 _ACTUAL_NAMES = _BLOCK_NAMES[:-1]
+_N_CLASSES    = len( _BLOCK_NAMES )
 _BLOCK_SCALE  = 0.038
 _MIN_X_OFFSET = 0.400
 
@@ -42,6 +44,8 @@ _MIN_X_OFFSET = 0.400
 ########## BELIEFS #################################################################################
 
 _CONFUSE_PROB = 0.025
+_NULL_THRESH  =  0.75
+_EXIST_THRESH = 0.05
 
 
 

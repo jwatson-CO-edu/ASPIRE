@@ -13,11 +13,7 @@ from spatialmath import Quaternion
 from spatialmath.quaternion import UnitQuaternion
 from spatialmath.base import r2q
 
-
-
-
-
-########## HELPER FUNCTIONS ########################################################################
+########## CONTAINER OPERATIONS ####################################################################
 
 def p_lst_has_nan( lst ):
     """ Does the list contain NaN? """
@@ -26,6 +22,37 @@ def p_lst_has_nan( lst ):
             return True
     return False
 
+
+def p_list_duplicates( lst ):
+    """ Return True if a value appears more than once """
+    s = set( lst )
+    return (len( lst ) > len( s ))
+
+
+
+########## FILER OPERATIONS ########################################################################
+
+def get_paths_in_dir_with_prefix( directory, prefix ):
+    """ Get only paths in the `directory` that contain the `prefix` """
+    fPaths = [os.path.join(directory, f) for f in os.listdir( directory ) if os.path.isfile( os.path.join(directory, f))]
+    return [path for path in fPaths if (prefix in str(path))]
+
+
+def get_merged_logs_in_dir_with_prefix( directory, prefix ):
+    """ Merge all logs into one that can be analized easily """
+    pklPaths = get_paths_in_dir_with_prefix( directory, prefix )
+    logMain  = DataLogger()
+    for path in pklPaths:
+        log_i = DataLogger()
+        log_i.load( path )
+        # pprint( log_i.metrics )
+        # print( '\n' )
+        logMain.merge_from( log_i )
+    return logMain.get_snapshot()
+
+
+
+########## GEOMETRY ################################################################################
 
 def origin_row_vec():
     """ Return a row vector representing the origin pose as a Position and Orientation --> [Px,Py,Pz,Ow,Ox,Oy,Oz] """
@@ -72,6 +99,7 @@ def row_vec_to_pb_posn_ornt( V ):
     ornt[-1] = V[3]
     return posn, ornt
 
+
 def homog_to_row_vec( homog ):
     """ Express a homogeneous coord as a Position and Orientation --> [Px,Py,Pz,Ow,Ox,Oy,Oz] """
     P = homog[0:3,3]
@@ -93,6 +121,31 @@ def homog_to_pb_posn_ornt( homog ):
     """ Express a homogeneous coord as a Position and Orientation --> [Px,Py,Pz],[Ox,Oy,Oz,Ow] """
     return row_vec_to_pb_posn_ornt( homog_to_row_vec( homog ) )
 
+
+def diff_norm( v1, v2 ):
+    """ Return the norm of the difference between the two vectors """
+    return np.linalg.norm( np.subtract( v1, v2 ) )
+
+
+def closest_dist_Q_to_segment_AB( Q, A, B, includeEnds = True ):
+    """ Return the closest distance of point Q to line segment AB """
+    l = diff_norm( B, A )
+    if l <= 0.0:
+        return diff_norm( Q, A )
+    D = np.subtract( B, A ) / l
+    V = np.subtract( Q, A )
+    t = V.dot( D )
+    if (t > l) or (t < 0.0):
+        if includeEnds:
+            return min( diff_norm( Q, A ), diff_norm( Q, B ) )
+        else:
+            return float("NaN")
+    P = np.add( A, D*t )
+    return diff_norm( P, Q ) 
+
+
+
+########## STATS & SAMPLING ########################################################################
 
 def total_pop( odds ):
     """ Sum over all categories in the prior odds """
@@ -153,50 +206,18 @@ def multiclass_Bayesian_belief_update( cnfMtx, priorB, evidnc ):
         P_hGe[i,:] = (cnfMtx[i,:]*priorB[i,0]).reshape( (Nclass,) ) / P_e
     return P_hGe.dot( evidnc ).reshape( (Nclass,) )
 
-def diff_norm( v1, v2 ):
-    """ Return the norm of the difference between the two vectors """
-    return np.linalg.norm( np.subtract( v1, v2 ) )
 
-def closest_dist_Q_to_segment_AB( Q, A, B, includeEnds = True ):
-    """ Return the closest distance of point Q to line segment AB """
-    l = diff_norm( B, A )
-    if l <= 0.0:
-        return diff_norm( Q, A )
-    D = np.subtract( B, A ) / l
-    V = np.subtract( Q, A )
-    t = V.dot( D )
-    if (t > l) or (t < 0.0):
-        if includeEnds:
-            return min( diff_norm( Q, A ), diff_norm( Q, B ) )
+def get_confused_class_reading( label, confProb, orderedLabels ):
+    """ Return a discrete distribution with uniform confusion between classes other than `label` """
+    rtnLabels = {}
+    Nclass    = len( orderedLabels )
+    for i in range( Nclass ):
+        blkName_i = orderedLabels[i]
+        if blkName_i == label:
+            rtnLabels[ blkName_i ] = 1.0-confProb*(Nclass-1)
         else:
-            return float("NaN")
-    P = np.add( A, D*t )
-    return diff_norm( P, Q ) 
-
-
-def p_list_duplicates( lst ):
-    """ Return True if a value appears more than once """
-    s = set( lst )
-    return (len( lst ) > len( s ))
-
-
-def get_paths_in_dir_with_prefix( directory, prefix ):
-    """ Get only paths in the `directory` that contain the `prefix` """
-    fPaths = [os.path.join(directory, f) for f in os.listdir( directory ) if os.path.isfile( os.path.join(directory, f))]
-    return [path for path in fPaths if (prefix in str(path))]
-
-
-def get_merged_logs_in_dir_with_prefix( directory, prefix ):
-    """ Merge all logs into one that can be analized easily """
-    pklPaths = get_paths_in_dir_with_prefix( directory, prefix )
-    logMain  = DataLogger()
-    for path in pklPaths:
-        log_i = DataLogger()
-        log_i.load( path )
-        # pprint( log_i.metrics )
-        # print( '\n' )
-        logMain.merge_from( log_i )
-    return logMain.get_snapshot()
+            rtnLabels[ blkName_i ] = confProb
+    return rtnLabels
 
 ########## EXPERIMENT STATISTICS ###################################################################
 

@@ -23,7 +23,8 @@ class ObjectReading( GraspObj ):
     def __init__( self, labels = None, pose = None ):
         """ Init distribution and  """
         super().__init__( None, pose )
-        self.labels = labels if (labels is not None) else {} # Current belief in each class
+        self.labels  = labels if (labels is not None) else {} # Current belief in each class
+        self.visited = False
 
 
     def __repr__( self ):
