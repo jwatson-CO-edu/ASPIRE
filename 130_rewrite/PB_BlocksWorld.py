@@ -8,7 +8,8 @@ from pybullet_utils import bullet_client as bc
 import pybullet_data
 
 from symbols import GraspObj, ObjectReading
-from utils import row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec
+from utils import ( row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec, get_confused_class_reading, 
+                    roll_outcome )
 from env_config import ( TABLE_URDF_PATH, _MIN_X_OFFSET, _BLOCK_SCALE, _CONFUSE_PROB, _BLOCK_NAMES,
                          _USE_GRAPHICS, _BLOCK_ALPHA, _ONLY_PRIMARY, _ONLY_RED, _ACCEPT_POSN_ERR,
                          _ACTUAL_NAMES )
@@ -284,20 +285,15 @@ class PB_BlocksWorld:
 
 
     ##### Sensor Sampling #################################################
-        
-    # FIXME, START HERE: NOISY READINGS SHOULD MAKE MISTAKES!
 
     def get_block_noisy( self, blockName, confuseProb = _CONFUSE_PROB ):
         """ Find one of the ROYGBV blocks, Partially Observable, Return None if the name is not in the world """
         try:
-            rtnObj = self.get_block_true( blockName )
-            rtnObj = ObjectReading( labels = None, pose = np.array( rtnObj.pose ) )
-            for i in range( len( _BLOCK_NAMES ) ):
-                blkName_i = _BLOCK_NAMES[i]
-                if blkName_i == blockName:
-                    rtnObj.labels[ blkName_i ] = 1.0-confuseProb*(len( _BLOCK_NAMES )-1)
-                else:
-                    rtnObj.labels[ blkName_i ] = confuseProb
+            rtnObj   = self.get_block_true( blockName )
+            rtnObj   = ObjectReading( labels = None, pose = np.array( rtnObj.pose ) )
+            rollDist = get_confused_class_reading( blockName, confuseProb, _BLOCK_NAMES )
+            noisyLbl = roll_outcome( rollDist )
+            rtnObj.labels = get_confused_class_reading( noisyLbl, confuseProb, _BLOCK_NAMES )
             return rtnObj
         except ValueError:
             return None
