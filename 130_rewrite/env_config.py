@@ -6,6 +6,11 @@ import pybullet_data
 
 
 ########## SETTINGS ################################################################################
+np.set_printoptions(
+    edgeitems =  16, # Number of items before ...
+    linewidth = 200, 
+    formatter = dict( float = lambda x: "%.5g" % x ) 
+)
 
 ROBOT_URDF_PATH = os.path.expanduser( "~/MAGPIE/090_pdls_responsive/ur_e_description/urdf/ur5e.urdf" )
 TABLE_URDF_PATH = os.path.join( pybullet_data.getDataPath(), "table/table.urdf" )
@@ -54,4 +59,5 @@ _EXIST_THRESH = 0.05
 _ACCEPT_POSN_ERR =  1.00*_BLOCK_SCALE # 0.65 # 0.75 # 0.85
 _Z_SAFE          =  8.0*_BLOCK_SCALE
 _MIN_SEP         =  0.75*_BLOCK_SCALE # 0.40
+_MIN_X_OFFSET    = 0.400
 

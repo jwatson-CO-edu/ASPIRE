@@ -9,7 +9,7 @@ import pybullet_data
 
 from symbols import GraspObj, ObjectReading
 from utils import ( row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec, get_confused_class_reading, 
-                    roll_outcome )
+                    roll_outcome, origin_row_vec )
 from env_config import ( TABLE_URDF_PATH, _MIN_X_OFFSET, _BLOCK_SCALE, _CONFUSE_PROB, _BLOCK_NAMES,
                          _USE_GRAPHICS, _BLOCK_ALPHA, _ONLY_PRIMARY, _ONLY_RED, _ACCEPT_POSN_ERR,
                          _ACTUAL_NAMES )
@@ -114,6 +114,15 @@ class GhostRobot:
         """ Render the effector cursor """
         draw_cross( clientRef, self.pose[:3], _BLOCK_SCALE*4.0, [0,0,0], w = 2.0 )
 
+
+    def goto_pose( self, targetPose ):
+        """ Send the effector to the `targetPose` """
+        self.target = np.array( targetPose )
+    
+
+    def goto_home( self ):
+        """ Send the effector to the origin """
+        self.goto_pose( origin_row_vec() )
 
 
 ########## ENVIRONMENT #############################################################################

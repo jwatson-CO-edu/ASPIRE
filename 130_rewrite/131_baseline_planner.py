@@ -1,18 +1,35 @@
 ########## DEV PLAN ################################################################################
 """
-[Y] Combine `ObjectBelief` and `ObjectMemory` --> `ObjectMemory`, SIMPLIFY!, 2024-04-11: Testing req'd
+[Y] Combine `ObjectBelief` and `ObjectMemory` --> `ObjectMemory`, SIMPLIFY!, 2024-04-11: Testing req'd , 2024-04-12: Seems to work!
 """
 
 ########## INIT ####################################################################################
 
-import numpy as np
+##### Imports #####
 
+### Standard ###
+import sys
+from traceback import print_exc, format_exc
+from pprint import pprint
+
+### Special ###
+import numpy as np
+from py_trees.common import Status
+
+### Local ###
 from symbols import GraspObj, ObjectReading
 from utils import ( multiclass_Bayesian_belief_update, get_confusion_matx, get_confused_class_reading, 
-                    DataLogger, )
+                    DataLogger, origin_row_vec, )
 from PB_BlocksWorld import PB_BlocksWorld
 from env_config import ( _BLOCK_SCALE, _N_CLASSES, _CONFUSE_PROB, _NULL_NAME, _NULL_THRESH, 
-                         _BLOCK_NAMES, _VERBOSE )
+                         _BLOCK_NAMES, _VERBOSE, _MIN_X_OFFSET, _ACTUAL_NAMES )
+
+### PDDLStream ### 
+sys.path.append( "../pddlstream/" )
+from pddlstream.utils import read, INF, get_file_path
+from pddlstream.language.generator import from_gen_fn, from_test
+from pddlstream.language.constants import print_solution, PDDLProblem
+from pddlstream.algorithms.meta import solve
 
 
 ########## HELPER FUNCTIONS ########################################################################
@@ -96,6 +113,7 @@ class ObjectMemory:
         if relevant:
             belBest.visited = True
             self.accum_evidence_for_belief( objReading, belBest )
+            belBest.pose = np.array( objReading.pose ) # WARNING: ASSUME THE NEW NEAREST POSE IS CORRECT!
 
         # 2. If this evidence does not support an existing belief, it is a new belief
         else:
@@ -150,11 +168,17 @@ class ObjectMemory:
         cNu = 0
         cIn = 0
         self.unvisit_beliefs()
-        for objEv in evdncLst:
-            if self.integrate_one_reading( objEv ):
-                cIn += 1
-            else:
-                cNu += 1
+        
+        if not len( self.beliefs ):
+            # WARNING: ASSUMING EACH OBJECT IS REPRESENTED BY EXACTLY 1 READING
+            for objEv in evdncLst:
+                self.beliefs.append( objEv.copy() )
+        else:
+            for objEv in evdncLst:
+                if self.integrate_one_reading( objEv ):
+                    cIn += 1
+                else:
+                    cNu += 1
 
         if _VERBOSE:
             if (cNu or cIn):
@@ -180,7 +204,7 @@ class ObjectMemory:
             for combo_i in comboList:
                 for label_j, prob_j in bel.labels.items():
                     prob_ij = combo_i[0] * prob_j
-                    objc_ij = GraspObj( self, label = label_j, pose = np.array( bel.pose ) )
+                    objc_ij = GraspObj( label = label_j, pose = np.array( bel.pose ) )
                     nuCombos.append( [prob_ij, combo_i[1]+[objc_ij,],] )
             comboList = nuCombos
         ## Sort all class combinations with decreasing probabilities ##
@@ -199,6 +223,9 @@ class ObjectMemory:
 
 
 ########## BASELINE PLANNER ########################################################################
+_trgtRed = [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] 
+_trgtGrn = [ _MIN_X_OFFSET+6.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ]
+
 
 class BaselineTAMP:
     """ Basic TAMP loop against which the Method is compared """
@@ -208,6 +235,15 @@ class BaselineTAMP:
     def reset_beliefs( self ):
         """ Erase belief memory """
         self.memory = ObjectMemory() # Distributions over objects
+
+
+    def reset_state( self ):
+        """ Erase problem state """
+        self.status  = Status.INVALID
+        self.symbols = []
+        self.task    = None
+        self.goal    = tuple()
+        self.facts   = list()
 
 
     def __init__( self, world = None ):
@@ -225,10 +261,175 @@ class BaselineTAMP:
         self.memory.belief_update( self.world.full_scan_noisy() )
 
 
+    ##### Stream Creators #################################################
+
+    def get_above_pose_stream( self ):
+        """ Return a function that returns poses """
+
+        def stream_func( *args ):
+            """ A function that returns poses """
+
+            if _VERBOSE:
+                print( f"\nEvaluate OBJECT stream with args: {args}\n" )
+
+            objcName = args[0]
+
+            for sym in self.symbols:
+                if sym.label == objcName:
+                    upPose = np.array( sym.pose )
+                    upPose[2] = 2.0*_BLOCK_SCALE
+                    yield (upPose,)
+
+        return stream_func
+
+
+    ##### Task And Motion Planning ########################################
+
+    def pddlstream_from_problem( self ):
+        """ Set up a PDDLStream problem with the UR5 """
+
+        domain_pddl  = read( get_file_path( __file__, 'domain.pddl' ) )
+        stream_pddl  = read( get_file_path( __file__, 'stream.pddl' ) )
+        constant_map = {}
+        stream_map = {
+            ### Symbol Streams ###
+            'sample-above': from_gen_fn( self.get_above_pose_stream() ), 
+            # ### Symbol Tests ###
+            # 2024-04-12: See if we can solve without this!
+            # 'test-free-placment': from_test( self.get_free_placement_test() ),
+        }
+
+        if _VERBOSE:
+            print( "About to create problem ... " )
+
+        return PDDLProblem( domain_pddl, constant_map, stream_pddl, stream_map, self.facts, self.goal )
+
+
+    def set_table( self ):
+        """ Get ready for an experiment """
+        self.world.robot.goto_home()
+        self.world.reset_blocks()
+        self.world.spin_for( 500 )
+
+
+    def set_goal( self ):
+        """ Set the goal """
+
+        self.goal = ( 'and',
+            ('HandEmpty',),
+            
+            ('GraspObj' , 'redBlock', _trgtRed  ), # ; Tower A
+            ('Supported', 'ylwBlock', 'redBlock'), 
+            ('Supported', 'bluBlock', 'ylwBlock'),
+
+            ('GraspObj', 'grnBlock' , _trgtGrn  ), # ; Tower B
+            ('Supported', 'ornBlock', 'grnBlock'), 
+            ('Supported', 'vioBlock', 'ornBlock'),
+        )
+
+        if _VERBOSE:
+            print( f"### Goal ###" )
+            pprint( self.goal )
+
+
+    def phase_1_Perceive( self, Nscans = 1 ):
+        """ Take in evidence and form beliefs """
+
+        for _ in range( Nscans ):
+            planner.perceive_scene() # We need at least an initial set of beliefs in order to plan
+
+        self.symbols = self.memory.most_likely_objects( N = 1 )
+        self.status  = Status.RUNNING
+
+        if _VERBOSE:
+            print( f"Starting Objects:" )
+            for obj in self.symbols:
+                print( f"\t{obj}" )
+
+
+    def phase_2_Conditions( self ):
+        """ Get the necessary initial state, Check for goals already met """
+        
+        start = origin_row_vec()
+
+        self.facts = [
+            ## Init Predicates ##
+            ('Waypoint', start,),
+            ('AtPose'  , start,),
+            ('HandEmpty',),
+            ## Goal Predicates ##
+            ('Waypoint', _trgtRed,),
+            ('Waypoint', _trgtGrn,),
+        ] 
+
+        for body in _ACTUAL_NAMES:
+            self.facts.append( ('Graspable', body,) )
+            self.facts.append( ('Supported', body, 'table',) )
+
+        for sym in self.symbols:
+             self.facts.append( ('GraspObj', sym.label, sym.pose,) )
+             self.facts.append( ('Waypoint', sym.pose,) )
+
+        if _VERBOSE:
+            print( f"### Initial Symbols ###" )
+            for sym in self.facts:
+                print( f"\t{sym}" )
+
+            
+    def phase_3_Plan_Task( self ):
+        """ Attempt to solve the symbolic problem """
+
+        self.task = self.pddlstream_from_problem()
+
+        self.logger.log_event( "Begin Solver" )
+
+        try:
+            
+            solution = solve( 
+                self.task, 
+                algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
+                unit_costs   = True, 
+                unit_efforts = True,
+
+                # search_sample_ratio = 1/500, #1/1500, #1/5, #1/1000, #1/750 # 1/1000, #1/2000 #500, #1/2, # 1/500, #1/200, #1/10, #2, # 25 #1/25
+
+            )
+            # print( "Solver has completed!\n\n\n" )
+            print_solution( solution )
+        except Exception as ex:
+            self.logger.log_event( "SOLVER FAULT", format_exc() )
+            self.status = Status.FAILURE
+            print_exc()
+            solution = (None, None, None)
+            self.noSoln += 1 # DEATH MONITOR
+        
+
+
 ########## MAIN ####################################################################################
 if __name__ == "__main__":
-    planner = BaselineTAMP()
-    objs    = planner.world.full_scan_noisy()
 
-    for obj in objs:
-        print( obj )
+    planner = BaselineTAMP()
+    
+    planner.set_goal()
+    planner.logger.begin_trial()
+
+    planner.phase_1_Perceive()
+    planner.phase_2_Conditions()
+    planner.phase_3_Plan_Task()
+
+    planner.logger.end_trial( True )
+
+    if 0:
+        for _ in range(10):
+            planner.perceive_scene()
+        for bel in planner.memory.beliefs:
+            print( bel )
+
+    if 0:
+        objs = planner.world.full_scan_noisy()
+        for obj in objs:
+            print( obj )
+
+    
+
+    
