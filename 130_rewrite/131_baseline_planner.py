@@ -1,6 +1,6 @@
 ########## DEV PLAN ################################################################################
 """
-[ ] Combine `ObjectBelief` and `ObjectMemory` --> `ObjectMemory`, SIMPLIFY!
+[Y] Combine `ObjectBelief` and `ObjectMemory` --> `ObjectMemory`, SIMPLIFY!, 2024-04-11: Testing req'd
 """
 
 ########## INIT ####################################################################################
@@ -8,9 +8,11 @@
 import numpy as np
 
 from symbols import GraspObj, ObjectReading
-from utils import multiclass_Bayesian_belief_update, get_confusion_matx, get_confused_class_reading
+from utils import ( multiclass_Bayesian_belief_update, get_confusion_matx, get_confused_class_reading, 
+                    DataLogger, )
+from PB_BlocksWorld import PB_BlocksWorld
 from env_config import ( _BLOCK_SCALE, _N_CLASSES, _CONFUSE_PROB, _NULL_NAME, _NULL_THRESH, 
-                         _EXIST_THRESH, _BLOCK_NAMES, _VERBOSE )
+                         _BLOCK_NAMES, _VERBOSE )
 
 
 ########## HELPER FUNCTIONS ########################################################################
@@ -203,4 +205,30 @@ class BaselineTAMP:
 
     ##### Init ############################################################
 
-    pass
+    def reset_beliefs( self ):
+        """ Erase belief memory """
+        self.memory = ObjectMemory() # Distributions over objects
+
+
+    def __init__( self, world = None ):
+        """ Create a pre-determined collection of poses and plan skeletons """
+        self.reset_beliefs()
+        self.world  = world if (world is not None) else PB_BlocksWorld()
+        self.logger = DataLogger()
+        # DEATH MONITOR
+        self.noSoln =  0
+        self.nonLim = 10
+
+
+    def perceive_scene( self ):
+        """ Integrate one noisy scan into the current beliefs """
+        self.memory.belief_update( self.world.full_scan_noisy() )
+
+
+########## MAIN ####################################################################################
+if __name__ == "__main__":
+    planner = BaselineTAMP()
+    objs    = planner.world.full_scan_noisy()
+
+    for obj in objs:
+        print( obj )

@@ -285,6 +285,8 @@ class PB_BlocksWorld:
 
     ##### Sensor Sampling #################################################
         
+    # FIXME, START HERE: NOISY READINGS SHOULD MAKE MISTAKES!
+
     def get_block_noisy( self, blockName, confuseProb = _CONFUSE_PROB ):
         """ Find one of the ROYGBV blocks, Partially Observable, Return None if the name is not in the world """
         try:
