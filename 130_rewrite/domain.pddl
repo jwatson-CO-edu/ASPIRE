@@ -95,10 +95,10 @@
                       ;; Domain ;;
                       (Graspable ?labelUp)
                       (Waypoint ?poseUp)
-                      ;; Object State ;;
-                      (GraspObj ?labelUp ?poseUp) 
                       ;; Requirements ;;
                       (PoseAbove ?poseUp ?labelDn)
+                      ;; Object State ;;
+                      (GraspObj ?labelUp ?poseUp) 
                       ;; Robot State ;;
                       (Holding ?labelUp)
                       )

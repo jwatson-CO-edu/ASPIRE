@@ -8,7 +8,7 @@
 ##### Imports #####
 
 ### Standard ###
-import sys
+import sys, pickle
 from traceback import print_exc, format_exc
 from pprint import pprint
 
@@ -17,7 +17,7 @@ import numpy as np
 from py_trees.common import Status
 
 ### Local ###
-from symbols import GraspObj, ObjectReading
+from symbols import GraspObj, ObjPose
 from utils import ( multiclass_Bayesian_belief_update, get_confusion_matx, get_confused_class_reading, 
                     DataLogger, origin_row_vec, )
 from PB_BlocksWorld import PB_BlocksWorld
@@ -66,7 +66,6 @@ def extract_class_dist_in_order( obj, order = _BLOCK_NAMES ):
     return np.array( extract_dct_values_in_order( obj.labels, order ) )
 
 
-
 ########## BELIEFS #################################################################################
 
 class ObjectMemory:
@@ -113,11 +112,12 @@ class ObjectMemory:
         if relevant:
             belBest.visited = True
             self.accum_evidence_for_belief( objReading, belBest )
-            belBest.pose = np.array( objReading.pose ) # WARNING: ASSUME THE NEW NEAREST POSE IS CORRECT!
+            # belBest.pose = np.array( objReading.pose ) # WARNING: ASSUME THE NEW NEAREST POSE IS CORRECT!
+            belBest.pose = objReading.pose # WARNING: ASSUME THE NEW NEAREST POSE IS CORRECT!
 
         # 2. If this evidence does not support an existing belief, it is a new belief
         else:
-            self.beliefs.append( objReading.copy() )
+            self.beliefs.append( objReading.copy() ) 
 
         # N. Return whether the reading was relevant to an existing belief
         return relevant
@@ -196,6 +196,14 @@ class ObjectMemory:
 
     def most_likely_objects( self, N = 1 ):
         """ Get the `N` most likely combinations of object classes """
+
+        def p_unique_labels( objLst ):
+            """ Return true if there are as many classes as there are objects """
+            lbls = set([sym.label for sym in objLst])
+            if _NULL_NAME in lbls: # WARNING: HACK
+                return False
+            return len( lbls ) == len( objLst )
+
         ## Init ##
         comboList = [ [1.0,[],], ]
         ## Generate all class combinations with joint probabilities ##
@@ -204,14 +212,19 @@ class ObjectMemory:
             for combo_i in comboList:
                 for label_j, prob_j in bel.labels.items():
                     prob_ij = combo_i[0] * prob_j
-                    objc_ij = GraspObj( label = label_j, pose = np.array( bel.pose ) )
+
+                    # objc_ij = GraspObj( label = label_j, pose = np.array( bel.pose ) )
+                    objc_ij = GraspObj( label = label_j, pose = bel.pose )
+                    
                     nuCombos.append( [prob_ij, combo_i[1]+[objc_ij,],] )
             comboList = nuCombos
         ## Sort all class combinations with decreasing probabilities ##
         comboList.sort( key = (lambda x: x[0]), reverse = True )
         ## Return top combos ##
         if N == 1:
-            return comboList[0][1]
+            for combo in comboList:
+                if p_unique_labels( combo[1] ):
+                    return combo[1]
         elif N > 1:
             rtnCombos = []
             for i in range(N):
@@ -223,8 +236,8 @@ class ObjectMemory:
 
 
 ########## BASELINE PLANNER ########################################################################
-_trgtRed = [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] 
-_trgtGrn = [ _MIN_X_OFFSET+6.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ]
+_trgtRed = ObjPose( [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
+_trgtGrn = ObjPose( [ _MIN_X_OFFSET+6.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
 
 
 class BaselineTAMP:
@@ -270,14 +283,17 @@ class BaselineTAMP:
             """ A function that returns poses """
 
             if _VERBOSE:
-                print( f"\nEvaluate OBJECT stream with args: {args}\n" )
+                print( f"\nEvaluate ABOVE LABEL stream with args: {args}\n" )
 
             objcName = args[0]
 
             for sym in self.symbols:
                 if sym.label == objcName:
-                    upPose = np.array( sym.pose )
-                    upPose[2] = 2.0*_BLOCK_SCALE
+                    # upPose = np.array( sym.pose )
+                    upPose = sym.pose.copy()
+                    # upPose[2] = 2.0*_BLOCK_SCALE
+                    upPose.pose[2] = 2.0*_BLOCK_SCALE
+                    print( f"FOUND a pose {upPose} supported by {objcName}!" )
                     yield (upPose,)
 
         return stream_func
@@ -316,20 +332,22 @@ class BaselineTAMP:
         """ Set the goal """
 
         self.goal = ( 'and',
-            ('HandEmpty',),
             
-            ('GraspObj' , 'redBlock', _trgtRed  ), # ; Tower A
+            # ('GraspObj' , 'redBlock', _trgtRed  ), # ; Tower A
             ('Supported', 'ylwBlock', 'redBlock'), 
             ('Supported', 'bluBlock', 'ylwBlock'),
 
-            ('GraspObj', 'grnBlock' , _trgtGrn  ), # ; Tower B
+            # ('GraspObj', 'grnBlock' , _trgtGrn  ), # ; Tower B
             ('Supported', 'ornBlock', 'grnBlock'), 
             ('Supported', 'vioBlock', 'ornBlock'),
+
+            ('HandEmpty',),
         )
 
         if _VERBOSE:
-            print( f"### Goal ###" )
+            print( f"\n### Goal ###" )
             pprint( self.goal )
+            print()
 
 
     def phase_1_Perceive( self, Nscans = 1 ):
@@ -342,7 +360,7 @@ class BaselineTAMP:
         self.status  = Status.RUNNING
 
         if _VERBOSE:
-            print( f"Starting Objects:" )
+            print( f"\nStarting Objects:" )
             for obj in self.symbols:
                 print( f"\t{obj}" )
 
@@ -350,30 +368,32 @@ class BaselineTAMP:
     def phase_2_Conditions( self ):
         """ Get the necessary initial state, Check for goals already met """
         
-        start = origin_row_vec()
+        start = ObjPose( origin_row_vec() )
 
         self.facts = [
             ## Init Predicates ##
             ('Waypoint', start,),
             ('AtPose'  , start,),
+            # ('Free'    , start,), # Not needed?
             ('HandEmpty',),
             ## Goal Predicates ##
             ('Waypoint', _trgtRed,),
+            ('Free'    , _trgtRed,),
             ('Waypoint', _trgtGrn,),
+            ('Free'    , _trgtGrn,),
         ] 
 
-        for body in _ACTUAL_NAMES:
-            self.facts.append( ('Graspable', body,) )
-            self.facts.append( ('Supported', body, 'table',) )
-
         for sym in self.symbols:
+             self.facts.append( ('Graspable', sym.label,) )
+             self.facts.append( ('Supported', sym.label, 'table',) )
              self.facts.append( ('GraspObj', sym.label, sym.pose,) )
              self.facts.append( ('Waypoint', sym.pose,) )
 
         if _VERBOSE:
-            print( f"### Initial Symbols ###" )
+            print( f"\n### Initial Symbols ###" )
             for sym in self.facts:
                 print( f"\t{sym}" )
+            print()
 
             
     def phase_3_Plan_Task( self ):
@@ -383,19 +403,43 @@ class BaselineTAMP:
 
         self.logger.log_event( "Begin Solver" )
 
+        # print( dir( self.task ) )
+        if 0:
+            print( f"\nself.task.init\n" )
+            pprint( self.task.init )
+            print( f"\nself.task.goal\n" )
+            pprint( self.task.goal )
+            print( f"\nself.task.domain_pddl\n" )
+            pprint( self.task.domain_pddl )
+            print( f"\nself.task.stream_pddl\n" )
+            pprint( self.task.stream_pddl )
+
         try:
             
             solution = solve( 
                 self.task, 
-                algorithm = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
-                unit_costs   = True, 
-                unit_efforts = True,
-
-                # search_sample_ratio = 1/500, #1/1500, #1/5, #1/1000, #1/750 # 1/1000, #1/2000 #500, #1/2, # 1/500, #1/200, #1/10, #2, # 25 #1/25
+                algorithm      = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
+                unit_costs     = True, # False, #True, 
+                unit_efforts   = True, # False, #True,
+                reorder        = False,
+                # initial_complexity = 4,
+                # max_complexity = 4,
+                # max_failures  = 4,
+                search_sample_ratio = 1/500, #1/1500, #1/5, #1/1000, #1/750 # 1/1000, #1/2000 #500, #1/2, # 1/500, #1/200, #1/10, #2, # 25 #1/25
 
             )
-            # print( "Solver has completed!\n\n\n" )
+
+            print( "Solver has completed!\n\n\n" )
             print_solution( solution )
+            soln, cost, cert = solution
+            if 0:
+                print( type(cert) )
+                print( dir(cert) )
+                print( "\n >>> All Facts <<<" )
+                pprint( cert.all_facts )
+                print()
+
+
         except Exception as ex:
             self.logger.log_event( "SOLVER FAULT", format_exc() )
             self.status = Status.FAILURE
@@ -418,6 +462,13 @@ if __name__ == "__main__":
     planner.phase_3_Plan_Task()
 
     planner.logger.end_trial( True )
+
+    if 0:
+        with open( "statistics/py3/magpie-tamp.pkl", 'rb' ) as f:
+            postRunDiag = pickle.load( f )
+            print( '\n' )
+            pprint( postRunDiag )
+            print( '\n' )
 
     if 0:
         for _ in range(10):

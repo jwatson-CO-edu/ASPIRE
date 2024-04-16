@@ -6,8 +6,9 @@
   (:stream sample-above
     :inputs (?label)
     :domain (Graspable ?label)
+    ; :fluents (Free) 
     :outputs (?pose)
-    :certified (and (Waypoint ?pose) (PoseAbove ?pose ?label) )
+    :certified (and (PoseAbove ?pose ?label) (Waypoint ?pose) (Free ?pose) )
   )
 
 ;;;;;;;;;; TESTS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

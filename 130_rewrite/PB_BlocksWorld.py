@@ -7,7 +7,7 @@ import pybullet as pb
 from pybullet_utils import bullet_client as bc
 import pybullet_data
 
-from symbols import GraspObj, ObjectReading
+from symbols import GraspObj, ObjectReading, ObjPose, extract_row_vec_pose
 from utils import ( row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec, get_confused_class_reading, 
                     roll_outcome, origin_row_vec )
 from env_config import ( TABLE_URDF_PATH, _MIN_X_OFFSET, _BLOCK_SCALE, _CONFUSE_PROB, _BLOCK_NAMES,
@@ -74,7 +74,7 @@ class NoisyObjectSensor:
     def noisy_reading_from_true( self, trueObj ):
         """ Add noise to the true reading and return it """
         rtnObj = ObjectReading()
-        rtnObj.pose = np.array( trueObj.pose )
+        rtnObj.pose = trueObj.pose
         for blkName_i in _BLOCK_NAMES:
             if blkName_i == trueObj.label:
                 rtnObj.labels[ blkName_i ] = 1.0-self.confProb*(len( _BLOCK_NAMES )-1)
@@ -90,7 +90,7 @@ class GhostRobot:
 
     def __init__( self, initPose = None ):
         """ Set the initial location of the effector """
-        self.pose   = np.array( initPose ) if isinstance(initPose, (list,np.ndarray)) else np.array([0,0,0,1,0,0,0])
+        self.pose   = extract_row_vec_pose( initPose )
         self.target = np.array( self.pose )
         self.speed  = _BLOCK_SCALE / 10.0
 
@@ -117,7 +117,7 @@ class GhostRobot:
 
     def goto_pose( self, targetPose ):
         """ Send the effector to the `targetPose` """
-        self.target = np.array( targetPose )
+        self.target = extract_row_vec_pose( targetPose )
     
 
     def goto_home( self ):
@@ -260,7 +260,10 @@ class PB_BlocksWorld:
             idx = _BLOCK_NAMES.index( blockName )
             blockPos, blockOrn = self.physicsClient.getBasePositionAndOrientation( self.blocks[idx] )
             # blockPos = np.array( blockPos )
-            return GraspObj( blockName, pb_posn_ornt_to_row_vec( blockPos, blockOrn ) )
+            return GraspObj( 
+                blockName, 
+                ObjPose( pb_posn_ornt_to_row_vec( blockPos, blockOrn ) )
+            )
         except ValueError:
             return None
         
@@ -299,7 +302,8 @@ class PB_BlocksWorld:
         """ Find one of the ROYGBV blocks, Partially Observable, Return None if the name is not in the world """
         try:
             rtnObj   = self.get_block_true( blockName )
-            rtnObj   = ObjectReading( labels = None, pose = np.array( rtnObj.pose ) )
+            # rtnObj   = ObjectReading( labels = None, pose = np.array( rtnObj.pose ) )
+            rtnObj   = ObjectReading( labels = None, pose = rtnObj.pose )
             rollDist = get_confused_class_reading( blockName, confuseProb, _BLOCK_NAMES )
             noisyLbl = roll_outcome( rollDist )
             rtnObj.labels = get_confused_class_reading( noisyLbl, confuseProb, _BLOCK_NAMES )
