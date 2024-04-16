@@ -81,10 +81,12 @@
     (:goal
         (and
             (GraspObj red targetRed) ; Tower A
+            ; (Supported red table)
             (Supported ylw red)
             (Supported blu ylw)
 
             (GraspObj grn targetGrn) ; Tower B
+            ; (Supported grn table)
             (Supported orn grn)
             (Supported vio orn)
         )

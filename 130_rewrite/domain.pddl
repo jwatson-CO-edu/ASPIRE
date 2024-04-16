@@ -95,10 +95,10 @@
                       ;; Domain ;;
                       (Graspable ?labelUp)
                       (Waypoint ?poseUp)
-                      ;; Requirements ;;
-                      (PoseAbove ?poseUp ?labelDn)
                       ;; Object State ;;
                       (GraspObj ?labelUp ?poseUp) 
+                      ;; Requirements ;;
+                      (PoseAbove ?poseUp ?labelDn)
                       ;; Robot State ;;
                       (Holding ?labelUp)
                       )
@@ -109,6 +109,24 @@
                 ;; Robot State ;;
                 (HandEmpty)
                 (not (Holding ?labelUp))
+              )
+  )
+
+  (:action place
+      :parameters (?label ?pose)
+      :precondition (and 
+                      ;; Domain ;;
+                      (Graspable ?label)
+                      (Waypoint ?pose)
+                      ;; Object State ;;
+                      (GraspObj ?label ?pose) 
+                      ;; Robot State ;;
+                      (Holding ?label)
+                      )
+      :effect (and 
+                ;; Robot State ;;
+                (HandEmpty)
+                (not (Holding ?label))
               )
   )
 )
