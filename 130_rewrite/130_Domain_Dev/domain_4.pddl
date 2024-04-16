@@ -114,7 +114,7 @@
 
   (:action place
 
-      :parameters (?label ?pose ?support)
+      :parameters (?label ?pose)
       :precondition (and 
                       ;; Domain ;;
                       (Graspable ?label)
@@ -125,8 +125,6 @@
                       (Holding ?label)
                       )
       :effect (and 
-                ;; Object State ;;
-                (Supported ?label ?support)
                 ;; Robot State ;;
                 (HandEmpty)
                 (not (Holding ?label))
