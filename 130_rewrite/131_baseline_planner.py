@@ -21,6 +21,7 @@ from symbols import GraspObj, ObjPose
 from utils import ( multiclass_Bayesian_belief_update, get_confusion_matx, get_confused_class_reading, 
                     DataLogger, origin_row_vec, )
 from PB_BlocksWorld import PB_BlocksWorld
+from actions import display_PDLS_plan
 from env_config import ( _BLOCK_SCALE, _N_CLASSES, _CONFUSE_PROB, _NULL_NAME, _NULL_THRESH, 
                          _BLOCK_NAMES, _VERBOSE, _MIN_X_OFFSET, _ACTUAL_NAMES )
 
@@ -431,21 +432,24 @@ class BaselineTAMP:
 
             print( "Solver has completed!\n\n\n" )
             print_solution( solution )
-            soln, cost, cert = solution
-            if 0:
-                print( type(cert) )
-                print( dir(cert) )
-                print( "\n >>> All Facts <<<" )
-                pprint( cert.all_facts )
-                print()
-
-
+            
         except Exception as ex:
             self.logger.log_event( "SOLVER FAULT", format_exc() )
             self.status = Status.FAILURE
             print_exc()
             solution = (None, None, None)
             self.noSoln += 1 # DEATH MONITOR
+
+        plan, cost, evaluations = solution
+        if (plan is not None) and len( plan ):
+            display_PDLS_plan( plan )
+            self.currPlan = plan
+            self.action   = get_BT_plan_until_block_change( plan, self.world )
+            self.noSoln = 0 # DEATH MONITOR
+        else:
+            self.noSoln += 1 # DEATH MONITOR
+            self.logger.log_event( "NO SOLUTION" )
+            self.status = Status.FAILURE
         
 
 
