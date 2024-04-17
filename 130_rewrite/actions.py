@@ -467,15 +467,15 @@ def get_ith_BT_action_from_PDLS_plan( pdlsPlan, i, world ):
     actArgs  = pdlsPlan[i].args
     btAction = None
     if actName == "move_free":
-        btAction = MoveFree( actArgs, world = world, robot=world.robot )
+        btAction = MoveFree( actArgs, world = world, robot = world.robot )
     elif actName == "pick":
-        btAction = Pick( actArgs, world = world, robot=world.robot )
+        btAction = Pick( actArgs, world = world, robot = world.robot )
     elif actName == "move_holding":
-        btAction = MoveHolding( actArgs, world = world, robot=world.robot )
+        btAction = MoveHolding( actArgs, world = world, robot = world.robot )
     elif actName == "place":
-        btAction = Place( actArgs, world = world, robot=world.robot )
+        btAction = Place( actArgs, world = world, robot = world.robot )
     elif actName == "stack":
-        btAction = Stack( actArgs, world = world, robot=world.robot )
+        btAction = Stack( actArgs, world = world, robot = world.robot )
     else:
         raise NotImplementedError( f"There is no BT procedure defined for a PDDL action named {actName}!" )
     print( f"Action {i+1}, {actName} --> {btAction.name}, planned!" )

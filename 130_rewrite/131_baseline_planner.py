@@ -19,9 +19,9 @@ from py_trees.common import Status
 ### Local ###
 from symbols import GraspObj, ObjPose
 from utils import ( multiclass_Bayesian_belief_update, get_confusion_matx, get_confused_class_reading, 
-                    DataLogger, origin_row_vec, )
+                    DataLogger, origin_row_vec, row_vec_to_pb_posn_ornt )
 from PB_BlocksWorld import PB_BlocksWorld
-from actions import display_PDLS_plan
+from actions import display_PDLS_plan, get_BT_plan_until_block_change, BT_Runner
 from env_config import ( _BLOCK_SCALE, _N_CLASSES, _CONFUSE_PROB, _NULL_NAME, _NULL_THRESH, 
                          _BLOCK_NAMES, _VERBOSE, _MIN_X_OFFSET, _ACTUAL_NAMES )
 
@@ -300,7 +300,7 @@ class BaselineTAMP:
         return stream_func
 
 
-    ##### Task And Motion Planning ########################################
+    ##### TAMP Helpers ####################################################
 
     def pddlstream_from_problem( self ):
         """ Set up a PDDLStream problem with the UR5 """
@@ -350,6 +350,24 @@ class BaselineTAMP:
             pprint( self.goal )
             print()
 
+
+    def check_OOB( self, thresh_m = 10.0 ):
+        """ Return true if any of the simulated objects are out of bounds """
+        truSym = self.world.full_scan_true()
+        for truth in truSym:
+            posn, _ = row_vec_to_pb_posn_ornt( truth.pose )
+            for coord in posn:
+                if abs( coord ) >= thresh_m:
+                    return True
+        return False
+
+
+    def p_failed( self ):
+        """ Has the system encountered a failure? """
+        return (self.status == Status.FAILURE)
+
+
+    ##### Task And Motion Planning Phases #################################
 
     def phase_1_Perceive( self, Nscans = 1 ):
         """ Take in evidence and form beliefs """
@@ -441,16 +459,94 @@ class BaselineTAMP:
             self.noSoln += 1 # DEATH MONITOR
 
         plan, cost, evaluations = solution
+
         if (plan is not None) and len( plan ):
             display_PDLS_plan( plan )
             self.currPlan = plan
             self.action   = get_BT_plan_until_block_change( plan, self.world )
-            self.noSoln = 0 # DEATH MONITOR
+            self.noSoln   = 0 # DEATH MONITOR
         else:
             self.noSoln += 1 # DEATH MONITOR
             self.logger.log_event( "NO SOLUTION" )
             self.status = Status.FAILURE
         
+
+    def phase_4_Execute_Action( self ):
+        """ Attempt to execute the first action in the symbolic plan """
+        
+        btr = BT_Runner( self.action, self.world, 20.0, 30.0 )
+        btr.setup_BT_for_running()
+
+        while not btr.p_ended():
+            
+            btr.tick_once()
+            self.world.robot.draw( self.world.physicsClient )
+
+            if (btr.status == Status.FAILURE):
+                self.status = Status.FAILURE
+                self.logger.log_event( "Action Failure", btr.msg )
+            if self.check_OOB( 1.5 ):
+                self.status = Status.FAILURE
+                self.logger.log_event( "Object OOB", str( self.world.full_scan_true() ) )
+
+
+    ##### TAMP Main Loop ##################################################
+
+    def solve_task( self, maxIter = 100 ):
+        """ Solve the goal """
+        
+        i = 0
+
+        print( "\n\n\n##### TAMP BEGIN #####\n" )
+
+        self.reset_state()
+        self.set_goal()
+        self.logger.begin_trial()
+
+        while (self.status != Status.SUCCESS) and (i < maxIter):
+
+            print( f"### Iteration {i+1} ###" )
+            
+            i += 1
+
+            print( f"Phase 1, {self.status} ..." )
+
+            self.reset_beliefs() # WARNING: REMOVE FOR RESPONSIVE
+            
+            self.phase_1_Perceive( 1 )
+
+            print( f"Phase 2, {self.status} ..." )
+            self.phase_2_Conditions()
+
+            if self.status in (Status.SUCCESS, Status.FAILURE):
+                print( f"LOOP, {self.status} ..." )
+                continue
+
+            print( f"Phase 3, {self.status} ..." )
+            self.phase_3_Plan_Task()
+
+            # DEATH MONITOR
+            if self.noSoln >= self.nonLim:
+                self.logger.log_event( "SOLVER BRAINDEATH", f"Iteration {i+1}: Solver has failed {self.noSoln} time in a row!" )
+                break
+
+            if self.p_failed():
+                print( f"LOOP, {self.status} ..." )
+                continue
+
+            print( f"Phase 4, {self.status} ..." )
+            self.phase_4_Execute_Action()
+
+            print()
+
+        self.logger.end_trial(
+            self.validate_goal_true( self.goal ),
+            {'end_symbols' : list( self.symbols ) }
+        )
+
+        self.logger.save( "data/TAMP-Loop" )
+
+        print( f"\n##### TAMP END with status {self.status} after iteration {i} #####\n\n\n" )
 
 
 ########## MAIN ####################################################################################

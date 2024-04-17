@@ -781,6 +781,7 @@ class ResponsiveExecutive:
 
         self.logger.log_event( "End Solver" )
 
+
     def phase_4_Execute_Action( self ):
         """ Attempt to execute the first action in the symbolic plan """
         
