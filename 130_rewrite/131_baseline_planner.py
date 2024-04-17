@@ -392,14 +392,13 @@ class BaselineTAMP:
         self.facts = [
             ## Init Predicates ##
             ('Waypoint', start,),
-            ('AtPose'  , start,),
-            # ('Free'    , start,), # Not needed?
+            ('AtPose'  , start,), # FIXME: YOU DON'T KNOW IF THIS IS TRUE!
             ('HandEmpty',),
             ## Goal Predicates ##
             ('Waypoint', _trgtRed,),
-            ('Free'    , _trgtRed,),
+            ('Free'    , _trgtRed,), # FIXME: YOU DON'T KNOW IF THIS IS TRUE!
             ('Waypoint', _trgtGrn,),
-            ('Free'    , _trgtGrn,),
+            ('Free'    , _trgtGrn,), # FIXME: YOU DON'T KNOW IF THIS IS TRUE!
         ] 
 
         for sym in self.symbols:
