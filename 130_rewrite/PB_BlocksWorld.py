@@ -90,28 +90,53 @@ class GhostRobot:
 
     def __init__( self, initPose = None ):
         """ Set the initial location of the effector """
-        self.pose   = extract_row_vec_pose( initPose )
-        self.target = np.array( self.pose )
-        self.speed  = _BLOCK_SCALE / 10.0
+        self.pose    = extract_row_vec_pose( initPose )
+        self.target  = np.array( self.pose )
+        self.speed   = _BLOCK_SCALE / 10.0
+        self.halted  = False
+        self.epsilon = 1e-5
+
+
+    def set_pause( self, val = True ):
+        """ Set the `halted` flag """
+        self.halted = val
+
+
+    def set_step_speed( self, nuSpeed ):
+        """ Set the per-step max travel, enforce non-negative """
+        self.speed = abs( nuSpeed )
+
+
+    def dist_to_target( self ):
+        """ Get linear distance between current pose and target pose """
+        return np.linalg.norm( np.subtract( self.target[:3], self.pose[:3] ) )
+    
+
+    def get_current_pose( self ):
+        """ Get a copy of the current pose """
+        return np.array( self.pose )
+
 
     def tick( self ):
-        """ Advance the cursor by one speed """
-        bgn = self.pose[:3]
-        end = self.target[:3]
-        dif = np.subtract( end, bgn )
-        mag = np.linalg.norm( dif )
-        if mag > 0.0:
-            unt = dif / mag
-        else:
-            unt = np.zeros( (3,) )
-        if mag > self.speed:
-            dif = unt * self.speed
-            self.pose[:3] = np.add( bgn, dif )
-        else:
-            self.pose = np.array( self.target )
+        """ Advance the cursor by one speed (if not halted) """
+        if not self.halted:
+            bgn = self.pose[:3]
+            end = self.target[:3]
+            dif = np.subtract( end, bgn )
+            mag = np.linalg.norm( dif )
+            if mag > 0.0:
+                unt = dif / mag
+            else:
+                unt = np.zeros( (3,) )
+            if mag > self.speed:
+                dif = unt * self.speed
+                self.pose[:3] = np.add( bgn, dif )
+            else:
+                self.pose = np.array( self.target )
+
 
     def draw( self, clientRef ):
-        """ Render the effector cursor """
+        """ Render the effector cursor, NOTE: Letting client code call this """
         draw_cross( clientRef, self.pose[:3], _BLOCK_SCALE*4.0, [0,0,0], w = 2.0 )
 
 
@@ -123,6 +148,14 @@ class GhostRobot:
     def goto_home( self ):
         """ Send the effector to the origin """
         self.goto_pose( origin_row_vec() )
+
+
+    def p_moving( self ):
+        """ Return True if the robot is not halted and there is still significant distance to target """
+        if self.halted:
+            return False
+        else:
+            return (self.dist_to_target() > self.epsilon)
 
 
 ########## ENVIRONMENT #############################################################################
