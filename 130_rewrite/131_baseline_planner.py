@@ -408,6 +408,8 @@ class BaselineTAMP:
              self.facts.append( ('GraspObj', sym.label, sym.pose,) )
              self.facts.append( ('Waypoint', sym.pose,) )
 
+        # FIXME: VALIDATE NOISILY TO AVOID REPEAT WORK AND CORRECT MISTAKES
+
         if _VERBOSE:
             print( f"\n### Initial Symbols ###" )
             for sym in self.facts:
@@ -489,6 +491,48 @@ class BaselineTAMP:
                 self.status = Status.FAILURE
                 self.logger.log_event( "Object OOB", str( self.world.full_scan_true() ) )
 
+
+    ##### Goal Validation #################################################
+
+    # FIXME, START HERE: VALIDATE FOR GOAL MET
+
+    def validate_predicate_true( self, pred ):
+        """ Check if the predicate is true """
+        pTyp = pred[0]
+        if pTyp == 'HandEmpty':
+            print( f"HandEmpty: {self.world.grasp}" )
+            return (len( self.world.grasp ) == 0)
+        elif pTyp == 'GraspObj':
+            pLbl = pred[1]
+            pPos = pred[2]
+            tObj = self.world.get_block_true( pLbl )
+            print( pred )
+            print( "GraspObj:", pPos.pose[:3], tObj.pose[:3] )
+            print( f"GraspObj: {diff_norm( pPos.pose[:3], tObj.pose[:3] )} <= {_ACCEPT_POSN_ERR}" )
+            return (diff_norm( pPos.pose[:3], tObj.pose[:3] ) <= _ACCEPT_POSN_ERR)
+        elif pTyp == 'Supported':
+            lblUp = pred[1]
+            lblDn = pred[2]
+            objUp = self.world.get_block_true( lblUp )
+            objDn = self.world.get_block_true( lblDn )
+            xySep = diff_norm( objUp.pose[:2], objDn.pose[:2] )
+            zSep  = objUp.pose[2] - objDn.pose[2] # Signed value
+            print( f"Supported, X-Y Sep: {xySep} <= {2.0*_BLOCK_SCALE}, Z Sep: {zSep} >= {1.35*_BLOCK_SCALE}" )
+            return ((xySep <= 2.0*_BLOCK_SCALE) and (zSep >= 1.35*_BLOCK_SCALE))
+        else:
+            print( f"UNSUPPORTED predicate check!: {pTyp}" )
+            return False
+    
+    def validate_goal_true( self, goal ):
+        """ Check if the goal is met """
+        if goal[0] == 'and':
+            for g in goal[1:]:
+                if not self.validate_predicate_true( g ):
+                    return False
+            return True
+        else:
+            raise ValueError( f"Unexpected goal format!: {goal}" )
+        
 
     ##### TAMP Main Loop ##################################################
 
