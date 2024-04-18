@@ -19,11 +19,11 @@ from py_trees.common import Status
 ### Local ###
 from symbols import GraspObj, ObjPose
 from utils import ( multiclass_Bayesian_belief_update, get_confusion_matx, get_confused_class_reading, 
-                    DataLogger, origin_row_vec, row_vec_to_pb_posn_ornt )
+                    DataLogger, origin_row_vec, row_vec_to_pb_posn_ornt, diff_norm, )
 from PB_BlocksWorld import PB_BlocksWorld
 from actions import display_PDLS_plan, get_BT_plan_until_block_change, BT_Runner
 from env_config import ( _BLOCK_SCALE, _N_CLASSES, _CONFUSE_PROB, _NULL_NAME, _NULL_THRESH, 
-                         _BLOCK_NAMES, _VERBOSE, _MIN_X_OFFSET, _ACTUAL_NAMES )
+                         _BLOCK_NAMES, _VERBOSE, _MIN_X_OFFSET, _ACCEPT_POSN_ERR, _MIN_SEP, )
 
 ### PDDLStream ### 
 sys.path.append( "../pddlstream/" )
@@ -300,6 +300,27 @@ class BaselineTAMP:
         return stream_func
 
 
+    def get_free_placement_test( self ):
+        """ Return a function that checks placement poses """
+
+        def test_func( *args ):
+            """ a function that checks placement poses """
+            print( f"\nEvaluate PLACEMENT test with args: {args}\n" )
+            # ?pose
+            chkPose   = args[0]
+            posn , _  = row_vec_to_pb_posn_ornt( chkPose.pose )
+            print( f"Symbols: {self.symbols}" )
+
+            for sym in self.symbols:
+                symPosn, _ = row_vec_to_pb_posn_ornt( sym.pose )
+                if diff_norm( posn, symPosn ) < ( _MIN_SEP ):
+                    print( f"PLACEMENT test FAILURE\n" )
+                    return False
+            print( f"PLACEMENT test SUCCESS\n" )
+            return True
+        
+        return test_func
+
     ##### TAMP Helpers ####################################################
 
     def pddlstream_from_problem( self ):
@@ -312,8 +333,7 @@ class BaselineTAMP:
             ### Symbol Streams ###
             'sample-above': from_gen_fn( self.get_above_pose_stream() ), 
             # ### Symbol Tests ###
-            # 2024-04-12: See if we can solve without this!
-            # 'test-free-placment': from_test( self.get_free_placement_test() ),
+            'test-free-placment': from_test( self.get_free_placement_test() ),
         }
 
         if _VERBOSE:
@@ -365,6 +385,63 @@ class BaselineTAMP:
     def p_failed( self ):
         """ Has the system encountered a failure? """
         return (self.status == Status.FAILURE)
+    
+
+    ##### Noisy Task Monitoring ###########################################
+
+    def get_sampled_block( self, label ):
+        """ If a block with `label` was sampled, then return a reference to it, Otherwise return `None` """
+        for sym in self.symbols:
+            if sym.label == label:
+                return sym
+        return None
+    
+    # FIXME, START HERE: ADD THIS TO PHASE 2
+    def ground_relevant_predicates_noisy( self ):
+        """ Scan the environment for evidence that the task is progressing, using current beliefs """
+        rtnFacts = []
+        ## Gripper Predicates ##
+        if len( self.world.grasp ):
+            for grasped in self.world.grasp:
+                [hndl,pDif,bOrn,] = grasped
+                labl = self.world.get_handle_name( hndl )
+                rtnFacts.append( ('Holding', labl,) )
+        else:
+            rtnFacts.append( ('HandEmpty',) )
+        ## Obj@Loc Predicates ##
+        # A. Check goals
+        for g in self.goal[1:]:
+            if g[0] == 'GraspObj':
+                pLbl = g[1]
+                pPos = g[2]
+                tObj = self.get_sampled_block( pLbl )
+                return (diff_norm( pPos.pose[:3], tObj.pose[:3] ) <= _ACCEPT_POSN_ERR)
+        # B. No need to ground the rest
+        ## Support Predicates && Blocked Status ##
+        # Check if `sym_i` is supported by `sym_j`, blocking `sym_j`, NOTE: Table supports not checked
+        supDices = set([])
+        for i, sym_i in enumerate( self.symbols ):
+            for j, sym_j in enumerate( self.symbols ):
+                if i != j:
+                    lblUp = sym_i.label
+                    lblDn = sym_j.label
+                    posUp = sym_i.pose
+                    posDn = sym_j.pose
+                    xySep = diff_norm( posUp.pose[:2], posDn.pose[:2] )
+                    zSep  = posUp.pose[2] - posDn.pose[2] # Signed value
+                    if ((xySep <= 2.0*_BLOCK_SCALE) and (zSep >= 1.35*_BLOCK_SCALE)):
+                        supDices.add(i)
+                        rtnFacts.extend([
+                            ('Supported', lblUp, lblDn,),
+                            ('Blocked', lblDn,),
+                        ])
+        for i, sym_i in enumerate( self.symbols ):
+            if i not in supDices:
+                rtnFacts.append( ('Supported', sym_i.label, 'table',) )
+        ## Where the robot at? ##
+        rtnFacts.append( ('AtPose', ObjPose( self.world.robot.get_current_pose() ),) )
+        ## Return relevant predicates ##
+        return rtnFacts
 
 
     ##### Task And Motion Planning Phases #################################
@@ -392,8 +469,6 @@ class BaselineTAMP:
         self.facts = [
             ## Init Predicates ##
             ('Waypoint', start,),
-            ('AtPose'  , start,), # FIXME: YOU DON'T KNOW IF THIS IS TRUE!
-            ('HandEmpty',),
             ## Goal Predicates ##
             ('Waypoint', _trgtRed,),
             ('Free'    , _trgtRed,), # FIXME: YOU DON'T KNOW IF THIS IS TRUE!
@@ -493,31 +568,36 @@ class BaselineTAMP:
 
     ##### Goal Validation #################################################
 
-    # FIXME, START HERE: VALIDATE FOR GOAL MET
-
     def validate_predicate_true( self, pred ):
         """ Check if the predicate is true """
         pTyp = pred[0]
+        print( f"Check Predicate (True): {pred}" )
+        ## Check that there is nothing in the "gripper" ##
         if pTyp == 'HandEmpty':
             print( f"HandEmpty: {self.world.grasp}" )
             return (len( self.world.grasp ) == 0)
+        ## Check that an object of the required class is near to the required pose ##
         elif pTyp == 'GraspObj':
             pLbl = pred[1]
             pPos = pred[2]
             tObj = self.world.get_block_true( pLbl )
-            print( pred )
             print( "GraspObj:", pPos.pose[:3], tObj.pose[:3] )
             print( f"GraspObj: {diff_norm( pPos.pose[:3], tObj.pose[:3] )} <= {_ACCEPT_POSN_ERR}" )
             return (diff_norm( pPos.pose[:3], tObj.pose[:3] ) <= _ACCEPT_POSN_ERR)
+        ## Check that an object of the required class is near to the required pose ##
         elif pTyp == 'Supported':
             lblUp = pred[1]
             lblDn = pred[2]
             objUp = self.world.get_block_true( lblUp )
-            objDn = self.world.get_block_true( lblDn )
-            xySep = diff_norm( objUp.pose[:2], objDn.pose[:2] )
-            zSep  = objUp.pose[2] - objDn.pose[2] # Signed value
-            print( f"Supported, X-Y Sep: {xySep} <= {2.0*_BLOCK_SCALE}, Z Sep: {zSep} >= {1.35*_BLOCK_SCALE}" )
-            return ((xySep <= 2.0*_BLOCK_SCALE) and (zSep >= 1.35*_BLOCK_SCALE))
+            if lblDn == 'table':
+                return (objUp.pose[2] <= 1.35*_BLOCK_SCALE)
+            else:
+                objDn = self.world.get_block_true( lblDn )
+                xySep = diff_norm( objUp.pose[:2], objDn.pose[:2] )
+                zSep  = objUp.pose[2] - objDn.pose[2] # Signed value
+                print( f"Supported, X-Y Sep: {xySep} <= {2.0*_BLOCK_SCALE}, Z Sep: {zSep} >= {1.35*_BLOCK_SCALE}" )
+                return ((xySep <= 2.0*_BLOCK_SCALE) and (zSep >= 1.35*_BLOCK_SCALE))
+        ## Else goal contains a bad predicate ##
         else:
             print( f"UNSUPPORTED predicate check!: {pTyp}" )
             return False
