@@ -20,10 +20,11 @@ from py_trees.common import Status
 from symbols import GraspObj, ObjPose
 from utils import ( multiclass_Bayesian_belief_update, get_confusion_matx, get_confused_class_reading, 
                     DataLogger, origin_row_vec, row_vec_to_pb_posn_ornt, diff_norm, )
-from PB_BlocksWorld import PB_BlocksWorld
+from PB_BlocksWorld import PB_BlocksWorld, rand_table_pose
 from actions import display_PDLS_plan, get_BT_plan_until_block_change, BT_Runner
 from env_config import ( _BLOCK_SCALE, _N_CLASSES, _CONFUSE_PROB, _NULL_NAME, _NULL_THRESH, 
-                         _BLOCK_NAMES, _VERBOSE, _MIN_X_OFFSET, _ACCEPT_POSN_ERR, _MIN_SEP, )
+                         _BLOCK_NAMES, _VERBOSE, _MIN_X_OFFSET, _ACCEPT_POSN_ERR, _MIN_SEP, 
+                         _N_XTRA_SPOTS, )
 
 ### PDDLStream ### 
 sys.path.append( "../pddlstream/" )
@@ -396,7 +397,7 @@ class BaselineTAMP:
                 return sym
         return None
     
-    # FIXME, START HERE: ADD THIS TO PHASE 2
+    
     def ground_relevant_predicates_noisy( self ):
         """ Scan the environment for evidence that the task is progressing, using current beliefs """
         rtnFacts = []
@@ -471,18 +472,21 @@ class BaselineTAMP:
             ('Waypoint', start,),
             ## Goal Predicates ##
             ('Waypoint', _trgtRed,),
-            ('Free'    , _trgtRed,), # FIXME: YOU DON'T KNOW IF THIS IS TRUE!
             ('Waypoint', _trgtGrn,),
-            ('Free'    , _trgtGrn,), # FIXME: YOU DON'T KNOW IF THIS IS TRUE!
         ] 
 
+        ## Ground the Blocks ##
         for sym in self.symbols:
              self.facts.append( ('Graspable', sym.label,) )
-             self.facts.append( ('Supported', sym.label, 'table',) )
              self.facts.append( ('GraspObj', sym.label, sym.pose,) )
              self.facts.append( ('Waypoint', sym.pose,) )
 
-        # FIXME: VALIDATE NOISILY TO AVOID REPEAT WORK AND CORRECT MISTAKES
+        ## Fetch Relevant Facts ##
+        self.facts.extend( self.ground_relevant_predicates_noisy() )
+
+        ## Populate Spots for Block Movements ##
+        for _ in range( _N_XTRA_SPOTS ):
+            self.facts.append( ('Waypoint', ObjPose( rand_table_pose() ),) )
 
         if _VERBOSE:
             print( f"\n### Initial Symbols ###" )
@@ -676,15 +680,17 @@ class BaselineTAMP:
 if __name__ == "__main__":
 
     planner = BaselineTAMP()
+    planner.solve_task( maxIter = 100 )
     
-    planner.set_goal()
-    planner.logger.begin_trial()
+    if 0:
+        planner.set_goal()
+        planner.logger.begin_trial()
 
-    planner.phase_1_Perceive()
-    planner.phase_2_Conditions()
-    planner.phase_3_Plan_Task()
+        planner.phase_1_Perceive()
+        planner.phase_2_Conditions()
+        planner.phase_3_Plan_Task()
 
-    planner.logger.end_trial( True )
+        planner.logger.end_trial( True )
 
     if 0:
         with open( "statistics/py3/magpie-tamp.pkl", 'rb' ) as f:
