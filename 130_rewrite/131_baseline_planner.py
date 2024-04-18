@@ -293,8 +293,8 @@ class BaselineTAMP:
                 if sym.label == objcName:
                     # upPose = np.array( sym.pose )
                     upPose = sym.pose.copy()
-                    # upPose[2] = 2.0*_BLOCK_SCALE
-                    upPose.pose[2] = 2.0*_BLOCK_SCALE
+                    # upPose.pose[2] = 2.0*_BLOCK_SCALE
+                    upPose.pose[2] += _BLOCK_SCALE
                     print( f"FOUND a pose {upPose} supported by {objcName}!" )
                     yield (upPose,)
 
@@ -313,7 +313,7 @@ class BaselineTAMP:
             print( f"Symbols: {self.symbols}" )
 
             for sym in self.symbols:
-                symPosn, _ = row_vec_to_pb_posn_ornt( sym.pose )
+                symPosn, _ = row_vec_to_pb_posn_ornt( sym.pose.pose )
                 if diff_norm( posn, symPosn ) < ( _MIN_SEP ):
                     print( f"PLACEMENT test FAILURE\n" )
                     return False
@@ -376,7 +376,7 @@ class BaselineTAMP:
         """ Return true if any of the simulated objects are out of bounds """
         truSym = self.world.full_scan_true()
         for truth in truSym:
-            posn, _ = row_vec_to_pb_posn_ornt( truth.pose )
+            posn, _ = row_vec_to_pb_posn_ornt( truth.pose.pose )
             for coord in posn:
                 if abs( coord ) >= thresh_m:
                     return True
@@ -416,7 +416,8 @@ class BaselineTAMP:
                 pLbl = g[1]
                 pPos = g[2]
                 tObj = self.get_sampled_block( pLbl )
-                return (diff_norm( pPos.pose[:3], tObj.pose[:3] ) <= _ACCEPT_POSN_ERR)
+                if (tObj is not None) and (diff_norm( pPos.pose[:3], tObj.pose.pose[:3] ) <= _ACCEPT_POSN_ERR):
+                    rtnFacts.append( g ) # Position goal met
         # B. No need to ground the rest
         ## Support Predicates && Blocked Status ##
         # Check if `sym_i` is supported by `sym_j`, blocking `sym_j`, NOTE: Table supports not checked
@@ -445,6 +446,23 @@ class BaselineTAMP:
         return rtnFacts
 
 
+    def check_goal_objects( self, goal, symbols ):
+        """ Return True if the labels mentioned in the goals are a subset of the determinized symbols """
+        goalSet = set([])
+        symbSet = set( [sym.label for sym in symbols] )
+        for g in goal:
+            if isinstance( g, (tuple, list) ):
+                prdName = g[0]
+                if prdName == 'GraspObj':
+                    goalSet.add( g[1] )
+                elif prdName == 'Supported':
+                    goalSet.add( g[1] )
+                    goalSet.add( g[2] )
+                else:
+                    continue
+        return (goalSet <= symbSet)
+    
+
     ##### Task And Motion Planning Phases #################################
 
     def phase_1_Perceive( self, Nscans = 1 ):
@@ -465,34 +483,39 @@ class BaselineTAMP:
     def phase_2_Conditions( self ):
         """ Get the necessary initial state, Check for goals already met """
         
-        start = ObjPose( origin_row_vec() )
+        if not self.check_goal_objects( self.goal, self.symbols ):
+            self.logger.log_event( "Required objects missing", str( self.symbols ) )   
+            self.status = Status.FAILURE
+        else:
+            start = ObjPose( origin_row_vec() )
 
-        self.facts = [
-            ## Init Predicates ##
-            ('Waypoint', start,),
-            ## Goal Predicates ##
-            ('Waypoint', _trgtRed,),
-            ('Waypoint', _trgtGrn,),
-        ] 
+            self.facts = [
+                ## Init Predicates ##
+                ('Waypoint', start,),
+                ## Goal Predicates ##
+                ('Waypoint', _trgtRed,),
+                ('Waypoint', _trgtGrn,),
+            ] 
 
-        ## Ground the Blocks ##
-        for sym in self.symbols:
-             self.facts.append( ('Graspable', sym.label,) )
-             self.facts.append( ('GraspObj', sym.label, sym.pose,) )
-             self.facts.append( ('Waypoint', sym.pose,) )
+            ## Ground the Blocks ##
+            for sym in self.symbols:
+                self.facts.append( ('Graspable', sym.label,) )
+                self.facts.append( ('GraspObj', sym.label, sym.pose,) )
+                self.facts.append( ('Waypoint', sym.pose,) )
 
-        ## Fetch Relevant Facts ##
-        self.facts.extend( self.ground_relevant_predicates_noisy() )
+            ## Fetch Relevant Facts ##
+            # print( self.ground_relevant_predicates_noisy() )
+            self.facts.extend( self.ground_relevant_predicates_noisy() )
 
-        ## Populate Spots for Block Movements ##
-        for _ in range( _N_XTRA_SPOTS ):
-            self.facts.append( ('Waypoint', ObjPose( rand_table_pose() ),) )
+            ## Populate Spots for Block Movements ##
+            for _ in range( _N_XTRA_SPOTS ):
+                self.facts.append( ('Waypoint', ObjPose( rand_table_pose() ),) )
 
-        if _VERBOSE:
-            print( f"\n### Initial Symbols ###" )
-            for sym in self.facts:
-                print( f"\t{sym}" )
-            print()
+            if _VERBOSE:
+                print( f"\n### Initial Symbols ###" )
+                for sym in self.facts:
+                    print( f"\t{sym}" )
+                print()
 
             
     def phase_3_Plan_Task( self ):
@@ -585,9 +608,8 @@ class BaselineTAMP:
             pLbl = pred[1]
             pPos = pred[2]
             tObj = self.world.get_block_true( pLbl )
-            print( "GraspObj:", pPos.pose[:3], tObj.pose[:3] )
-            print( f"GraspObj: {diff_norm( pPos.pose[:3], tObj.pose[:3] )} <= {_ACCEPT_POSN_ERR}" )
-            return (diff_norm( pPos.pose[:3], tObj.pose[:3] ) <= _ACCEPT_POSN_ERR)
+            print( f"GraspObj: {diff_norm( pPos.pose[:3], tObj.pose.pose[:3] )} <= {_ACCEPT_POSN_ERR}" )
+            return (diff_norm( pPos.pose[:3], tObj.pose.pose[:3] ) <= _ACCEPT_POSN_ERR)
         ## Check that an object of the required class is near to the required pose ##
         elif pTyp == 'Supported':
             lblUp = pred[1]
@@ -597,8 +619,8 @@ class BaselineTAMP:
                 return (objUp.pose[2] <= 1.35*_BLOCK_SCALE)
             else:
                 objDn = self.world.get_block_true( lblDn )
-                xySep = diff_norm( objUp.pose[:2], objDn.pose[:2] )
-                zSep  = objUp.pose[2] - objDn.pose[2] # Signed value
+                xySep = diff_norm( objUp.pose[:2], objDn.pose.pose[:2] )
+                zSep  = objUp.pose[2] - objDn.pose.pose[2] # Signed value
                 print( f"Supported, X-Y Sep: {xySep} <= {2.0*_BLOCK_SCALE}, Z Sep: {zSep} >= {1.35*_BLOCK_SCALE}" )
                 return ((xySep <= 2.0*_BLOCK_SCALE) and (zSep >= 1.35*_BLOCK_SCALE))
         ## Else goal contains a bad predicate ##
@@ -663,6 +685,8 @@ class BaselineTAMP:
 
             print( f"Phase 4, {self.status} ..." )
             self.phase_4_Execute_Action()
+
+            self.world.spin_for( 100 )
 
             print()
 

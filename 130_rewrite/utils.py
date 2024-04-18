@@ -56,7 +56,7 @@ def get_merged_logs_in_dir_with_prefix( directory, prefix ):
 
 def origin_row_vec():
     """ Return a row vector representing the origin pose as a Position and Orientation --> [Px,Py,Pz,Ow,Ox,Oy,Oz] """
-    return [0,0,0,1,0,0,0]
+    return [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
 
 
 def NaN_row_vec():

@@ -44,7 +44,7 @@ _N_CLASSES    = len( _BLOCK_NAMES )
 _BLOCK_SCALE  = 0.038
 _MIN_X_OFFSET = 0.400
 _N_XTRA_SPOTS = 3
-
+_ROBOT_SPEED  = _BLOCK_SCALE / 10.0
 
 
 ########## BELIEFS #################################################################################

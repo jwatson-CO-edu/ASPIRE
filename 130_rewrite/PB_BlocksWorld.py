@@ -12,7 +12,7 @@ from utils import ( row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec, get_confus
                     roll_outcome, origin_row_vec )
 from env_config import ( TABLE_URDF_PATH, _MIN_X_OFFSET, _BLOCK_SCALE, _CONFUSE_PROB, _BLOCK_NAMES,
                          _USE_GRAPHICS, _BLOCK_ALPHA, _ONLY_PRIMARY, _ONLY_RED, _ACCEPT_POSN_ERR,
-                         _ACTUAL_NAMES )
+                         _ACTUAL_NAMES, _ROBOT_SPEED )
 
 
 
@@ -48,7 +48,7 @@ def banished_pose():
     return [100,100,100], [0, 0, 0, 1]
 
 
-def draw_cross( clientRef, position, scale, color, w = 2.0 ):
+def draw_cross( clientRef, position, scale, w = 2.0, timeout_s = 0.50 ):
     """ Draw a static cross at the XYZ `position` with arms aligned with the lab axes """
     ofst = scale/2.0
     cntr = np.array( position )
@@ -58,9 +58,9 @@ def draw_cross( clientRef, position, scale, color, w = 2.0 ):
     Xlin = [ np.add( cntr, Xdif ), np.subtract( cntr, Xdif ) ]
     Ylin = [ np.add( cntr, Ydif ), np.subtract( cntr, Ydif ) ]
     Zlin = [ np.add( cntr, Zdif ), np.subtract( cntr, Zdif ) ]
-    clientRef.addUserDebugLine( Xlin[0], Xlin[1], color, lineWidth = w )
-    clientRef.addUserDebugLine( Ylin[0], Ylin[1], color, lineWidth = w )
-    clientRef.addUserDebugLine( Zlin[0], Zlin[1], color, lineWidth = w )
+    clientRef.addUserDebugLine( Xlin[0], Xlin[1], [1,0,0], lineWidth = w, lifeTime = timeout_s )
+    clientRef.addUserDebugLine( Ylin[0], Ylin[1], [0,1,0], lineWidth = w, lifeTime = timeout_s )
+    clientRef.addUserDebugLine( Zlin[0], Zlin[1], [0,0,1], lineWidth = w, lifeTime = timeout_s )
 
 
 ########## SIMULATED VISION ########################################################################
@@ -92,7 +92,7 @@ class GhostRobot:
         """ Set the initial location of the effector """
         self.pose    = extract_row_vec_pose( initPose )
         self.target  = np.array( self.pose )
-        self.speed   = _BLOCK_SCALE / 10.0
+        self.speed   = _ROBOT_SPEED
         self.halted  = False
         self.epsilon = 1e-5
 
@@ -119,6 +119,9 @@ class GhostRobot:
 
     def tick( self ):
         """ Advance the cursor by one speed (if not halted) """
+
+        # print( f"Robot at {self.pose}, {self.pose.shape}" )
+
         if not self.halted:
             bgn = self.pose[:3]
             end = self.target[:3]
@@ -130,14 +133,18 @@ class GhostRobot:
                 unt = np.zeros( (3,) )
             if mag > self.speed:
                 dif = unt * self.speed
-                self.pose[:3] = np.add( bgn, dif )
+                trn = np.add( bgn, dif )
+                # print( f"Robot move to {trn}" )
+                self.pose[:3] = trn[:3]
             else:
                 self.pose = np.array( self.target )
+        else:
+            print( f"Robot STOPPED!" )
 
 
     def draw( self, clientRef ):
         """ Render the effector cursor, NOTE: Letting client code call this """
-        draw_cross( clientRef, self.pose[:3], _BLOCK_SCALE*4.0, [0,0,0], w = 2.0 )
+        draw_cross( clientRef, self.pose[:3], _BLOCK_SCALE*4.0, w = 2.0 )
 
 
     def goto_pose( self, targetPose ):
@@ -180,7 +187,7 @@ class PB_BlocksWorld:
 
         ## Instantiate Robot and Table ##
         self.table     = make_table( self.physicsClient )
-        self.robot     = GhostRobot()
+        self.robot     = GhostRobot( origin_row_vec() )
         self.robotName = "Ghost"
         self.grasp     = []
 
@@ -241,7 +248,7 @@ class PB_BlocksWorld:
         if hndl is not None:
             blockName = self.get_handle_name( hndl )
             symb = self.get_block_true( blockName )
-            bPsn, bOrn = row_vec_to_pb_posn_ornt( symb.pose )
+            bPsn, bOrn = row_vec_to_pb_posn_ornt( extract_row_vec_pose( symb.pose ) )
             ePsn = self.robot.pose[:3]
             pDif = np.subtract( bPsn, ePsn )
             self.grasp.append( (hndl,pDif,bOrn,) ) # Preserve the original orientation because I am lazy
@@ -263,7 +270,7 @@ class PB_BlocksWorld:
         
     def get_handle_at_pose( self, rowVec, posnErr = 2.0*_ACCEPT_POSN_ERR ):
         """ Return the handle of the object nearest to the `rowVec` pose if it is within `posnErr`, Otherwise return `None` """
-        posnQ, _ = row_vec_to_pb_posn_ornt( rowVec )
+        posnQ, _ = row_vec_to_pb_posn_ornt( extract_row_vec_pose( rowVec ) )
         distMin = 1e6
         indxMin = -1
         for i, blk in enumerate( self.blocks ):
@@ -314,8 +321,9 @@ class PB_BlocksWorld:
     def step( self ):
         """ Advance one step and sleep """
         self.physicsClient.stepSimulation()
+        self.robot.tick()
         time.sleep( self.period )
-        ePsn, _    = self.robot.get_current_pose()
+        ePsn = self.robot.get_current_pose()[:3]
         for obj in self.grasp:
             self.physicsClient.resetBasePositionAndOrientation( obj[0], np.add( obj[1], ePsn ), obj[2] )
 

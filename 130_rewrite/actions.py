@@ -171,6 +171,7 @@ class Move_Effector( BasicBehavior ):
             hmgR = row_vec_to_homog( self.ctrl.get_current_pose() )
             hmgT = row_vec_to_homog( self.pose )
             
+            print( hmgR, hmgT )
 
             [errT, errO] = pose_error( hmgR, hmgT )
             if (errT <= DEFAULT_TRAN_ERR) and (errO <= DEFAULT_ORNT_ERR):
@@ -366,7 +367,7 @@ class Pick( GroundedAction ):
         
         if name is None:
             name = f"Pick {label} at {pose.pose} from {prevSupport}"
-        super().__init__( args, goal, world, robot, name )
+        super().__init__( args, world, robot, name )
 
         self.add_child( 
             Grasp( label, pose, name = name, ctrl = robot, world = world )
@@ -376,14 +377,14 @@ class Pick( GroundedAction ):
 
 class MoveHolding( GroundedAction ):
     """ Move the burdened effector to the given location """
-    def __init__( self, args, goal = None, world = None, robot = None, name = None ):
+    def __init__( self, args, world = None, robot = None, name = None ):
 
         # ?poseBgn ?poseEnd ?label
         poseBgn, poseEnd, label = args
 
         if name is None:
             name = f"Move Holding {label} --to-> {poseEnd.pose}"
-        super().__init__( args, goal, world, robot, name )
+        super().__init__( args, world, robot, name )
 
         poseBgn = extract_row_vec_pose( poseBgn )
         poseEnd = extract_row_vec_pose( poseEnd )
@@ -402,14 +403,14 @@ class MoveHolding( GroundedAction ):
 
 class Stack( GroundedAction ):
     """ Let go of gripper payload """
-    def __init__( self, args, goal = None, world = None, robot = None, name = None ):
+    def __init__( self, args, world = None, robot = None, name = None ):
 
         # ?labelUp ?poseUp ?labelDn
         labelUp, poseUp, labelDn = args
         
         if name is None:
             name = f"Stack {labelUp} on top of {labelDn} at {poseUp.pose}"
-        super().__init__( args, goal, world, robot, name )
+        super().__init__( args, world, robot, name )
 
         self.add_child( 
             Ungrasp( name = name, ctrl = robot, world = world )
@@ -419,14 +420,14 @@ class Stack( GroundedAction ):
 
 class Place( GroundedAction ):
     """ Let go of gripper payload """
-    def __init__( self, args, goal = None, world = None, robot = None, name = None ):
+    def __init__( self, args, world = None, robot = None, name = None ):
 
         # ?label ?pose
         label, pose = args
         
         if name is None:
             name = f"Place {label} at {pose.pose}"
-        super().__init__( args, goal, world, robot, name )
+        super().__init__( args, world, robot, name )
 
         self.add_child( 
             Ungrasp( name = name, ctrl = robot, world = world )
