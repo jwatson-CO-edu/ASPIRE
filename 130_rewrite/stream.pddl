@@ -7,7 +7,8 @@
     :inputs (?label)
     :domain (Graspable ?label)
     :outputs (?pose)
-    :certified (and (PoseAbove ?pose ?label) (Waypoint ?pose) (Free ?pose) )
+    :certified (and (PoseAbove ?pose ?label) (Waypoint ?pose) ) ;(Free ?pose) ) ; 2024-04-19: This causes shoving?
+    ; :certified (and (PoseAbove ?pose ?label) (Waypoint ?pose) (Free ?pose) ) ; 2024-04-19: This causes shoving?
   )
 
 ;;;;;;;;;; TESTS ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

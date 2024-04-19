@@ -24,7 +24,7 @@ from PB_BlocksWorld import PB_BlocksWorld, rand_table_pose
 from actions import display_PDLS_plan, get_BT_plan_until_block_change, BT_Runner
 from env_config import ( _BLOCK_SCALE, _N_CLASSES, _CONFUSE_PROB, _NULL_NAME, _NULL_THRESH, 
                          _BLOCK_NAMES, _VERBOSE, _MIN_X_OFFSET, _ACCEPT_POSN_ERR, _MIN_SEP, 
-                         _N_XTRA_SPOTS, )
+                         _N_XTRA_SPOTS, _POST_N_SPINS, )
 
 ### PDDLStream ### 
 sys.path.append( "../pddlstream/" )
@@ -322,6 +322,7 @@ class BaselineTAMP:
         
         return test_func
 
+
     ##### TAMP Helpers ####################################################
 
     def pddlstream_from_problem( self ):
@@ -401,6 +402,7 @@ class BaselineTAMP:
     def ground_relevant_predicates_noisy( self ):
         """ Scan the environment for evidence that the task is progressing, using current beliefs """
         rtnFacts = []
+        # foundBlc = set([])
         ## Gripper Predicates ##
         if len( self.world.grasp ):
             for grasped in self.world.grasp:
@@ -431,7 +433,7 @@ class BaselineTAMP:
                     posDn = sym_j.pose
                     xySep = diff_norm( posUp.pose[:2], posDn.pose[:2] )
                     zSep  = posUp.pose[2] - posDn.pose[2] # Signed value
-                    if ((xySep <= 2.0*_BLOCK_SCALE) and (zSep >= 1.35*_BLOCK_SCALE)):
+                    if ((xySep <= 1.5*_BLOCK_SCALE) and (1.65*_BLOCK_SCALE >= zSep >= _BLOCK_SCALE)):
                         supDices.add(i)
                         rtnFacts.extend([
                             ('Supported', lblUp, lblDn,),
@@ -619,8 +621,8 @@ class BaselineTAMP:
                 return (objUp.pose[2] <= 1.35*_BLOCK_SCALE)
             else:
                 objDn = self.world.get_block_true( lblDn )
-                xySep = diff_norm( objUp.pose[:2], objDn.pose.pose[:2] )
-                zSep  = objUp.pose[2] - objDn.pose.pose[2] # Signed value
+                xySep = diff_norm( objUp.pose.pose[:2], objDn.pose.pose[:2] )
+                zSep  = objUp.pose.pose[2] - objDn.pose.pose[2] # Signed value
                 print( f"Supported, X-Y Sep: {xySep} <= {2.0*_BLOCK_SCALE}, Z Sep: {zSep} >= {1.35*_BLOCK_SCALE}" )
                 return ((xySep <= 2.0*_BLOCK_SCALE) and (zSep >= 1.35*_BLOCK_SCALE))
         ## Else goal contains a bad predicate ##
@@ -628,6 +630,7 @@ class BaselineTAMP:
             print( f"UNSUPPORTED predicate check!: {pTyp}" )
             return False
     
+
     def validate_goal_true( self, goal ):
         """ Check if the goal is met """
         if goal[0] == 'and':
@@ -637,7 +640,38 @@ class BaselineTAMP:
             return True
         else:
             raise ValueError( f"Unexpected goal format!: {goal}" )
-        
+
+
+    def p_fact_match_noisy( self, pred ):
+        """ Search grounded facts for a predicate that matches `pred` """
+        for fact in self.facts:
+            if pred[0] == fact[0]:
+                same = True 
+                for i in range( 1, len( pred ) ):
+                    if type( pred[i] ) != type( fact[i] ):
+                        same = False 
+                        break
+                    elif isinstance( pred[i], str ) and (pred[i] != fact[i]):
+                        same = False
+                        break
+                    elif (pred[i].index != fact[i].index):
+                        same = False
+                        break
+                if same:
+                    return True
+        return False
+
+
+
+    def validate_goal_noisy( self, goal ):
+        """ Check if the system believes the goal is met """
+        if goal[0] == 'and':
+            for g in goal[1:]:
+                if not self.p_fact_match_noisy( g ):
+                    return False
+            return True
+        else:
+            raise ValueError( f"Unexpected goal format!: {goal}" )
 
     ##### TAMP Main Loop ##################################################
 
@@ -652,11 +686,15 @@ class BaselineTAMP:
         self.set_goal()
         self.logger.begin_trial()
 
+        indicateSuccess = False
+
         while (self.status != Status.SUCCESS) and (i < maxIter):
 
             print( f"### Iteration {i+1} ###" )
             
             i += 1
+
+            ## Phase 1 ##
 
             print( f"Phase 1, {self.status} ..." )
 
@@ -664,34 +702,66 @@ class BaselineTAMP:
             
             self.phase_1_Perceive( 1 )
 
+            ## Phase 2 ##
+
             print( f"Phase 2, {self.status} ..." )
             self.phase_2_Conditions()
+
+            if self.validate_goal_noisy( self.goal ):
+                indicateSuccess = True
+                self.logger.log_event( "Believe Success", f"Iteration {i}: Noisy facts indicate goal was met!\n{self.facts}" )
+                print( f"!!! Noisy success at iteration {i} !!!" )
+                self.status = Status.SUCCESS
 
             if self.status in (Status.SUCCESS, Status.FAILURE):
                 print( f"LOOP, {self.status} ..." )
                 continue
+
+            ## Phase 3 ##
 
             print( f"Phase 3, {self.status} ..." )
             self.phase_3_Plan_Task()
 
             # DEATH MONITOR
             if self.noSoln >= self.nonLim:
-                self.logger.log_event( "SOLVER BRAINDEATH", f"Iteration {i+1}: Solver has failed {self.noSoln} time in a row!" )
+                self.logger.log_event( "SOLVER BRAINDEATH", f"Iteration {i}: Solver has failed {self.noSoln} times in a row!" )
                 break
 
             if self.p_failed():
                 print( f"LOOP, {self.status} ..." )
                 continue
 
+            ## Phase 4 ##
+
             print( f"Phase 4, {self.status} ..." )
             self.phase_4_Execute_Action()
 
-            self.world.spin_for( 100 )
+            self.world.spin_for( _POST_N_SPINS )
 
             print()
 
+        goalMetTrue = self.validate_goal_true( self.goal )
+
+        if goalMetTrue == indicateSuccess:
+            if indicateSuccess:
+                trialCode = "TP"
+            else:
+                trialCode = "TN"
+        else:
+            if indicateSuccess:
+                trialCode = "FP"
+            else:
+                trialCode = "FN"
+
+        self.logger.log_event( "Goal Met", trialCode )
+
+        if goalMetTrue:
+            self.status = Status.SUCCESS
+        else:
+            self.status = Status.FAILURE
+
         self.logger.end_trial(
-            self.validate_goal_true( self.goal ),
+            goalMetTrue,
             {'end_symbols' : list( self.symbols ) }
         )
 
