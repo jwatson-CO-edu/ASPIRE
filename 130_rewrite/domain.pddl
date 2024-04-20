@@ -33,6 +33,9 @@
   (:action move_free
       :parameters (?poseBgn ?poseEnd)
       :precondition (and 
+        ;; Domain ;;
+        (Waypoint ?poseBgn)
+        (Waypoint ?poseEnd)
         ;; Robot State ;;
         (HandEmpty)
         (AtPose ?poseBgn)
@@ -59,6 +62,7 @@
     )
     :effect (and
       ;; Object State ;;
+      ; (Free ?pose)
       (not (Supported ?label ?prevSupport))
       (not (Blocked ?prevSupport))
       ;; Robot State ;;
@@ -70,6 +74,10 @@
   (:action move_holding
       :parameters (?poseBgn ?poseEnd ?label)
       :precondition (and 
+        ;; Domain ;;
+        (Graspable ?label)
+        (Waypoint ?poseBgn)
+        (Waypoint ?poseEnd)
         ;; Robot State ;;
         (Holding ?label)
         (AtPose ?poseBgn)
@@ -97,6 +105,7 @@
                       (Waypoint ?poseUp)
                       ;; Object State ;;
                       (GraspObj ?labelUp ?poseUp) 
+                      ; (Free ?poseUp)
                       ;; Requirements ;;
                       (PoseAbove ?poseUp ?labelDn)
                       ;; Robot State ;;
@@ -106,6 +115,7 @@
                 ;; Object State ;;
                 (Supported ?labelUp ?labelDn)
                 (Blocked ?labelDn)
+                ; (not (Free ?poseUp))
                 ;; Robot State ;;
                 (HandEmpty)
                 (not (Holding ?labelUp))
@@ -120,10 +130,13 @@
                       (Waypoint ?pose)
                       ;; Object State ;;
                       (GraspObj ?label ?pose) 
+                      ; (Free ?pose)
                       ;; Robot State ;;
                       (Holding ?label)
                       )
       :effect (and 
+                ;; Object State ;;
+                ; (not (Free ?pose))
                 ;; Robot State ;;
                 (HandEmpty)
                 (not (Holding ?label))

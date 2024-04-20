@@ -212,6 +212,13 @@ class PB_BlocksWorld:
 
         self.blocks = [redBlock, ylwBlock, bluBlock, grnBlock, ornBlock, vioBlock, None]
 
+        ## Place Camera ##
+        self.physicsClient.resetDebugVisualizerCamera(
+                             cameraDistance       =   0.75,
+                             cameraYaw            =  23.2,
+                             cameraPitch          = -33.2,
+                             cameraTargetPosition = [_MIN_X_OFFSET, 0.0, 0.0])
+
         ## Fake Vision ##
         self.sensor = NoisyObjectSensor()
 

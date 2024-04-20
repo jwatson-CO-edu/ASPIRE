@@ -24,7 +24,7 @@ from PB_BlocksWorld import PB_BlocksWorld, rand_table_pose
 from actions import display_PDLS_plan, get_BT_plan_until_block_change, BT_Runner
 from env_config import ( _BLOCK_SCALE, _N_CLASSES, _CONFUSE_PROB, _NULL_NAME, _NULL_THRESH, 
                          _BLOCK_NAMES, _VERBOSE, _MIN_X_OFFSET, _ACCEPT_POSN_ERR, _MIN_SEP, 
-                         _N_XTRA_SPOTS, _POST_N_SPINS, )
+                         _POST_N_SPINS, )
 
 ### PDDLStream ### 
 sys.path.append( "../pddlstream/" )
@@ -227,6 +227,7 @@ class ObjectMemory:
             for combo in comboList:
                 if p_unique_labels( combo[1] ):
                     return combo[1]
+            return list()
         elif N > 1:
             rtnCombos = []
             for i in range(N):
@@ -249,21 +250,22 @@ class BaselineTAMP:
 
     def reset_beliefs( self ):
         """ Erase belief memory """
-        self.memory = ObjectMemory() # Distributions over objects
+        self.memory  = ObjectMemory() # Distributions over objects
+        self.symbols = []
+        self.facts   = list()
 
 
     def reset_state( self ):
         """ Erase problem state """
         self.status  = Status.INVALID
-        self.symbols = []
         self.task    = None
         self.goal    = tuple()
-        self.facts   = list()
 
 
     def __init__( self, world = None ):
         """ Create a pre-determined collection of poses and plan skeletons """
         self.reset_beliefs()
+        self.reset_state()
         self.world  = world if (world is not None) else PB_BlocksWorld()
         self.logger = DataLogger()
         # DEATH MONITOR
@@ -274,6 +276,16 @@ class BaselineTAMP:
     def perceive_scene( self ):
         """ Integrate one noisy scan into the current beliefs """
         self.memory.belief_update( self.world.full_scan_noisy() )
+
+
+    ##### Stream Helpers ##################################################
+
+    def get_grounded_pose_or_new( self, rowVec ):
+        """ If there is a `Waypoint` approx. to `rowVec`, then return it, Else create new `ObjPose` """
+        for fact in self.facts:
+            if fact[0] == 'Waypoint' and (diff_norm( rowVec[:3], fact[1].pose[:3] ) <= _ACCEPT_POSN_ERR):
+                return fact[1]
+        return ObjPose( rowVec )
 
 
     ##### Stream Creators #################################################
@@ -291,12 +303,43 @@ class BaselineTAMP:
 
             for sym in self.symbols:
                 if sym.label == objcName:
-                    # upPose = np.array( sym.pose )
-                    upPose = sym.pose.copy()
-                    # upPose.pose[2] = 2.0*_BLOCK_SCALE
-                    upPose.pose[2] += _BLOCK_SCALE
-                    print( f"FOUND a pose {upPose} supported by {objcName}!" )
-                    yield (upPose,)
+                    upPose = sym.pose.pose.copy()
+                    upPose[2] += _BLOCK_SCALE
+
+                    # rtnPose = self.get_grounded_pose_or_new( upPose )
+                    rtnPose = ObjPose( upPose )
+                    
+                    print( f"FOUND a pose {rtnPose} supported by {objcName}!" )
+                    yield (rtnPose,)
+
+        return stream_func
+    
+
+    def get_placement_pose_stream( self ):
+        """ Return a function that returns poses """
+
+        def stream_func( *args ):
+            """ A function that returns poses """
+
+            if _VERBOSE:
+                print( f"\nEvaluate PLACEMENT POSE stream with args: {args}\n" )
+
+            # objcName = args[0]
+            placed   = False
+            testPose = None
+            while not placed:
+                testPose  = rand_table_pose()
+                print( f"\t\tSample: {testPose}" )
+                posn , _  = row_vec_to_pb_posn_ornt( testPose )
+                collide   = False
+                for sym in self.symbols:
+                    symPosn, _ = row_vec_to_pb_posn_ornt( sym.pose.pose )
+                    if diff_norm( posn, symPosn ) < ( _MIN_SEP ):
+                        collide = True
+                        break
+                if not collide:
+                    placed = True
+            yield (ObjPose(testPose),)
 
         return stream_func
 
@@ -333,8 +376,9 @@ class BaselineTAMP:
         constant_map = {}
         stream_map = {
             ### Symbol Streams ###
-            'sample-above': from_gen_fn( self.get_above_pose_stream() ), 
-            # ### Symbol Tests ###
+            'sample-above'        : from_gen_fn( self.get_above_pose_stream()     ), 
+            # 'sample-free-placment': from_gen_fn( self.get_placement_pose_stream() ), 
+            ### Symbol Tests ###
             'test-free-placment': from_test( self.get_free_placement_test() ),
         }
 
@@ -443,7 +487,11 @@ class BaselineTAMP:
             if i not in supDices:
                 rtnFacts.append( ('Supported', sym_i.label, 'table',) )
         ## Where the robot at? ##
-        rtnFacts.append( ('AtPose', ObjPose( self.world.robot.get_current_pose() ),) )
+        robotPose = ObjPose( self.world.robot.get_current_pose() )
+        rtnFacts.extend([ 
+            ('AtPose', robotPose,),
+            ('WayPoint', robotPose,),
+        ])
         ## Return relevant predicates ##
         return rtnFacts
 
@@ -464,6 +512,14 @@ class BaselineTAMP:
                     continue
         return (goalSet <= symbSet)
     
+
+    def block_exists( self, label ):
+        """ See if a fact already covers this block """
+        for f in self.facts:
+            if (f[0] == 'GraspObj') and (f[1] == label):
+                return True
+        return False
+
 
     ##### Task And Motion Planning Phases #################################
 
@@ -502,16 +558,17 @@ class BaselineTAMP:
             ## Ground the Blocks ##
             for sym in self.symbols:
                 self.facts.append( ('Graspable', sym.label,) )
-                self.facts.append( ('GraspObj', sym.label, sym.pose,) )
-                self.facts.append( ('Waypoint', sym.pose,) )
+                if not self.block_exists( sym.label ):
+                    self.facts.append( ('GraspObj', sym.label, sym.pose,) )
+                    self.facts.append( ('Waypoint', sym.pose,) )
 
             ## Fetch Relevant Facts ##
             # print( self.ground_relevant_predicates_noisy() )
             self.facts.extend( self.ground_relevant_predicates_noisy() )
 
-            ## Populate Spots for Block Movements ##
-            for _ in range( _N_XTRA_SPOTS ):
-                self.facts.append( ('Waypoint', ObjPose( rand_table_pose() ),) )
+            ## Populate Spots for Block Movements ##, 2024-04-19: This needs to be a stream?
+            # for _ in range( _N_XTRA_SPOTS ):
+            #     self.facts.append( ('Waypoint', ObjPose( rand_table_pose() ),) )
 
             if _VERBOSE:
                 print( f"\n### Initial Symbols ###" )
@@ -546,10 +603,10 @@ class BaselineTAMP:
                 unit_costs     = True, # False, #True, 
                 unit_efforts   = True, # False, #True,
                 reorder        = False,
-                # initial_complexity = 4,
+                initial_complexity = 3,
                 # max_complexity = 4,
                 # max_failures  = 4,
-                # search_sample_ratio = 1/500, #1/1500, #1/5, #1/1000, #1/750 # 1/1000, #1/2000 #500, #1/2, # 1/500, #1/200, #1/10, #2, # 25 #1/25
+                # search_sample_ratio = 1/4
 
             )
 
@@ -590,7 +647,7 @@ class BaselineTAMP:
             if (btr.status == Status.FAILURE):
                 self.status = Status.FAILURE
                 self.logger.log_event( "Action Failure", btr.msg )
-            if self.check_OOB( 1.5 ):
+            if self.check_OOB( 10 ):
                 self.status = Status.FAILURE
                 self.logger.log_event( "Object OOB", str( self.world.full_scan_true() ) )
 
@@ -737,6 +794,10 @@ class BaselineTAMP:
             self.phase_4_Execute_Action()
 
             self.world.spin_for( _POST_N_SPINS )
+
+            if self.check_OOB( 10 ):
+                self.status = Status.FAILURE
+                break
 
             print()
 
