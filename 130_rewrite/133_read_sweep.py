@@ -4,6 +4,7 @@ import os
 from pprint import pprint
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 from utils import get_merged_logs_in_dir_with_prefix
 
@@ -29,6 +30,7 @@ def collect_multiple_makespan_datasets( dirDct, prefix = "TAMP-Loop" ):
     for name, path in dirDct.items():
         data_i = get_merged_logs_in_dir_with_prefix( path, prefix )
         msPass, msFail = collect_pass_fail_makespans( data_i )
+        print( f"Series {name}: Success Rate = {len(msPass) / (len(msPass)+len(msFail))}" )
         dataDct[ name ] = {
             'data'  : data_i,
             'msPass': msPass,
@@ -63,12 +65,25 @@ def plot_pass_fail_histo( msPass, msFail, Nbins, plotName ):
     plt.clf()
 
 
-def plot_sweep_pass_makespans( data ):
+def plot_sweep_pass_makespans( data, plotName ):
     """  """
     datNames = list( data.keys() )
     datNames.sort()
+    pltSeries = []
     for datName in datNames:
-        pass # FIXME, START HERE: PLOT EACH MAKESPAN SPREAD IN ORDER
+        pltSeries.append( data[ datName ]['msPass'] )
+    plt.boxplot( pltSeries,
+                 vert=True,  # vertical box alignment
+                 patch_artist=True,  # fill with color
+                 labels=datNames,# will be used to label x-ticks
+                 showfliers=False)  
+    plt.title('Expected Block Tower Makespan -vs- Confusion')
+    plt.xlabel('Total Confusion Probability')
+    plt.ylabel('Makespan [s]')
+    plt.savefig( str( plotName ) + "_sweep-makespans" + '.pdf' )
+    plt.show()
+    plt.clf()
+        
 
 
 
@@ -78,14 +93,15 @@ def plot_sweep_pass_makespans( data ):
 if __name__ == "__main__":
     data = collect_multiple_makespan_datasets( 
         {
-            f"{0.001*6}" : "./data/",
-            f"{0.010*6}" : "./132a_sweep/data/",
-            f"{0.025*6}" : "./132b_sweep/data/",
-            f"{0.050*6}" : "./132c_sweep/data/",
-            f"{0.075*6}" : "./132d_sweep/data/",
+            f"{np.round(0.001*6,3):.3f}" : "./data/",
+            f"{np.round(0.010*6,3):.3f}" : "./132a_sweep/data/",
+            f"{np.round(0.025*6,3):.3f}" : "./132b_sweep/data/",
+            f"{np.round(0.050*6,3):.3f}" : "./132c_sweep/data/",
+            f"{np.round(0.075*6,3):.3f}" : "./132d_sweep/data/",
         }, 
         prefix = "TAMP-Loop" 
     )
+    plot_sweep_pass_makespans( data, "TAMP-Baseline-Conf" )
     
     
     # get_merged_logs_in_dir_with_prefix( drctry, prefix )
