@@ -48,7 +48,7 @@ _ROBOT_SPEED  = _BLOCK_SCALE / 10.0
 
 ########## BELIEFS #################################################################################
 
-_CONFUSE_PROB = 0.05 # 0.025
+_CONFUSE_PROB = 0.075 # 0.025
 _NULL_THRESH  = 0.75
 _EXIST_THRESH = 0.05
 
