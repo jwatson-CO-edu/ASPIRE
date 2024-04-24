@@ -66,20 +66,37 @@ def plot_pass_fail_histo( msPass, msFail, Nbins, plotName ):
 
 
 def plot_sweep_pass_makespans( data, plotName ):
-    """  """
+    """ Plot expected successful makespan spread for each category in the sweep """
     datNames = list( data.keys() )
     datNames.sort()
     pltSeries = []
+    pltRates  = []
     for datName in datNames:
         pltSeries.append( data[ datName ]['msPass'] )
-    plt.boxplot( pltSeries,
+        pltRates.append( len(data[ datName ]['msPass']) / (len(data[ datName ]['msPass'])+len(data[ datName ]['msFail'])) )
+
+    fig, ax1 = plt.subplots()
+    ax2 = ax1.twinx()
+    
+    ax1.boxplot( pltSeries,
                  vert=True,  # vertical box alignment
                  patch_artist=True,  # fill with color
                  labels=datNames,# will be used to label x-ticks
                  showfliers=False)  
+    ax1.set_ylabel('Makespan [s]')
+
+    # HACK for misaligned categories, WHY?
+    datNames = ['',  ] + datNames
+    pltRates = [None,] + pltRates
+
+    # print( datNames, pltRates )
+    ax2.plot( datNames, pltRates )
+    ax2.set_ylim([0.00, 1.00])
+    ax2.set_ylabel('Success Rate')
+
     plt.title('Expected Block Tower Makespan -vs- Confusion')
-    plt.xlabel('Total Confusion Probability')
-    plt.ylabel('Makespan [s]')
+    plt.xlabel('Probability of Class Confusion')
+    
     plt.savefig( str( plotName ) + "_sweep-makespans" + '.pdf' )
     plt.show()
     plt.clf()
