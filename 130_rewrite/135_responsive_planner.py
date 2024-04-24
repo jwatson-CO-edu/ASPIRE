@@ -242,7 +242,7 @@ _trgtRed = ObjPose( [ _MIN_X_OFFSET+2.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  
 _trgtGrn = ObjPose( [ _MIN_X_OFFSET+6.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ] )
 
 
-class BaselineTAMP:
+class ResponsiveTAMP:
     """ Basic TAMP loop against which the Method is compared """
 
     ##### Init ############################################################
@@ -834,7 +834,7 @@ class BaselineTAMP:
 ########## MAIN ####################################################################################
 if __name__ == "__main__":
 
-    planner = BaselineTAMP()
+    planner = ResponsiveTAMP()
     planner.solve_task( maxIter = 100 )
     
     if 0:
