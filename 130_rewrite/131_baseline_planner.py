@@ -1,8 +1,3 @@
-########## DEV PLAN ################################################################################
-"""
-[Y] Combine `ObjectBelief` and `ObjectMemory` --> `ObjectMemory`, SIMPLIFY!, 2024-04-11: Testing req'd , 2024-04-12: Seems to work!
-"""
-
 ########## INIT ####################################################################################
 
 ##### Imports #####
@@ -19,12 +14,12 @@ from py_trees.common import Status
 ### Local ###
 from symbols import GraspObj, ObjPose
 from utils import ( multiclass_Bayesian_belief_update, get_confusion_matx, get_confused_class_reading, 
-                    DataLogger, origin_row_vec, row_vec_to_pb_posn_ornt, diff_norm, )
+                    DataLogger, pb_posn_ornt_to_row_vec, row_vec_to_pb_posn_ornt, diff_norm, )
 from PB_BlocksWorld import PB_BlocksWorld, rand_table_pose
 from actions import display_PDLS_plan, get_BT_plan_until_block_change, BT_Runner
 from env_config import ( _BLOCK_SCALE, _N_CLASSES, _CONFUSE_PROB, _NULL_NAME, _NULL_THRESH, 
                          _BLOCK_NAMES, _VERBOSE, _MIN_X_OFFSET, _ACCEPT_POSN_ERR, _MIN_SEP, 
-                         _POST_N_SPINS, _USE_GRAPHICS, )
+                         _POST_N_SPINS, _USE_GRAPHICS, _N_XTRA_SPOTS, )
 
 ### PDDLStream ### 
 sys.path.append( "../pddlstream/" )
@@ -442,11 +437,20 @@ class BaselineTAMP:
                 return sym
         return None
     
+
+    def get_grounded_fact_pose_or_new( self, rowVec ):
+        """ If there is a `Waypoint` approx. to `rowVec`, then return it, Else create new `ObjPose` """ 
+        for fact in self.facts:
+            if fact[0] == 'Waypoint' and (diff_norm( rowVec[:3], fact[1].pose[:3] ) <= _ACCEPT_POSN_ERR):
+                return fact[1]
+            if fact[0] == 'GraspObj' and (diff_norm( rowVec[:3], fact[2].pose[:3] ) <= _ACCEPT_POSN_ERR):
+                return fact[2]
+        return ObjPose( rowVec )
+    
     
     def ground_relevant_predicates_noisy( self ):
         """ Scan the environment for evidence that the task is progressing, using current beliefs """
         rtnFacts = []
-        # foundBlc = set([])
         ## Gripper Predicates ##
         if len( self.world.grasp ):
             for grasped in self.world.grasp:
@@ -482,10 +486,14 @@ class BaselineTAMP:
                         rtnFacts.extend([
                             ('Supported', lblUp, lblDn,),
                             ('Blocked', lblDn,),
+                            ('PoseAbove', self.get_grounded_fact_pose_or_new( posUp.pose ), lblDn,),
                         ])
         for i, sym_i in enumerate( self.symbols ):
             if i not in supDices:
-                rtnFacts.append( ('Supported', sym_i.label, 'table',) )
+                rtnFacts.extend( [
+                    ('Supported', sym_i.label, 'table',),
+                    ('PoseAbove', self.get_grounded_fact_pose_or_new( sym_i.pose.pose ), 'table',),
+                ] )
         ## Where the robot at? ##
         robotPose = ObjPose( self.world.robot.get_current_pose() )
         rtnFacts.extend([ 
@@ -538,6 +546,33 @@ class BaselineTAMP:
                 print( f"\t{obj}" )
 
 
+    def allocate_table_swap_space( self, Nspots = _N_XTRA_SPOTS ):
+        """ Find some open poses on the table for performing necessary swaps """
+        rtnFacts  = []
+        freeSpots = []
+        occuSpots = [ np.array( sym.pose.pose ) for sym in self.symbols]
+        while len( freeSpots ) < Nspots:
+            nuPose = pb_posn_ornt_to_row_vec( *rand_table_pose() )
+            print( f"\t\tSample: {nuPose}" )
+            posn    = nuPose[:3]
+            collide = False
+            for spot in occuSpots:
+                symPosn = spot[:3]
+                if diff_norm( posn, symPosn ) < ( _MIN_SEP ):
+                    collide = True
+                    break
+            if not collide:
+                freeSpots.append( ObjPose( nuPose ) )
+                occuSpots.append( nuPose )
+        for objPose in freeSpots:
+            rtnFacts.extend([
+                ('Waypoint', objPose,),
+                ('Free', objPose,),
+                ('PoseAbove', objPose, 'table'),
+            ])
+        return rtnFacts
+                
+
     def phase_2_Conditions( self ):
         """ Get the necessary initial state, Check for goals already met """
         
@@ -545,30 +580,31 @@ class BaselineTAMP:
             self.logger.log_event( "Required objects missing", str( self.symbols ) )   
             self.status = Status.FAILURE
         else:
-            start = ObjPose( origin_row_vec() )
+            
+            self.facts = [ ('Base', 'table',) ] 
 
-            self.facts = [
-                ## Init Predicates ##
-                ('Waypoint', start,),
-                ## Goal Predicates ##
-                ('Waypoint', _trgtRed,),
-                ('Waypoint', _trgtGrn,),
-            ] 
+            ## Copy `Waypoint`s present in goals ##
+            for g in self.goal[1:]:
+                if g[0] == 'GraspObj':
+                    self.facts.append( ('Waypoint', g[2],) )
 
             ## Ground the Blocks ##
             for sym in self.symbols:
                 self.facts.append( ('Graspable', sym.label,) )
-                if not self.block_exists( sym.label ):
-                    self.facts.append( ('GraspObj', sym.label, sym.pose,) )
-                    self.facts.append( ('Waypoint', sym.pose,) )
+
+                # blockPose, p_factDex, p_goalDex = self.get_grounded_pose_or_new( sym.pose.pose )
+                blockPose = self.get_grounded_fact_pose_or_new( sym.pose.pose )
+
+                # print( f"`blockPose`: {blockPose}" )
+                self.facts.append( ('GraspObj', sym.label, blockPose,) )
+                if not self.p_grounded_fact_pose( blockPose ):
+                    self.facts.append( ('Waypoint', blockPose,) )
 
             ## Fetch Relevant Facts ##
-            # print( self.ground_relevant_predicates_noisy() )
             self.facts.extend( self.ground_relevant_predicates_noisy() )
 
-            ## Populate Spots for Block Movements ##, 2024-04-19: This needs to be a stream?
-            # for _ in range( _N_XTRA_SPOTS ):
-            #     self.facts.append( ('Waypoint', ObjPose( rand_table_pose() ),) )
+            ## Populate Spots for Block Movements ##, 2024-04-25: Injecting this for now, Try a stream later ...
+            self.facts.extend( self.allocate_table_swap_space( _N_XTRA_SPOTS ) )
 
             if _VERBOSE:
                 print( f"\n### Initial Symbols ###" )
