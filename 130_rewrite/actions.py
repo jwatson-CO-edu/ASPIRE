@@ -346,7 +346,7 @@ class MoveFree( GroundedAction ):
         poseBgn, poseEnd = args
 
         if name is None:
-            name = f"Move Free --to-> {poseEnd.pose}"
+            name = f"Move Free from {poseBgn.pose} --to-> {poseEnd.pose}"
 
         super().__init__( args, world, robot, name )
 
@@ -360,13 +360,30 @@ class MoveFree( GroundedAction ):
 
 class Pick( GroundedAction ):
     """ Add object to the gripper payload """
-    def __init__( self, args, goal = None, world = None, robot = None, name = None ):
+    def __init__( self, args, world = None, robot = None, name = None ):
 
         # ?label ?pose ?prevSupport
         label, pose, prevSupport = args
         
         if name is None:
             name = f"Pick {label} at {pose.pose} from {prevSupport}"
+        super().__init__( args, world, robot, name )
+
+        self.add_child( 
+            Grasp( label, pose, name = name, ctrl = robot, world = world )
+        )
+
+
+
+class Unstack( GroundedAction ):
+    """ Add object to the gripper payload """
+    def __init__( self, args, world = None, robot = None, name = None ):
+
+        # ?label ?pose ?prevSupport
+        label, pose, prevSupport = args
+        
+        if name is None:
+            name = f"Unstack {label} at {pose.pose} from {prevSupport}"
         super().__init__( args, world, robot, name )
 
         self.add_child( 
@@ -401,6 +418,22 @@ class MoveHolding( GroundedAction ):
 
 
 
+class Place( GroundedAction ):
+    """ Let go of gripper payload """
+    def __init__( self, args, world = None, robot = None, name = None ):
+
+        # ?label ?pose ?support
+        label, pose, support = args
+        
+        if name is None:
+            name = f"Place {label} at {pose.pose} onto {support}"
+        super().__init__( args, world, robot, name )
+
+        self.add_child( 
+            Ungrasp( name = name, ctrl = robot, world = world )
+        )
+
+
 class Stack( GroundedAction ):
     """ Let go of gripper payload """
     def __init__( self, args, world = None, robot = None, name = None ):
@@ -409,24 +442,7 @@ class Stack( GroundedAction ):
         labelUp, poseUp, labelDn = args
         
         if name is None:
-            name = f"Stack {labelUp} on top of {labelDn} at {poseUp.pose}"
-        super().__init__( args, world, robot, name )
-
-        self.add_child( 
-            Ungrasp( name = name, ctrl = robot, world = world )
-        )
-
-
-
-class Place( GroundedAction ):
-    """ Let go of gripper payload """
-    def __init__( self, args, world = None, robot = None, name = None ):
-
-        # ?label ?pose
-        label, pose = args
-        
-        if name is None:
-            name = f"Place {label} at {pose.pose}"
+            name = f"Stack {labelUp} at {poseUp.pose} onto {labelDn}"
         super().__init__( args, world, robot, name )
 
         self.add_child( 
@@ -464,6 +480,7 @@ class Plan( Sequence ):
 ########## PDLS --TO-> BT ##########################################################################
 
 def get_ith_BT_action_from_PDLS_plan( pdlsPlan, i, world ):
+    """ Fetch the `i`th item from `pdlsPlan` and parameterize a BT that operates on the `world` """
     actName  = pdlsPlan[i].name
     actArgs  = pdlsPlan[i].args
     btAction = None
@@ -471,6 +488,8 @@ def get_ith_BT_action_from_PDLS_plan( pdlsPlan, i, world ):
         btAction = MoveFree( actArgs, world = world, robot = world.robot )
     elif actName == "pick":
         btAction = Pick( actArgs, world = world, robot = world.robot )
+    elif actName == "unstack":
+        btAction = Unstack( actArgs, world = world, robot = world.robot )
     elif actName == "move_holding":
         btAction = MoveHolding( actArgs, world = world, robot = world.robot )
     elif actName == "place":
@@ -492,7 +511,6 @@ def get_BT_plan_until_block_change( pdlsPlan, world ):
             rtnBTlst.append( btAction )
             if btAction.__class__ in ( Place, Stack ):
                 break
-
     rtnPlan = Plan()
     rtnPlan.add_children( rtnBTlst )
     return rtnPlan

@@ -301,10 +301,12 @@ class BaselineTAMP:
                     upPose = sym.pose.pose.copy()
                     upPose[2] += _BLOCK_SCALE
 
-                    # rtnPose = self.get_grounded_pose_or_new( upPose )
-                    rtnPose = ObjPose( upPose )
-                    
+                    rtnPose = self.get_grounded_fact_pose_or_new( upPose )
                     print( f"FOUND a pose {rtnPose} supported by {objcName}!" )
+
+                    # rtnPose = ObjPose( upPose )
+                    # print( f"FOUND a pose {rtnPose} supported by {objcName}!" )
+
                     yield (rtnPose,)
 
         return stream_func
@@ -469,6 +471,7 @@ class BaselineTAMP:
                 if (tObj is not None) and (diff_norm( pPos.pose[:3], tObj.pose.pose[:3] ) <= _ACCEPT_POSN_ERR):
                     rtnFacts.append( g ) # Position goal met
         # B. No need to ground the rest
+
         ## Support Predicates && Blocked Status ##
         # Check if `sym_i` is supported by `sym_j`, blocking `sym_j`, NOTE: Table supports not checked
         supDices = set([])
