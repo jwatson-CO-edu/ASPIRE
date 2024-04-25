@@ -652,8 +652,8 @@ class BaselineTAMP:
                 algorithm      = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
                 unit_costs     = True, # False, #True, 
                 unit_efforts   = True, # False, #True,
-                reorder        = False,
-                initial_complexity = 3,
+                reorder        = True,
+                initial_complexity = 2,
                 # max_complexity = 4,
                 # max_failures  = 4,
                 # search_sample_ratio = 1/4
@@ -792,6 +792,7 @@ class BaselineTAMP:
 
         self.reset_state()
         self.set_goal()
+        self.world.reset_blocks()
         self.logger.begin_trial()
 
         indicateSuccess = False
@@ -886,7 +887,7 @@ class BaselineTAMP:
 if __name__ == "__main__":
 
     planner = BaselineTAMP()
-    planner.solve_task( maxIter = 100 )
+    planner.solve_task( maxIter = 200 )
     
     if 0:
         planner.set_goal()

@@ -19,7 +19,7 @@ from utils import row_vec_to_homog
 from symbols import extract_row_vec_pose
 from env_config import _Z_SAFE
 
-sys.path.append( "../../" )
+sys.path.append( "../" )
 from magpie.poses import pose_error
 
 ##### Constants #####
@@ -346,7 +346,7 @@ class MoveFree( GroundedAction ):
         poseBgn, poseEnd = args
 
         if name is None:
-            name = f"Move Free --to-> {poseEnd.pose}"
+            name = f"Move Free from {poseBgn.pose} --to-> {poseEnd.pose}"
 
         super().__init__( args, world, robot, name )
 
@@ -360,13 +360,30 @@ class MoveFree( GroundedAction ):
 
 class Pick( GroundedAction ):
     """ Add object to the gripper payload """
-    def __init__( self, args, goal = None, world = None, robot = None, name = None ):
+    def __init__( self, args, world = None, robot = None, name = None ):
 
         # ?label ?pose ?prevSupport
         label, pose, prevSupport = args
         
         if name is None:
             name = f"Pick {label} at {pose.pose} from {prevSupport}"
+        super().__init__( args, world, robot, name )
+
+        self.add_child( 
+            Grasp( label, pose, name = name, ctrl = robot, world = world )
+        )
+
+
+
+class Unstack( GroundedAction ):
+    """ Add object to the gripper payload """
+    def __init__( self, args, world = None, robot = None, name = None ):
+
+        # ?label ?pose ?prevSupport
+        label, pose, prevSupport = args
+        
+        if name is None:
+            name = f"Unstack {label} at {pose.pose} from {prevSupport}"
         super().__init__( args, world, robot, name )
 
         self.add_child( 
@@ -390,15 +407,35 @@ class MoveHolding( GroundedAction ):
         poseEnd = extract_row_vec_pose( poseEnd )
         posnBgn = poseBgn[:3]
         posnEnd = poseEnd[:3]
-        posnMid = np.add( posnBgn, posnEnd ) / 2.0
-        posnMid[2] = _Z_SAFE
-        poseMid = posnMid.tolist() + [1,0,0,0]
-                
+        psnMid1 = np.array( posnBgn )
+        psnMid2 = np.array( posnEnd )
+        psnMid1[2] = _Z_SAFE
+        psnMid2[2] = _Z_SAFE
+        poseMd1 = psnMid1.tolist() + [1,0,0,0]
+        poseMd2 = psnMid2.tolist() + [1,0,0,0]
+    
         self.add_children( [
-            Move_Effector( poseMid, ctrl = robot, world = world ),
+            Move_Effector( poseMd1, ctrl = robot, world = world ),
+            Move_Effector( poseMd2, ctrl = robot, world = world ),
             Move_Effector( poseEnd, ctrl = robot, world = world ),
         ] )
 
+
+
+class Place( GroundedAction ):
+    """ Let go of gripper payload """
+    def __init__( self, args, world = None, robot = None, name = None ):
+
+        # ?label ?pose ?support
+        label, pose, support = args
+        
+        if name is None:
+            name = f"Place {label} at {pose.pose} onto {support}"
+        super().__init__( args, world, robot, name )
+
+        self.add_child( 
+            Ungrasp( name = name, ctrl = robot, world = world )
+        )
 
 
 class Stack( GroundedAction ):
@@ -409,24 +446,7 @@ class Stack( GroundedAction ):
         labelUp, poseUp, labelDn = args
         
         if name is None:
-            name = f"Stack {labelUp} on top of {labelDn} at {poseUp.pose}"
-        super().__init__( args, world, robot, name )
-
-        self.add_child( 
-            Ungrasp( name = name, ctrl = robot, world = world )
-        )
-
-
-
-class Place( GroundedAction ):
-    """ Let go of gripper payload """
-    def __init__( self, args, world = None, robot = None, name = None ):
-
-        # ?label ?pose
-        label, pose = args
-        
-        if name is None:
-            name = f"Place {label} at {pose.pose}"
+            name = f"Stack {labelUp} at {poseUp.pose} onto {labelDn}"
         super().__init__( args, world, robot, name )
 
         self.add_child( 
@@ -464,6 +484,7 @@ class Plan( Sequence ):
 ########## PDLS --TO-> BT ##########################################################################
 
 def get_ith_BT_action_from_PDLS_plan( pdlsPlan, i, world ):
+    """ Fetch the `i`th item from `pdlsPlan` and parameterize a BT that operates on the `world` """
     actName  = pdlsPlan[i].name
     actArgs  = pdlsPlan[i].args
     btAction = None
@@ -471,6 +492,8 @@ def get_ith_BT_action_from_PDLS_plan( pdlsPlan, i, world ):
         btAction = MoveFree( actArgs, world = world, robot = world.robot )
     elif actName == "pick":
         btAction = Pick( actArgs, world = world, robot = world.robot )
+    elif actName == "unstack":
+        btAction = Unstack( actArgs, world = world, robot = world.robot )
     elif actName == "move_holding":
         btAction = MoveHolding( actArgs, world = world, robot = world.robot )
     elif actName == "place":
@@ -492,7 +515,6 @@ def get_BT_plan_until_block_change( pdlsPlan, world ):
             rtnBTlst.append( btAction )
             if btAction.__class__ in ( Place, Stack ):
                 break
-
     rtnPlan = Plan()
     rtnPlan.add_children( rtnBTlst )
     return rtnPlan

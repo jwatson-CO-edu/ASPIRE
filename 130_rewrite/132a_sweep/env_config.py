@@ -48,7 +48,7 @@ _ROBOT_SPEED  = _BLOCK_SCALE / 10.0
 
 ########## BELIEFS #################################################################################
 
-_CONFUSE_PROB = 0.01 #0.05 # 0.025
+_CONFUSE_PROB = 0.025 # 0.001 # 0.025 # 0.05
 _NULL_THRESH  = 0.75
 _EXIST_THRESH = 0.05
 
@@ -56,8 +56,8 @@ _EXIST_THRESH = 0.05
 
 ########## MEASUREMENTS ############################################################################
 
-_ACCEPT_POSN_ERR =  0.50*_BLOCK_SCALE # 0.50 # 0.65 # 0.75 # 0.85 # 1.00
-_Z_SAFE          =  8.00*_BLOCK_SCALE
+_ACCEPT_POSN_ERR =  0.55*_BLOCK_SCALE # 0.50 # 0.65 # 0.75 # 0.85 # 1.00
+_Z_SAFE          = 10.00*_BLOCK_SCALE
 _MIN_SEP         =  0.40*_BLOCK_SCALE # 0.40 # 0.60 # 0.70 # 0.75
 _MIN_X_OFFSET    =  0.400
 
@@ -66,4 +66,4 @@ _MIN_X_OFFSET    =  0.400
 ########## PLANNER #################################################################################
 
 _POST_N_SPINS = 150
-# _N_XTRA_SPOTS = 2
+_N_XTRA_SPOTS = 3

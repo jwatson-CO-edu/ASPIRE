@@ -407,12 +407,16 @@ class MoveHolding( GroundedAction ):
         poseEnd = extract_row_vec_pose( poseEnd )
         posnBgn = poseBgn[:3]
         posnEnd = poseEnd[:3]
-        posnMid = np.add( posnBgn, posnEnd ) / 2.0
-        posnMid[2] = _Z_SAFE
-        poseMid = posnMid.tolist() + [1,0,0,0]
-                
+        psnMid1 = np.array( posnBgn )
+        psnMid2 = np.array( posnEnd )
+        psnMid1[2] = _Z_SAFE
+        psnMid2[2] = _Z_SAFE
+        poseMd1 = psnMid1.tolist() + [1,0,0,0]
+        poseMd2 = psnMid2.tolist() + [1,0,0,0]
+    
         self.add_children( [
-            Move_Effector( poseMid, ctrl = robot, world = world ),
+            Move_Effector( poseMd1, ctrl = robot, world = world ),
+            Move_Effector( poseMd2, ctrl = robot, world = world ),
             Move_Effector( poseEnd, ctrl = robot, world = world ),
         ] )
 
