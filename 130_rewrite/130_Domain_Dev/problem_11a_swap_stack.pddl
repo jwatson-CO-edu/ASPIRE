@@ -46,7 +46,6 @@
         (HandEmpty)
         (AtPose poseSwap)
         
-        
         (PoseAbove poseSwap table)
         (PoseAbove targetRed table)
         (PoseAbove targetGrn table)

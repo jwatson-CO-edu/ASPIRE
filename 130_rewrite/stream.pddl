@@ -25,7 +25,7 @@
   ;; Free Placement Test ;;
   ; Return true if the pose is open for a block placement
   (:stream test-free-placment
-    :inputs (?pose )
+    :inputs (?pose)
     :domain (Waypoint ?pose)
     :certified (Free ?pose) 
   )

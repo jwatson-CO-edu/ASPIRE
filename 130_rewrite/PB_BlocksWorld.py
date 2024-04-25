@@ -90,6 +90,9 @@ class GhostRobot:
 
     def __init__( self, initPose = None ):
         """ Set the initial location of the effector """
+        if initPose is None:
+            initPose = origin_row_vec()
+            initPose[2] = _BLOCK_SCALE
         self.pose    = extract_row_vec_pose( initPose )
         self.target  = np.array( self.pose )
         self.speed   = _ROBOT_SPEED
@@ -187,7 +190,7 @@ class PB_BlocksWorld:
 
         ## Instantiate Robot and Table ##
         self.table     = make_table( self.physicsClient )
-        self.robot     = GhostRobot( origin_row_vec() )
+        self.robot     = GhostRobot()
         self.robotName = "Ghost"
         self.grasp     = []
 

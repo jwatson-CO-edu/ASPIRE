@@ -12,7 +12,7 @@ import numpy as np
 from py_trees.common import Status
 
 ### Local ###
-from symbols import GraspObj, ObjPose
+from symbols import GraspObj, ObjPose, extract_row_vec_pose
 from utils import ( multiclass_Bayesian_belief_update, get_confusion_matx, get_confused_class_reading, 
                     DataLogger, pb_posn_ornt_to_row_vec, row_vec_to_pb_posn_ornt, diff_norm, )
 from PB_BlocksWorld import PB_BlocksWorld, rand_table_pose
@@ -282,6 +282,15 @@ class BaselineTAMP:
                 return fact[1]
         return ObjPose( rowVec )
 
+
+    def p_grounded_fact_pose( self, poseOrObj ):
+        """ Does this exist as a `Waypoint`? """
+        rowVec = extract_row_vec_pose( poseOrObj )
+        for fact in self.facts:
+            if fact[0] == 'Waypoint' and (diff_norm( rowVec[:3], fact[1].pose[:3] ) <= _ACCEPT_POSN_ERR):
+                return True
+        return False
+    
 
     ##### Stream Creators #################################################
 
@@ -590,6 +599,8 @@ class BaselineTAMP:
             for g in self.goal[1:]:
                 if g[0] == 'GraspObj':
                     self.facts.append( ('Waypoint', g[2],) )
+                    if abs(g[2].pose[2] - _BLOCK_SCALE) < _ACCEPT_POSN_ERR:
+                        self.facts.append( ('PoseAbove', g[2], 'table') )
 
             ## Ground the Blocks ##
             for sym in self.symbols:
