@@ -1,8 +1,11 @@
 import numpy as np
 import open3d as o3d
+import time
+import threading
 from RealSense import RealSense
 from magpie.ur5 import UR5_Interface
 from magpie import poses
+import keyboard
 
 TRAJ = 1
 
@@ -11,6 +14,17 @@ def save_data(color_image, robot_pose, traj, index):
     with open(f"./stream_data/{traj}/pose_{index}.txt", "w") as file:
         file.write(str(poses.pose_mtrx_to_vec(robot_pose)))
 
+def capture_loop(robot, real, stop_event):
+    index = 0
+    while not stop_event.is_set():
+        pcd, rgbd_image = real.getPCD()
+        depth_image, color_image = rgbd_image.depth, rgbd_image.color
+        robot_pose = robot.get_tcp_pose()
+
+        save_data(color_image, robot_pose, TRAJ, index)
+        index += 1
+        time.sleep(2)
+
 def main():
     robot = UR5_Interface()
     robot.start()
@@ -18,24 +32,21 @@ def main():
     real = RealSense(1.0)
     real.initConnection()
 
-    index = 0
+    stop_event = threading.Event()
+    capture_thread = threading.Thread(target=capture_loop, args=(robot, real, stop_event))
+    capture_thread.start()
+
     try:
         while True:
-            response = input("[Enter] - Capture Data, [Q] - Quit: ").strip().lower()
-            if response == "q":
+            if input().strip().lower() == 'q':
+                stop_event.set()
                 break
-
-            pcd, rgbd_image = real.getPCD()
-            depth_image, color_image = rgbd_image.depth, rgbd_image.color
-            robot_pose = robot.get_tcp_pose()
-
-            save_data(color_image, robot_pose, TRAJ, index)
-            index += 1
 
     except Exception as e:
         print(f"Erorr: {e}")
 
     finally:
+        capture_thread.join()
         real.disconnect()
         # robot.stop()
 
