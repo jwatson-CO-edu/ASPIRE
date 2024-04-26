@@ -22,7 +22,7 @@ from env_config import ( _BLOCK_SCALE, _N_CLASSES, _CONFUSE_PROB, _NULL_NAME, _N
                          _POST_N_SPINS, _USE_GRAPHICS, _N_XTRA_SPOTS, )
 
 ### PDDLStream ### 
-sys.path.append( "../pddlstream/" )
+sys.path.append( "../../pddlstream/" )
 from pddlstream.utils import read, INF, get_file_path
 from pddlstream.language.generator import from_gen_fn, from_test
 from pddlstream.language.constants import print_solution, PDDLProblem

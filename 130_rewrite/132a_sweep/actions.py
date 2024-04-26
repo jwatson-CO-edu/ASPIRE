@@ -19,7 +19,7 @@ from utils import row_vec_to_homog
 from symbols import extract_row_vec_pose
 from env_config import _Z_SAFE
 
-sys.path.append( "../" )
+sys.path.append( "../../" )
 from magpie.poses import pose_error
 
 ##### Constants #####
