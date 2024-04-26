@@ -147,6 +147,9 @@ class Motors:
     def Temp(self):
         self.Motor1.get_temperature()
         self.Motor2.get_temperature()
+    
+    def get_voltage(self):
+        return [self.Motor1.get_voltage(), self.Motor2.get_voltage()]
         
     # def Load(self):
     #     self.Motor1.get_load()

@@ -135,6 +135,13 @@ class UR5_Interface:
     
     def get_gripper_force( self ):
         return self.gripper.get_force()
+    
+    def set_gripper_force( self, limit ):
+        # torque in bits from 0-1023
+        self.gripper.torquelimit(limit)
+    
+    def get_gripper_voltage( self ):
+        return self.gripper.get_voltage()
         
     def align_tcp( self, lock_roll = False, lock_pitch = False, lock_yaw = False ):
         """
