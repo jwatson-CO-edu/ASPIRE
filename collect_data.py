@@ -5,7 +5,6 @@ import threading
 from RealSense import RealSense
 from magpie.ur5 import UR5_Interface
 from magpie import poses
-import keyboard
 
 TRAJ = 1
 
@@ -32,8 +31,11 @@ def main():
     real = RealSense(1.0)
     real.initConnection()
 
+    initial = np.array([-np.pi / 2.0, -np.pi / 2.6, -np.pi / 2.2, -np.pi * 4.0 / 2.8, -np.pi / 2.0, 0])
+    start = Move_Q(initial, name = None, ctrl = robot, rotSpeed = 1.05, rotAccel = 1.4, asynch = True)
+
     stop_event = threading.Event()
-    capture_thread = threading.Thread(target=capture_loop, args=(robot, real, stop_event))
+    capture_thread = threading.Thread(target = capture_loop, args = (robot, real, stop_event))
     capture_thread.start()
 
     try:
