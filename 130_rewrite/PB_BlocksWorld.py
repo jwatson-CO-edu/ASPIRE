@@ -11,8 +11,8 @@ from symbols import GraspObj, ObjectReading, ObjPose, extract_row_vec_pose
 from utils import ( row_vec_to_pb_posn_ornt, pb_posn_ornt_to_row_vec, get_confused_class_reading, 
                     roll_outcome, origin_row_vec, diff_norm, )
 from env_config import ( TABLE_URDF_PATH, _MIN_X_OFFSET, _BLOCK_SCALE, _CONFUSE_PROB, _BLOCK_NAMES,
-                         _USE_GRAPHICS, _BLOCK_ALPHA, _ONLY_PRIMARY, _ONLY_RED, _ACCEPT_POSN_ERR,
-                         _ACTUAL_NAMES, _ROBOT_SPEED )
+                         _USE_GRAPHICS, _BLOCK_ALPHA, _ONLY_PRIMARY, _ONLY_SECONDARY, _ONLY_RED, 
+                         _ACCEPT_POSN_ERR, _ACTUAL_NAMES, _ROBOT_SPEED, )
 
 
 
@@ -195,25 +195,38 @@ class PB_BlocksWorld:
         self.grasp     = []
 
         ## Instantiate Blocks ##
-        redBlock = make_block( self.physicsClient )
-        self.physicsClient.changeVisualShape( redBlock, -1, rgbaColor=[1.0, 0.0, 0.0, _BLOCK_ALPHA] )
+        self.blocks = []
 
-        ylwBlock = make_block( self.physicsClient )
-        self.physicsClient.changeVisualShape( ylwBlock, -1, rgbaColor=[1.0, 1.0, 0.0, _BLOCK_ALPHA] )
+        if not _ONLY_SECONDARY:
+            redBlock = make_block( self.physicsClient )
+            self.physicsClient.changeVisualShape( redBlock, -1, rgbaColor=[1.0, 0.0, 0.0, _BLOCK_ALPHA] )
+            self.blocks.append( redBlock )
 
-        bluBlock = make_block( self.physicsClient )
-        self.physicsClient.changeVisualShape( bluBlock, -1, rgbaColor=[0.0, 0.0, 1.0, _BLOCK_ALPHA] )
+            if not _ONLY_RED:
 
-        grnBlock = make_block( self.physicsClient )
-        self.physicsClient.changeVisualShape( grnBlock, -1, rgbaColor=[0.0, 1.0, 0.0, _BLOCK_ALPHA] )
+                ylwBlock = make_block( self.physicsClient )
+                self.physicsClient.changeVisualShape( ylwBlock, -1, rgbaColor=[1.0, 1.0, 0.0, _BLOCK_ALPHA] )
+                self.blocks.append( ylwBlock )
 
-        ornBlock = make_block( self.physicsClient )
-        self.physicsClient.changeVisualShape( ornBlock, -1, rgbaColor=[1.0, 0.5, 0.0, _BLOCK_ALPHA] )
+                bluBlock = make_block( self.physicsClient )
+                self.physicsClient.changeVisualShape( bluBlock, -1, rgbaColor=[0.0, 0.0, 1.0, _BLOCK_ALPHA] )
+                self.blocks.append( bluBlock )
 
-        vioBlock = make_block( self.physicsClient )
-        self.physicsClient.changeVisualShape( vioBlock, -1, rgbaColor=[0.5, 0.0, 1.0, _BLOCK_ALPHA] )
+        if not (_ONLY_PRIMARY or _ONLY_RED):
 
-        self.blocks = [redBlock, ylwBlock, bluBlock, grnBlock, ornBlock, vioBlock, None]
+            grnBlock = make_block( self.physicsClient )
+            self.physicsClient.changeVisualShape( grnBlock, -1, rgbaColor=[0.0, 1.0, 0.0, _BLOCK_ALPHA] )
+            self.blocks.append( grnBlock )
+
+            ornBlock = make_block( self.physicsClient )
+            self.physicsClient.changeVisualShape( ornBlock, -1, rgbaColor=[1.0, 0.5, 0.0, _BLOCK_ALPHA] )
+            self.blocks.append( ornBlock )
+
+            vioBlock = make_block( self.physicsClient )
+            self.physicsClient.changeVisualShape( vioBlock, -1, rgbaColor=[0.5, 0.0, 1.0, _BLOCK_ALPHA] )
+            self.blocks.append( vioBlock )
+
+        self.blocks.append( None )
 
         ## Place Camera ##
         self.physicsClient.resetDebugVisualizerCamera(
@@ -247,6 +260,9 @@ class PB_BlocksWorld:
                 posn, ornt = rand_table_pose()
                 self.physicsClient.resetBasePositionAndOrientation( blockHandl, posn, ornt )
                 if _ONLY_PRIMARY and blockHandl not in [self.get_handle( nam ) for nam in ['redBlock','ylwBlock','bluBlock']]:
+                    posn, ornt = banished_pose()
+                    self.physicsClient.resetBasePositionAndOrientation( blockHandl, posn, ornt )
+                if _ONLY_SECONDARY and blockHandl not in [self.get_handle( nam ) for nam in ['grnBlock', 'ornBlock', 'vioBlock']]:
                     posn, ornt = banished_pose()
                     self.physicsClient.resetBasePositionAndOrientation( blockHandl, posn, ornt )
                 elif _ONLY_RED and (blockHandl != self.get_handle( 'redBlock' )):

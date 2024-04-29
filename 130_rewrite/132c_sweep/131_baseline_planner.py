@@ -406,13 +406,10 @@ class BaselineTAMP:
 
         self.goal = ( 'and',
             
-            ('GraspObj' , 'redBlock', _trgtRed  ), # ; Tower A
-            ('Supported', 'ylwBlock', 'redBlock'), 
-            ('Supported', 'bluBlock', 'ylwBlock'),
-
             ('GraspObj', 'grnBlock' , _trgtGrn  ), # ; Tower B
             ('Supported', 'ornBlock', 'grnBlock'), 
             ('Supported', 'vioBlock', 'ornBlock'),
+            ('Supported', 'ylwBlock', 'vioBlock'),
 
             ('HandEmpty',),
         )

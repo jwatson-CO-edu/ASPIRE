@@ -27,15 +27,18 @@ _BLOCK_ALPHA  = 1.0
 
 ########## OBJECTS #################################################################################
 
-_NULL_NAME    = "NOTHING"
-_ONLY_RED     = False
-_ONLY_PRIMARY = False
+_NULL_NAME      = "NOTHING"
+_ONLY_RED       = False
+_ONLY_PRIMARY   = False
+_ONLY_SECONDARY = False
 if _ONLY_RED:
     _BLOCK_NAMES  = ['redBlock', _NULL_NAME]
 elif _ONLY_PRIMARY:
-    _BLOCK_NAMES  = ['redBlock', 'ylwBlock', 'bluBlock', _NULL_NAME]
+    _BLOCK_NAMES  = ['redBlock', 'ylwBlock', 'bluBlock', _NULL_NAME,]
+elif _ONLY_SECONDARY:
+    _BLOCK_NAMES  = ['grnBlock', 'ornBlock', 'vioBlock', _NULL_NAME,]
 else:
-    _BLOCK_NAMES  = ['redBlock', 'ylwBlock', 'bluBlock', 'grnBlock', 'ornBlock', 'vioBlock', _NULL_NAME]
+    _BLOCK_NAMES  = ['redBlock', 'ylwBlock', 'bluBlock', 'grnBlock', 'ornBlock', 'vioBlock', _NULL_NAME,]
 
 
 _POSE_DIM     = 7
@@ -66,4 +69,4 @@ _MIN_X_OFFSET    =  0.400
 ########## PLANNER #################################################################################
 
 _POST_N_SPINS = 150
-_N_XTRA_SPOTS = 3
+_N_XTRA_SPOTS = 4

@@ -53,6 +53,14 @@ def extract_dct_values_in_order( dct, keyLst ):
     return rtnLst
 
 
+def extract_class_dist_in_order( obj, order = _BLOCK_NAMES ):
+    """ Get the discrete class distribution, in order according to environment variable """
+    if isinstance( obj, dict ):
+        return np.array( extract_dct_values_in_order( obj, order ) )
+    else:
+        return np.array( extract_dct_values_in_order( obj.labels, order ) )
+
+
 def extract_class_dist_sorted_by_key( obj ):
     """ Get the discrete class distribution, sorted by key name """
     return np.array( extract_dct_values_in_order( obj.labels, sorted_obj_labels( obj ) ) )
@@ -406,13 +414,10 @@ class BaselineTAMP:
 
         self.goal = ( 'and',
             
-            ('GraspObj' , 'redBlock', _trgtRed  ), # ; Tower A
-            ('Supported', 'ylwBlock', 'redBlock'), 
-            ('Supported', 'bluBlock', 'ylwBlock'),
-
             ('GraspObj', 'grnBlock' , _trgtGrn  ), # ; Tower B
             ('Supported', 'ornBlock', 'grnBlock'), 
             ('Supported', 'vioBlock', 'ornBlock'),
+            ('Supported', 'ylwBlock', 'vioBlock'),
 
             ('HandEmpty',),
         )

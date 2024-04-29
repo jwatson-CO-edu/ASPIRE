@@ -219,6 +219,7 @@ def get_confused_class_reading( label, confProb, orderedLabels ):
             rtnLabels[ blkName_i ] = confProb
     return rtnLabels
 
+
 ########## EXPERIMENT STATISTICS ###################################################################
 
 class DataLogger:
