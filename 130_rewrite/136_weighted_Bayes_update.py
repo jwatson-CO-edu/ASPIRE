@@ -1,8 +1,11 @@
 ########## DEV PLAN ################################################################################
 """
+[ ] Test: Is the `_modified` version with scaled data the same as a regular update where the peak is half as high?
 [ ] Read: Gaussian Process
 [ ] Read: Weighted Gaussian Process
 """
+
+
 
 ########## INIT ####################################################################################
 
