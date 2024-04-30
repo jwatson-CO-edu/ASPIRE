@@ -1,8 +1,11 @@
 ########## INIT ####################################################################################
 from math import log
 from pprint import pprint
+import sys
+flush = sys.stdout.flush
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 from utils import get_confusion_matx, get_confused_class_reading, multiclass_Bayesian_belief_update, roll_outcome
 from env_config import _BLOCK_NAMES, _N_CLASSES, _NULL_NAME
@@ -82,73 +85,138 @@ def get_label_noisy( trueLabel, confuseProb, orderedLabels = _BLOCK_NAMES ):
 
 
 ########## MAIN ####################################################################################
-confProb = 0.60/6.0
-confMatx = get_confusion_matx( _N_CLASSES, confProb )
-
-
-##### Change in KL-Divergence for Each Update #############################
-# print( "##### Normal Bayes Update #####\n" )
-trueLbl = 'grnBlock'
-initLbl = 'redBlock'
-currBel = get_confused_class_reading( initLbl, 0.10/6.0, _BLOCK_NAMES )
-lastBel = currBel
-
-print( "Example Reading" )
-pprint( get_label_noisy( trueLbl, confProb, orderedLabels = _BLOCK_NAMES ) )
-print()
-
-print( "Init Belief" )
-pprint( currBel )
-print()
-
-thrshCrit = 0.60
+thrshCrit = 0.55
 kldivCrit = 2
+N         = 5000
 
-kldivStops = []
-thrshStops = []
-N          = 10000
+kldivPerf = []
+thrshPerf = []
+kldivTNs  = []
+thrshTNs  = []
+probs     = [0.01, 0.025, 0.05, 0.075, 0.10, 0.25, 0.50, 0.55, 0.60, 0.65,]
 
-for _ in range(N):
-    kldivLast  = 0
-    kldvCount  = 0
-    kldivQuit  = False
-    thrshQuit  = False
-    i          = 0
+for conf in probs:
 
-    while not (kldivQuit and thrshQuit):
-        i += 1
+    confProb = conf/6.0
+    print( f"\nPer-class confusion: {confProb}", end = "" )
+    confMatx = get_confusion_matx( _N_CLASSES, confProb )
 
-        nxtRead = get_label_noisy( trueLbl, confProb, orderedLabels = _BLOCK_NAMES )
-        currBel = integrate_one_reading( currBel, confMatx, nxtRead, order = _BLOCK_NAMES )
+    ##### Change in KL-Divergence for Each Update #############################
+    # print( "##### Normal Bayes Update #####\n" )
+    trueLbl = 'grnBlock'
+    initLbl = 'redBlock'
+    currBel = get_confused_class_reading( initLbl, 0.10/6.0, _BLOCK_NAMES )
+    lastBel = currBel
 
-        if not kldivQuit:
-            kldivCurr = KL_div_dct( currBel, lastBel, order = _BLOCK_NAMES )
-            if kldivCurr < kldivLast:
-                kldvCount += 1
-            else:
-                kldvCount = 0
-            if kldvCount >= kldivCrit:
-                mxP = 0.0
-                mxL = None
+    # print( "Example Reading" )
+    # pprint( get_label_noisy( trueLbl, confProb, orderedLabels = _BLOCK_NAMES ) )
+    # print()
+
+    # print( "Init Belief" )
+    # pprint( currBel )
+    # print()
+
+    kldivStops = []
+    thrshStops = []
+    kldivCrct  = 0
+    thrshCrct  = 0
+
+    for j in range(N):
+        kldivLast  = 0
+        kldvCount  = 0
+        kldivQuit  = False
+        thrshQuit  = False
+        i          = 0
+        
+
+        while not (kldivQuit and thrshQuit):
+            i += 1
+
+            nxtRead = get_label_noisy( trueLbl, confProb, orderedLabels = _BLOCK_NAMES )
+            currBel = integrate_one_reading( currBel, confMatx, nxtRead, order = _BLOCK_NAMES )
+
+            if not kldivQuit:
+                kldivCurr = KL_div_dct( currBel, lastBel, order = _BLOCK_NAMES )
+                if kldivCurr < kldivLast:
+                    kldvCount += 1
+                else:
+                    kldvCount = 0
+                if kldvCount >= kldivCrit:
+                    mxP = 0.0
+                    mxL = None
+                    for k, v in currBel.items():
+                        if v > mxP:
+                            mxP = v
+                            mxL = k
+                    if mxL != initLbl:
+                        kldivQuit = True
+                        kldivStops.append(i)
+                    if mxL == trueLbl:
+                        kldivCrct += 1
+
+            if not thrshQuit:
                 for k, v in currBel.items():
-                    if v > mxP:
-                        mxP = v
-                        mxL = k
-                if mxL != initLbl:
-                    # print( "KL STOP!" )
-                    kldivQuit = True
-                    kldivStops.append(i)
+                    if (v >= thrshCrit) and (k != initLbl):
+                        thrshQuit = True
+                        thrshStops.append(i)
+                        break
+                if thrshQuit:
+                    mxP = 0.0
+                    mxL = None
+                    for k, v in currBel.items():
+                        if v > mxP:
+                            mxP = v
+                            mxL = k
+                    if mxL == trueLbl:
+                        thrshCrct += 1
+            
 
-        if not thrshQuit:
-            for k, v in currBel.items():
-                if (v >= thrshCrit) and (k != initLbl):
-                    # print( "THRESH STOP!" )
-                    thrshQuit = True
-                    thrshStops.append(i)
-                    break
+            lastBel   = currBel
+            kldivLast = kldivCurr
 
-        lastBel   = currBel
-        kldivLast = kldivCurr
+        if j%100 == 0:
+            print( ".", end = "" ) 
+            flush()
+    
+    print()
 
-print( f"Mean steps for KL  detector: {np.mean( kldivStops )}" )
-print( f"Mean steps for {int(thrshCrit*100)}% detector: {np.mean( thrshStops )}" )
+    kldivMean = np.mean( kldivStops )
+    thrshMean = np.mean( thrshStops )
+
+    print( f"Mean steps for KL  detector: {kldivMean}" )
+    print( f"Mean steps for {int(thrshCrit*100)}% detector: {thrshMean}" )
+
+    kldivPerf.append( kldivMean )
+    thrshPerf.append( thrshMean )
+    kldivTNs.append( 1.0 * kldivCrct / N )
+    thrshTNs.append( 1.0 * thrshCrct / N )
+
+########## PLOT PERFORMANCE ########################################################################
+
+fig, ax1 = plt.subplots()
+ax2 = ax1.twinx()
+
+ax1.plot( probs, kldivPerf, label="KL Step" )
+ax1.plot( probs, thrshPerf, label=f"{int(thrshCrit*100)}% Thresh Step" )
+ax1.set_ylabel( 'Timestep Halted' )
+ax1.set_xlabel('Probability of Class Confusion')
+
+ax2.plot( probs, kldivTNs, 'g', label="KL TP" )
+ax2.plot( probs, thrshTNs, 'r', label="Thresh TP" )
+ax2.set_ylabel( 'TP' )
+ax2.set_ylim([0.75, 1.00])
+# ax2.legend( loc=0 )
+
+plt.title('Failure Detector Performance -vs- Confusion')
+
+
+# ask matplotlib for the plotted objects and their labels
+lines, labels = ax1.get_legend_handles_labels()
+lines2, labels2 = ax2.get_legend_handles_labels()
+ax2.legend(lines + lines2, labels + labels2, loc=0)
+
+plt.savefig( "DetectorPerf.pdf" )
+plt.show()
+
+print( kldivTNs )
+print( thrshTNs )
