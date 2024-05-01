@@ -128,6 +128,10 @@ class UR5_Interface:
     def set_gripper_angles( self, angle1, angle2):
         """ Sets the servo angles directly. """
         self.gripper.position_angles( angle1, angle2 )
+    
+    def get_gripper_angles( self ):
+        """ Gets the servo angles directly. """
+        return self.gripper.get_position()
         
     def close_gripper( self ):
         """ Set the gripper fingers to near-zero gap """

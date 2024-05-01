@@ -89,9 +89,8 @@ class Motors:
         delta_Z = self.Crank*math.cos(math.radians(delta_theta)) - 14 + 81.32 + self.Camera2Ref
         return delta_Z
 
-    def getPosition(self):
-        self.Motor1.get_present_position()
-        self.Motor2.get_present_position()
+    def get_position(self):
+        return [self.Motor1.get_present_position(), self.Motor2.get_present_position()]
         
     def openGripper(self):
         open1 = int((self.Motor1theta_min+4)*1023/300)
@@ -144,9 +143,8 @@ class Motors:
             N = 0.0025 * load - 0.0000007 * load**2
         return N
 
-    def Temp(self):
-        self.Motor1.get_temperature()
-        self.Motor2.get_temperature()
+    def get_temp(self):
+        return [self.Motor1.get_temperature(), self.Motor2.get_temperature()]
     
     def get_voltage(self):
         return [self.Motor1.get_voltage(), self.Motor2.get_voltage()]
