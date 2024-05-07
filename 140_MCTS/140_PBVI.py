@@ -1,4 +1,5 @@
 ########## INIT ####################################################################################
+# Adapted from:  https://github.com/namoshizun/PyPOMDP/blob/master/pypomdp/solvers/pbvi.py
 
 import numpy as np
 
@@ -20,6 +21,7 @@ class AlphaVec:
     
 class PBVI:
     """ Point-Based Value Iteration """
+    # NOTE: This is NOT MCTS, There is no tree
 
     def __init__( self ):
         """ ??? """
