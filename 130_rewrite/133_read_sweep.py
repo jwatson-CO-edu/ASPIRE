@@ -94,7 +94,7 @@ def plot_sweep_pass_makespans( data, plotName ):
     ax2.set_ylim([0.00, 1.00])
     ax2.set_ylabel('Success Rate')
 
-    plt.title('Expected Block Tower Makespan -vs- Confusion')
+    plt.title('Expected Block Tower Makespan -vs- Confusion, Responsive')
     plt.xlabel('Probability of Class Confusion')
     
     plt.savefig( str( plotName ) + "_sweep-makespans" + '.pdf' )
@@ -118,7 +118,7 @@ if __name__ == "__main__":
         }, 
         prefix = "TAMP-Loop" 
     )
-    plot_sweep_pass_makespans( data, "TAMP-Baseline-Conf" )
+    plot_sweep_pass_makespans( data, "TAMP-Responsive-Conf" )
     
     
     # get_merged_logs_in_dir_with_prefix( drctry, prefix )
