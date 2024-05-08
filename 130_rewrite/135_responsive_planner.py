@@ -1,7 +1,3 @@
-########## DEV PLAN ################################################################################
-"""
-"""
-
 ########## INIT ####################################################################################
 
 ##### Imports #####
@@ -16,14 +12,15 @@ import numpy as np
 from py_trees.common import Status
 
 ### Local ###
-from symbols import GraspObj, ObjPose
+from symbols import GraspObj, ObjPose, extract_row_vec_pose
 from utils import ( multiclass_Bayesian_belief_update, get_confusion_matx, get_confused_class_reading, 
-                    DataLogger, origin_row_vec, row_vec_to_pb_posn_ornt, diff_norm, )
+                    DataLogger, pb_posn_ornt_to_row_vec, row_vec_to_pb_posn_ornt, diff_norm, )
 from PB_BlocksWorld import PB_BlocksWorld, rand_table_pose
-from actions import display_PDLS_plan, get_BT_plan_until_block_change, BT_Runner
+from actions import ( display_PDLS_plan, get_BT_plan_until_block_change, BT_Runner, pass_msg_up, 
+                      MoveHolding )
 from env_config import ( _BLOCK_SCALE, _N_CLASSES, _CONFUSE_PROB, _NULL_NAME, _NULL_THRESH, 
                          _BLOCK_NAMES, _VERBOSE, _MIN_X_OFFSET, _ACCEPT_POSN_ERR, _MIN_SEP, 
-                         _POST_N_SPINS, _USE_GRAPHICS, )
+                         _POST_N_SPINS, _USE_GRAPHICS, _N_XTRA_SPOTS, _CHANGE_THRESH, )
 
 ### PDDLStream ### 
 sys.path.append( "../pddlstream/" )
@@ -37,7 +34,16 @@ from pddlstream.algorithms.meta import solve
 
 def d_between_obj_poses( obj1, obj2 ):
     """ Calculate the translation between poses in the same frame """
-    return np.linalg.norm( np.subtract( obj1.pose[:3], obj2.pose[:3] ) )
+    if hasattr( obj1, 'pose' ):
+        pose1 = obj1.pose
+        if hasattr( pose1, 'pose' ):
+            pose1 = pose1.pose
+    if hasattr( obj2, 'pose' ):
+        pose2 = obj2.pose
+        if hasattr( pose2, 'pose' ):
+            pose2 = pose2.pose
+
+    return np.linalg.norm( np.subtract( pose1[:3], pose2[:3] ) )
 
 
 def sorted_obj_labels( obj ):
@@ -57,6 +63,14 @@ def extract_dct_values_in_order( dct, keyLst ):
     return rtnLst
 
 
+def extract_class_dist_in_order( obj, order = _BLOCK_NAMES ):
+    """ Get the discrete class distribution, in order according to environment variable """
+    if isinstance( obj, dict ):
+        return np.array( extract_dct_values_in_order( obj, order ) )
+    else:
+        return np.array( extract_dct_values_in_order( obj.labels, order ) )
+
+
 def extract_class_dist_sorted_by_key( obj ):
     """ Get the discrete class distribution, sorted by key name """
     return np.array( extract_dct_values_in_order( obj.labels, sorted_obj_labels( obj ) ) )
@@ -65,6 +79,115 @@ def extract_class_dist_sorted_by_key( obj ):
 def extract_class_dist_in_order( obj, order = _BLOCK_NAMES ):
     """ Get the discrete class distribution, in order according to environment variable """
     return np.array( extract_dct_values_in_order( obj.labels, order ) )
+
+
+def argmax_over_keys( dct ):
+    """ Return the dictionary key associated with the greatest numeric value """
+    mxV = -1e9
+    mxL = None
+    for k, v in dct.items():
+        if v > mxV:
+            mxV = v
+            mxL = k
+    return mxL
+
+
+def argmax_over_dct( dct ):
+    """ Return the dictionary entry associated with the greatest numeric value """
+    mxV = -1e9
+    mxL = None
+    for k, v in dct.items():
+        if v > mxV:
+            mxV = v
+            mxL = k
+    return (mxL, mxV,)
+
+
+########## BT RUNNER + PERCEPTION ##################################################################
+
+class ResponsiveRunner( BT_Runner ):
+    """ Run a BT while also streaming perception data """
+
+    def __init__( self, root, world, tickHz = 4.0, limit_s = 20.0, planner = None ):
+        """ Init via superclass """
+        super().__init__( root, world, tickHz, limit_s )
+        self.planner = planner
+        self.belAssc = dict()
+
+
+    def assoc_beliefs( self ):
+        """ Gather symbols that are relevant to the plan and associate them with beliefs """
+        self.belAssc = dict()
+        count = 0 
+        for behav in self.root.children:
+            if isinstance( behav, MoveHolding ): # Every relevant action MOVES a block!
+                arg = behav.args[0]
+                bel = self.planner.memory.fetch_relevant_belief( arg )
+                if bel is not None:
+                    self.belAssc[ str(arg) ] = {
+                        "belief"  : bel,
+                        "initDist": bel.labels.copy(),
+                        "initMaxL": argmax_over_keys( bel.labels ),
+                        "lastDist": bel.labels.copy(),
+                        "KL_decr" : 0,
+                    }
+                    count += 1
+        if _VERBOSE:
+            print( f"Found {count} relevant symbols!" )
+            pprint( self.belAssc )
+            print()
+
+
+    def cache_label_dist( self ):
+        """ Store the current label distributions in the 'last' parameter, used in info gain calc """
+        for dct in self.belAssc.values():
+            dct['lastDist'] = dct['belief'].labels.copy()
+
+
+    def check_dist_change_thresh( self, thresh = 0.40 ):
+        """ Return true if a different key has crossed the confidence threshold for ANY belief, otherwise return false """
+        for dct in self.belAssc.values():
+            origLabl = dct['initMaxL']
+            distMax  = argmax_over_dct( dct['belief'].labels )
+            if ((distMax[1] >= thresh) and (distMax[0] != origLabl)):
+                return True
+        return False
+
+
+    def setup_BT_for_running( self ):
+        """ Connect the plan to world and robot, Associate relevant beliefs """
+        super().setup_BT_for_running()
+        self.assoc_beliefs()
+
+
+    def tick_once( self ):
+        """ Run one simulation step """
+        ## Let sim run ##
+        self.world.spin_for( self.Nstep )
+
+        ## Take a reading ##
+        if self.planner is not None:
+            self.planner.perceive_scene()
+            # Check that the relevant symbols have not changed distribution
+            if self.check_dist_change_thresh( _CHANGE_THRESH ):
+                self.set_fail( "OBJECT BELIEF CHANGE" )
+        self.cache_label_dist()
+
+        ## Advance BT ##
+        if not self.p_ended():
+            self.root.tick_once()
+            self.status = self.root.status
+
+        self.i += 1
+        ## Check Conditions ##
+        if (self.i >= self.Nlim) and (not self.p_ended()):
+            self.set_fail( "BT TIMEOUT" )
+        if self.p_ended():
+            # self.world.robot_release_all()
+            pass_msg_up( self.root )
+            if len( self.msg ) == 0:
+                self.msg = self.root.msg
+            self.display_BT() 
 
 
 ########## BELIEFS #################################################################################
@@ -96,6 +219,22 @@ class ObjectMemory:
             belief.labels[ key ] = pstrr[i]
 
 
+    def fetch_relevant_belief( self, objReading, maxRadius = 3.0*_BLOCK_SCALE ):
+        """ If there is a belief relevant to the `objReading` then return it, Otherwise return `None` """
+        relevant = False
+        dMin     = 1e6
+        belBest  = None
+        for belief in self.beliefs:
+            d = d_between_obj_poses( objReading, belief )
+            if (d < maxRadius) and (d < dMin):
+                dMin     = d
+                belBest  = belief
+                relevant = True
+        if relevant:
+            return belBest
+        return None
+
+
     def integrate_one_reading( self, objReading, maxRadius = 3.0*_BLOCK_SCALE ):
         """ Fuse this belief with the current beliefs """
         relevant = False
@@ -113,7 +252,6 @@ class ObjectMemory:
         if relevant:
             belBest.visited = True
             self.accum_evidence_for_belief( objReading, belBest )
-            # belBest.pose = np.array( objReading.pose ) # WARNING: ASSUME THE NEW NEAREST POSE IS CORRECT!
             belBest.pose = objReading.pose # WARNING: ASSUME THE NEW NEAREST POSE IS CORRECT!
 
         # 2. If this evidence does not support an existing belief, it is a new belief
@@ -250,8 +388,6 @@ class ResponsiveTAMP:
     def reset_beliefs( self ):
         """ Erase belief memory """
         self.memory  = ObjectMemory() # Distributions over objects
-        self.symbols = []
-        self.facts   = list()
 
 
     def reset_state( self ):
@@ -261,10 +397,18 @@ class ResponsiveTAMP:
         self.goal    = tuple()
 
 
+    def reset_symbols( self ):
+        """ Erase grounded symbols and predicates """
+        # 2024-05-07, WARNING: Moved following two from `ResponsiveTAMP.reset_beliefs`
+        self.symbols = []
+        self.facts   = list()
+
+
     def __init__( self, world = None ):
         """ Create a pre-determined collection of poses and plan skeletons """
         self.reset_beliefs()
         self.reset_state()
+        self.reset_symbols()
         self.world  = world if (world is not None) else PB_BlocksWorld()
         self.logger = DataLogger()
         # DEATH MONITOR
@@ -287,6 +431,15 @@ class ResponsiveTAMP:
         return ObjPose( rowVec )
 
 
+    def p_grounded_fact_pose( self, poseOrObj ):
+        """ Does this exist as a `Waypoint`? """
+        rowVec = extract_row_vec_pose( poseOrObj )
+        for fact in self.facts:
+            if fact[0] == 'Waypoint' and (diff_norm( rowVec[:3], fact[1].pose[:3] ) <= _ACCEPT_POSN_ERR):
+                return True
+        return False
+    
+
     ##### Stream Creators #################################################
 
     def get_above_pose_stream( self ):
@@ -305,10 +458,12 @@ class ResponsiveTAMP:
                     upPose = sym.pose.pose.copy()
                     upPose[2] += _BLOCK_SCALE
 
-                    # rtnPose = self.get_grounded_pose_or_new( upPose )
-                    rtnPose = ObjPose( upPose )
-                    
+                    rtnPose = self.get_grounded_fact_pose_or_new( upPose )
                     print( f"FOUND a pose {rtnPose} supported by {objcName}!" )
+
+                    # rtnPose = ObjPose( upPose )
+                    # print( f"FOUND a pose {rtnPose} supported by {objcName}!" )
+
                     yield (rtnPose,)
 
         return stream_func
@@ -323,7 +478,6 @@ class ResponsiveTAMP:
             if _VERBOSE:
                 print( f"\nEvaluate PLACEMENT POSE stream with args: {args}\n" )
 
-            # objcName = args[0]
             placed   = False
             testPose = None
             while not placed:
@@ -399,13 +553,10 @@ class ResponsiveTAMP:
 
         self.goal = ( 'and',
             
-            ('GraspObj' , 'redBlock', _trgtRed  ), # ; Tower A
-            ('Supported', 'ylwBlock', 'redBlock'), 
-            ('Supported', 'bluBlock', 'ylwBlock'),
-
-            ('GraspObj', 'grnBlock' , _trgtGrn  ), # ; Tower B
+            ('GraspObj', 'grnBlock' , _trgtGrn  ), # Tower
             ('Supported', 'ornBlock', 'grnBlock'), 
             ('Supported', 'vioBlock', 'ornBlock'),
+            ('Supported', 'ylwBlock', 'vioBlock'),
 
             ('HandEmpty',),
         )
@@ -441,11 +592,20 @@ class ResponsiveTAMP:
                 return sym
         return None
     
+
+    def get_grounded_fact_pose_or_new( self, rowVec ):
+        """ If there is a `Waypoint` approx. to `rowVec`, then return it, Else create new `ObjPose` """ 
+        for fact in self.facts:
+            if fact[0] == 'Waypoint' and (diff_norm( rowVec[:3], fact[1].pose[:3] ) <= _ACCEPT_POSN_ERR):
+                return fact[1]
+            if fact[0] == 'GraspObj' and (diff_norm( rowVec[:3], fact[2].pose[:3] ) <= _ACCEPT_POSN_ERR):
+                return fact[2]
+        return ObjPose( rowVec )
+    
     
     def ground_relevant_predicates_noisy( self ):
         """ Scan the environment for evidence that the task is progressing, using current beliefs """
         rtnFacts = []
-        # foundBlc = set([])
         ## Gripper Predicates ##
         if len( self.world.grasp ):
             for grasped in self.world.grasp:
@@ -464,6 +624,7 @@ class ResponsiveTAMP:
                 if (tObj is not None) and (diff_norm( pPos.pose[:3], tObj.pose.pose[:3] ) <= _ACCEPT_POSN_ERR):
                     rtnFacts.append( g ) # Position goal met
         # B. No need to ground the rest
+
         ## Support Predicates && Blocked Status ##
         # Check if `sym_i` is supported by `sym_j`, blocking `sym_j`, NOTE: Table supports not checked
         supDices = set([])
@@ -481,10 +642,14 @@ class ResponsiveTAMP:
                         rtnFacts.extend([
                             ('Supported', lblUp, lblDn,),
                             ('Blocked', lblDn,),
+                            ('PoseAbove', self.get_grounded_fact_pose_or_new( posUp.pose ), lblDn,),
                         ])
         for i, sym_i in enumerate( self.symbols ):
             if i not in supDices:
-                rtnFacts.append( ('Supported', sym_i.label, 'table',) )
+                rtnFacts.extend( [
+                    ('Supported', sym_i.label, 'table',),
+                    ('PoseAbove', self.get_grounded_fact_pose_or_new( sym_i.pose.pose ), 'table',),
+                ] )
         ## Where the robot at? ##
         robotPose = ObjPose( self.world.robot.get_current_pose() )
         rtnFacts.extend([ 
@@ -525,6 +690,8 @@ class ResponsiveTAMP:
     def phase_1_Perceive( self, Nscans = 1 ):
         """ Take in evidence and form beliefs """
 
+        self.reset_symbols() # Make absolutely sure symbols not carried over from last iter
+
         for _ in range( Nscans ):
             planner.perceive_scene() # We need at least an initial set of beliefs in order to plan
 
@@ -537,37 +704,68 @@ class ResponsiveTAMP:
                 print( f"\t{obj}" )
 
 
+    def allocate_table_swap_space( self, Nspots = _N_XTRA_SPOTS ):
+        """ Find some open poses on the table for performing necessary swaps """
+        rtnFacts  = []
+        freeSpots = []
+        occuSpots = [ np.array( sym.pose.pose ) for sym in self.symbols]
+        while len( freeSpots ) < Nspots:
+            nuPose = pb_posn_ornt_to_row_vec( *rand_table_pose() )
+            print( f"\t\tSample: {nuPose}" )
+            posn    = nuPose[:3]
+            collide = False
+            for spot in occuSpots:
+                symPosn = spot[:3]
+                if diff_norm( posn, symPosn ) < ( _MIN_SEP ):
+                    collide = True
+                    break
+            if not collide:
+                freeSpots.append( ObjPose( nuPose ) )
+                occuSpots.append( nuPose )
+        for objPose in freeSpots:
+            rtnFacts.extend([
+                ('Waypoint', objPose,),
+                ('Free', objPose,),
+                ('PoseAbove', objPose, 'table'),
+            ])
+        return rtnFacts
+                
+
     def phase_2_Conditions( self ):
         """ Get the necessary initial state, Check for goals already met """
         
         if not self.check_goal_objects( self.goal, self.symbols ):
+            self.reset_beliefs()
+            self.phase_1_Perceive( Nscans = 1 )
+
+        if not self.check_goal_objects( self.goal, self.symbols ):
             self.logger.log_event( "Required objects missing", str( self.symbols ) )   
             self.status = Status.FAILURE
         else:
-            start = ObjPose( origin_row_vec() )
+            
+            self.facts = [ ('Base', 'table',) ] 
 
-            self.facts = [
-                ## Init Predicates ##
-                ('Waypoint', start,),
-                ## Goal Predicates ##
-                ('Waypoint', _trgtRed,),
-                ('Waypoint', _trgtGrn,),
-            ] 
+            ## Copy `Waypoint`s present in goals ##
+            for g in self.goal[1:]:
+                if g[0] == 'GraspObj':
+                    self.facts.append( ('Waypoint', g[2],) )
+                    if abs(g[2].pose[2] - _BLOCK_SCALE) < _ACCEPT_POSN_ERR:
+                        self.facts.append( ('PoseAbove', g[2], 'table') )
 
             ## Ground the Blocks ##
             for sym in self.symbols:
                 self.facts.append( ('Graspable', sym.label,) )
-                if not self.block_exists( sym.label ):
-                    self.facts.append( ('GraspObj', sym.label, sym.pose,) )
-                    self.facts.append( ('Waypoint', sym.pose,) )
+
+                blockPose = self.get_grounded_fact_pose_or_new( sym.pose.pose )
+                self.facts.append( ('GraspObj', sym.label, blockPose,) )
+                if not self.p_grounded_fact_pose( blockPose ):
+                    self.facts.append( ('Waypoint', blockPose,) )
 
             ## Fetch Relevant Facts ##
-            # print( self.ground_relevant_predicates_noisy() )
             self.facts.extend( self.ground_relevant_predicates_noisy() )
 
-            ## Populate Spots for Block Movements ##, 2024-04-19: This needs to be a stream?
-            # for _ in range( _N_XTRA_SPOTS ):
-            #     self.facts.append( ('Waypoint', ObjPose( rand_table_pose() ),) )
+            ## Populate Spots for Block Movements ##, 2024-04-25: Injecting this for now, Try a stream later ...
+            self.facts.extend( self.allocate_table_swap_space( _N_XTRA_SPOTS ) )
 
             if _VERBOSE:
                 print( f"\n### Initial Symbols ###" )
@@ -583,30 +781,14 @@ class ResponsiveTAMP:
 
         self.logger.log_event( "Begin Solver" )
 
-        # print( dir( self.task ) )
-        if 0:
-            print( f"\nself.task.init\n" )
-            pprint( self.task.init )
-            print( f"\nself.task.goal\n" )
-            pprint( self.task.goal )
-            print( f"\nself.task.domain_pddl\n" )
-            pprint( self.task.domain_pddl )
-            print( f"\nself.task.stream_pddl\n" )
-            pprint( self.task.stream_pddl )
-
         try:
-            
             solution = solve( 
                 self.task, 
-                algorithm      = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
-                unit_costs     = True, # False, #True, 
-                unit_efforts   = True, # False, #True,
-                reorder        = False,
-                initial_complexity = 3,
-                # max_complexity = 4,
-                # max_failures  = 4,
-                # search_sample_ratio = 1/4
-
+                algorithm          = "adaptive", #"focused", #"binding", #"incremental", #"adaptive", 
+                unit_costs         = True, # False, #True, 
+                unit_efforts       = True, # False, #True,
+                reorder            = True,
+                initial_complexity = 2
             )
 
             print( "Solver has completed!\n\n\n" )
@@ -635,7 +817,8 @@ class ResponsiveTAMP:
     def phase_4_Execute_Action( self ):
         """ Attempt to execute the first action in the symbolic plan """
         
-        btr = BT_Runner( self.action, self.world, 20.0, 30.0 )
+        # btr = BT_Runner( self.action, self.world, 20.0, 30.0 )
+        btr = ResponsiveRunner( self.action, self.world, 20.0, 30.0, self )
         btr.setup_BT_for_running()
 
         while not btr.p_ended():
@@ -719,7 +902,6 @@ class ResponsiveTAMP:
         return False
 
 
-
     def validate_goal_noisy( self, goal ):
         """ Check if the system believes the goal is met """
         if goal[0] == 'and':
@@ -741,6 +923,7 @@ class ResponsiveTAMP:
 
         self.reset_state()
         self.set_goal()
+        self.world.reset_blocks()
         self.logger.begin_trial()
 
         indicateSuccess = False
@@ -754,8 +937,6 @@ class ResponsiveTAMP:
             ## Phase 1 ##
 
             print( f"Phase 1, {self.status} ..." )
-
-            self.reset_beliefs() # WARNING: REMOVE FOR RESPONSIVE
             
             self.phase_1_Perceive( 1 )
 
@@ -835,7 +1016,7 @@ class ResponsiveTAMP:
 if __name__ == "__main__":
 
     planner = ResponsiveTAMP()
-    planner.solve_task( maxIter = 100 )
+    planner.solve_task( maxIter = 200 )
     
     if 0:
         planner.set_goal()
