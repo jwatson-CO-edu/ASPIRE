@@ -1,5 +1,6 @@
 ########## DEV PLAN ################################################################################
 """
+[ ] Sample event running times from a Poisson distribution instead of a 
 [ ] Simulate an event sequence
 [ ] Take symbol likelihood into account
 [ ] Frame the task-wide Trial-and-Error problem
@@ -17,6 +18,9 @@
 
 * https://github.com/correlllab/Factor-Graphs-for-Failure-Analysis/blob/main/zc_WeBots_PDDL/80_Beta-Dist.ipynb
 """
+
+
+
 ########## INIT ####################################################################################
 
 from uuid import uuid5
@@ -34,8 +38,7 @@ class Event:
         """ Set params """
         self.ID       = uuid5()
         self.name     = "Event_" + str( self.ID )
-        self.durMean  = 1.0
-        self.durStdv  = 0.5
+        self.lamRate  = 1.0 # Rate per unit time the event is happenning 
         self.Npass    = 0
         self.Nfail    = 0
         self.duration = 0.0
@@ -58,7 +61,8 @@ class Event:
             self.duration = 0.0
             self.result   = False
         else:
-            self.duration = np.random.normal( self.durMean, self.durStdv )
+            # self.duration = np.random.normal( self.durMean, self.durStdv )
+            self.duration = np.random.poisson( lam = self.lamRate )
             self.result   = (beta.rvs( self.Npass, self.Nfail ) >= 0.5)
         rtnDur = self.duration
         rtnRes = self.result
