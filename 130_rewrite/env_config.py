@@ -20,7 +20,7 @@ _VERBOSE        = True
 
 ########## PYBULLET ################################################################################
 
-_USE_GRAPHICS = False
+_USE_GRAPHICS = True
 _BLOCK_ALPHA  = 1.0
 
 
@@ -71,3 +71,4 @@ _MIN_X_OFFSET    =  0.400
 _POST_N_SPINS  = 150
 _N_XTRA_SPOTS  = 4
 _CHANGE_THRESH = 0.40
+_BT_LOOK_DIV   = 2

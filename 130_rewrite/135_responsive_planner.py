@@ -20,7 +20,7 @@ from actions import ( display_PDLS_plan, get_BT_plan_until_block_change, BT_Runn
                       MoveHolding )
 from env_config import ( _BLOCK_SCALE, _N_CLASSES, _CONFUSE_PROB, _NULL_NAME, _NULL_THRESH, 
                          _BLOCK_NAMES, _VERBOSE, _MIN_X_OFFSET, _ACCEPT_POSN_ERR, _MIN_SEP, 
-                         _POST_N_SPINS, _USE_GRAPHICS, _N_XTRA_SPOTS, _CHANGE_THRESH, )
+                         _POST_N_SPINS, _USE_GRAPHICS, _N_XTRA_SPOTS, _CHANGE_THRESH, _BT_LOOK_DIV, )
 
 ### PDDLStream ### 
 sys.path.append( "../pddlstream/" )
@@ -108,11 +108,27 @@ def argmax_over_dct( dct ):
 class ResponsiveRunner( BT_Runner ):
     """ Run a BT while also streaming perception data """
 
+    tkCount = 0 # ---------- Number of ticks the runner has seen across actions
+    lookDiv = _BT_LOOK_DIV # How often the runner should update beliefs
+
     def __init__( self, root, world, tickHz = 4.0, limit_s = 20.0, planner = None ):
         """ Init via superclass """
         super().__init__( root, world, tickHz, limit_s )
-        self.planner = planner
-        self.belAssc = dict()
+        self.planner = planner # ---- Connection to TAMP system
+        self.belAssc = dict() # ----- Links to beliefs that may have changing distributions
+        self.blndStr = ["Holding",] # Action names that "blind" the robot
+        
+
+
+    def p_vision_blocked( self ):
+        """ Return `True` if the name of the last-run `GroundedAction` contains a `blndStr` """
+        node = self.root.tip()
+        while node:
+            for banned in self.blndStr:
+                if banned in node.name:
+                    return True
+            node = node.parent
+        return False
 
 
     def assoc_beliefs( self ):
@@ -164,13 +180,18 @@ class ResponsiveRunner( BT_Runner ):
         """ Run one simulation step """
         ## Let sim run ##
         self.world.spin_for( self.Nstep )
+        ResponsiveRunner.tkCount += 1
 
         ## Take a reading ##
         if self.planner is not None:
-            self.planner.perceive_scene()
-            # Check that the relevant symbols have not changed distribution
-            if self.check_dist_change_thresh( _CHANGE_THRESH ):
-                self.set_fail( "OBJECT BELIEF CHANGE" )
+            if (not self.p_vision_blocked()) and (ResponsiveRunner.tkCount % ResponsiveRunner.lookDiv == 0):
+                print( f"\tVision UPDATE during {ResponsiveRunner.tkCount}!" )
+                self.planner.perceive_scene()
+                # Check that the relevant symbols have not changed distribution
+                if self.check_dist_change_thresh( _CHANGE_THRESH ):
+                    self.set_fail( "OBJECT BELIEF CHANGE" )
+            # else:
+            #     print( f"\tVision BLOCKED by {self.root.tip().name}!" )
         self.cache_label_dist()
 
         ## Advance BT ##
