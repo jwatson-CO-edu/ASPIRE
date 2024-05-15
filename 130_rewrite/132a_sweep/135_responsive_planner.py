@@ -188,7 +188,7 @@ class ResponsiveRunner( BT_Runner ):
         """ Run one simulation step """
         ## Let sim run ##
         self.world.spin_for( self.Nstep )
-        ResponsiveRunner.tkCount += 1
+        # ResponsiveRunner.tkCount += 1
 
         ## Take a reading ##
         if self.planner is not None:
