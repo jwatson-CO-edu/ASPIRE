@@ -20,7 +20,7 @@ _VERBOSE        = True
 
 ########## PYBULLET ################################################################################
 
-_USE_GRAPHICS = True
+_USE_GRAPHICS = False
 _BLOCK_ALPHA  = 1.0
 
 
@@ -51,7 +51,7 @@ _ROBOT_SPEED  = _BLOCK_SCALE / 10.0
 
 ########## BELIEFS #################################################################################
 
-_CONFUSE_PROB = 0.001 # 0.001 # 0.001 # 0.025 # 0.05
+_CONFUSE_PROB = 0.05 # 0.001 # 0.001 # 0.025 # 0.05
 _NULL_THRESH  = 0.75
 _EXIST_THRESH = 0.05
 
@@ -71,4 +71,4 @@ _MIN_X_OFFSET    =  0.400
 _POST_N_SPINS  = 150
 _N_XTRA_SPOTS  = 4
 _CHANGE_THRESH = 0.40
-_BT_LOOK_DIV   = 4
+_BT_LOOK_DIV   = 1.0

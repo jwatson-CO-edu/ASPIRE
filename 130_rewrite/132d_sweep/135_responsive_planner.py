@@ -3,7 +3,8 @@
 ##### Imports #####
 
 ### Standard ###
-import sys, pickle
+import sys, pickle, time
+now = time.time
 from traceback import print_exc, format_exc
 from pprint import pprint
 
@@ -108,7 +109,7 @@ def argmax_over_dct( dct ):
 class ResponsiveRunner( BT_Runner ):
     """ Run a BT while also streaming perception data """
 
-    tkCount = 0 # ---------- Number of ticks the runner has seen across actions
+    lstLook = now() # ------ Last time the runner asked for a belief update
     lookDiv = _BT_LOOK_DIV # How often the runner should update beliefs
 
     def __init__( self, root, world, tickHz = 4.0, limit_s = 20.0, planner = None ):
@@ -118,6 +119,13 @@ class ResponsiveRunner( BT_Runner ):
         self.belAssc = dict() # ----- Links to beliefs that may have changing distributions
         self.blndStr = ["Holding",] # Action names that "blind" the robot
         
+
+    def p_look_ready( self ):
+        """ Has it been at least `_BT_LOOK_DIV` since the last belief update? """
+        if ((now() - ResponsiveRunner.lstLook) >= ResponsiveRunner.lookDiv):
+            ResponsiveRunner.lstLook = now()
+            return True
+        return False
 
 
     def p_vision_blocked( self ):
@@ -184,8 +192,10 @@ class ResponsiveRunner( BT_Runner ):
 
         ## Take a reading ##
         if self.planner is not None:
-            if (not self.p_vision_blocked()) and (ResponsiveRunner.tkCount % ResponsiveRunner.lookDiv == 0):
-                print( f"\tVision UPDATE during {ResponsiveRunner.tkCount}!" )
+            # if (not self.p_vision_blocked()) and (ResponsiveRunner.tkCount % ResponsiveRunner.lookDiv == 0):
+            #     print( f"\tVision UPDATE during {ResponsiveRunner.tkCount}!" )
+            if ((not self.p_vision_blocked()) and self.p_look_ready()):
+                print( f"\tVision UPDATE during {ResponsiveRunner.lstLook}!" )
                 self.planner.perceive_scene()
                 # Check that the relevant symbols have not changed distribution
                 if self.check_dist_change_thresh( _CHANGE_THRESH ):
