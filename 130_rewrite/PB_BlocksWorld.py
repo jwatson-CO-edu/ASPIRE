@@ -299,6 +299,15 @@ class PB_BlocksWorld:
             self.grasp.append( (hndl,pDif,bOrn,) ) # Preserve the original orientation because I am lazy
 
 
+    def p_robot_has_block( self, blockName ):
+        """ Return `True` if `blockName` is held in the end effector, Otherwise return `False` """
+        hndl = self.get_handle( blockName )
+        for objTpl in self.grasp:
+            if hndl == objTpl[0]:
+                return True
+        return False
+    
+
     def robot_release_all( self ):
         """ Unlock all objects from end effector """
         self.grasp = list()

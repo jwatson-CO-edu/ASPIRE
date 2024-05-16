@@ -94,8 +94,8 @@ def plot_sweep_pass_makespans( data, plotName ):
     ax2.set_ylim([0.00, 1.00])
     ax2.set_ylabel('Success Rate')
 
-    plt.title('Expected Block Tower Makespan -vs- Confusion, Responsive')
-    plt.xlabel('Probability of Class Confusion')
+    plt.title('Block Tower Makespan -vs- Update Frequency, Responsive, 0.30 Confusion')
+    ax1.set_xlabel('Seconds Between Belief Updates')
     
     plt.savefig( str( plotName ) + "_sweep-makespans" + '.pdf' )
     plt.show()
@@ -110,11 +110,11 @@ def plot_sweep_pass_makespans( data, plotName ):
 if __name__ == "__main__":
     data = collect_multiple_makespan_datasets( 
         {
-            f"{np.round(0.001*6,3):.3f}" : "./data/",
-            f"{np.round(0.010*6,3):.3f}" : "./132a_sweep/data/",
-            f"{np.round(0.025*6,3):.3f}" : "./132b_sweep/data/",
-            f"{np.round(0.050*6,3):.3f}" : "./132c_sweep/data/",
-            f"{np.round(0.075*6,3):.3f}" : "./132d_sweep/data/",
+            f"0.5" : "./data/",
+            f"1.0" : "./132a_sweep/data/",
+            f"2.0" : "./132b_sweep/data/",
+            f"4.0" : "./132c_sweep/data/",
+            f"8.0" : "./132d_sweep/data/",
         }, 
         prefix = "TAMP-Loop" 
     )

@@ -162,6 +162,14 @@ class ResponsiveRunner( BT_Runner ):
             print()
 
 
+    def move_assoc_beliefs( self ):
+        """ Beliefs associated with held objects should move with the effector """
+        # NOTE: This function assumes that associated beliefs are related to the held objects
+        effPosn = self.world.robot.get_current_pose()[:3]
+        for bel in self.belAssc.values():
+            bel[ "belief" ].pose.pose[:3] = effPosn
+    
+    
     def cache_label_dist( self ):
         """ Store the current label distributions in the 'last' parameter, used in info gain calc """
         for dct in self.belAssc.values():
@@ -190,6 +198,10 @@ class ResponsiveRunner( BT_Runner ):
         self.world.spin_for( self.Nstep )
         # ResponsiveRunner.tkCount += 1
 
+        ## Update believed poses of held blocks ##
+        if self.p_vision_blocked():
+            self.move_assoc_beliefs()
+        
         ## Take a reading ##
         if self.planner is not None:
             # if (not self.p_vision_blocked()) and (ResponsiveRunner.tkCount % ResponsiveRunner.lookDiv == 0):
