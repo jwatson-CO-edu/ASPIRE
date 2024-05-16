@@ -325,7 +325,7 @@ import huggingface_hub
 import numpy as np
 
 # Login to Hugging Face (ensure your credentials are securely managed)
-huggingface_hub.login('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')
+huggingface_hub.login('---')
 
 base_path = 'stream_data'
 trajectories = os.listdir(base_path)
