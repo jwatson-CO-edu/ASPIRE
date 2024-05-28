@@ -686,9 +686,16 @@ class BaselineTAMP:
         btr = BT_Runner( self.action, self.world, 20.0, 30.0 )
         btr.setup_BT_for_running()
 
+        lastTip = None
+        currTip = None
+
         while not btr.p_ended():
             
-            btr.tick_once()
+            currTip = btr.tick_once()
+            if currTip != lastTip:
+                self.logger.log_event( f"Behavior: {currTip}", str(btr.status) )
+            lastTip = currTip
+            
             if _USE_GRAPHICS:
                 self.world.robot.draw( self.world.physicsClient )
 
@@ -699,6 +706,7 @@ class BaselineTAMP:
                 self.status = Status.FAILURE
                 self.logger.log_event( "Object OOB", str( self.world.full_scan_true() ) )
 
+        self.logger.log_event( "BT END", str( btr.status ) )
 
     ##### Goal Validation #################################################
 

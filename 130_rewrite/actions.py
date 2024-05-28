@@ -315,6 +315,7 @@ class BT_Runner:
             if len( self.msg ) == 0:
                 self.msg = self.root.msg
             self.display_BT() 
+        return self.root.tip().name
 
 
 
