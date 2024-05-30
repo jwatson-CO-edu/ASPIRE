@@ -146,6 +146,13 @@ class PB_BlocksWorld:
         ## Fake Vision ##
         self.sensor = NoisyObjectSensor()
 
+        ## Place Camera ##
+        self.physicsClient.resetDebugVisualizerCamera(
+                             cameraDistance       =   0.75,
+                             cameraYaw            =  23.2,
+                             cameraPitch          = -33.2,
+                             cameraTargetPosition = [_MIN_X_OFFSET, 0.0, 0.0])
+
 
     ##### Block Movements #################################################
 

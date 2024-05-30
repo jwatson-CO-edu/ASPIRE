@@ -691,7 +691,7 @@ class BaselineTAMP:
     def phase_4_Execute_Action( self ):
         """ Attempt to execute the first action in the symbolic plan """
         
-        btr = BT_Runner( self.action, self.world, 20.0, 30.0 )
+        btr = BT_Runner( self.action, self.world, 50.0, 30.0 )
         btr.setup_BT_for_running()
 
         lastTip = None

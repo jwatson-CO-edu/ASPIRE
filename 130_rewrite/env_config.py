@@ -46,12 +46,12 @@ _ACTUAL_NAMES = _BLOCK_NAMES[:-1]
 _N_CLASSES    = len( _BLOCK_NAMES )
 _BLOCK_SCALE  = 0.038
 _MIN_X_OFFSET = 0.400
-_ROBOT_SPEED  = _BLOCK_SCALE / 10.0
+_ROBOT_SPEED  = _BLOCK_SCALE / 20.0
 
 
 ########## BELIEFS #################################################################################
 
-_CONFUSE_PROB = 0.05 # 0.001 # 0.001 # 0.025 # 0.05
+_CONFUSE_PROB = 0.001 # 0.05 # 0.001 # 0.001 # 0.025 # 0.05
 _NULL_THRESH  = 0.75
 _EXIST_THRESH = 0.05
 

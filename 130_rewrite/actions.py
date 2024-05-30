@@ -26,6 +26,7 @@ from magpie.poses import pose_error
 
 _HAND_WAIT   = 100
 _GRASP_PAUSE = False
+_GRASP_STALL = 4
 
 
 
@@ -88,6 +89,7 @@ class BasicBehavior( Behaviour ):
             self.logger.warning( f"{self.name} is NOT conntected to a robot controller!" )
         if self.world is None:
             self.logger.warning( f"{self.name} is NOT conntected to a world object!" )
+        self.count = 0
         
 
     def setup(self):
@@ -98,7 +100,8 @@ class BasicBehavior( Behaviour ):
     def initialise( self ):
         """ Run first time behaviour is ticked or not RUNNING.  Will be run again after SUCCESS/FAILURE. """
         self.status = Status.RUNNING # Do not let the behavior idle in INVALID
-        self.logger.debug( f"[{self.name}::initialise()]" )          
+        self.logger.debug( f"[{self.name}::initialise()]" ) 
+        self.count = 0         
 
         
     def terminate( self, new_status ):
@@ -111,6 +114,17 @@ class BasicBehavior( Behaviour ):
         """ Return true in all cases """
         self.status = py_trees.common.Status.SUCCESS
         return self.status
+    
+
+    def stall( self, Nwait ):
+        """ Run at least `Nwait` ticks """
+        rtnStat = Status.INVALID
+        if self.count < Nwait:
+            rtnStat = Status.RUNNING
+        else:
+            rtnStat = Status.SUCCESS
+        self.count += 1
+        return rtnStat
     
     
     
@@ -208,7 +222,7 @@ class Grasp( BasicBehavior ):
         
     def update( self ):
         """ Return true if the target reached """
-        self.status = Status.SUCCESS
+        self.status = self.stall( _GRASP_STALL )
         return self.status
     
 
@@ -237,7 +251,7 @@ class Ungrasp( BasicBehavior ):
         
     def update( self ):
         """ Return true if the target reached """
-        self.status = Status.SUCCESS
+        self.status = self.stall( _GRASP_STALL )
         return self.status
     
 

@@ -11,7 +11,8 @@ from roboticstoolbox.robot.ERobot import ERobot
 
 from utils import homog_to_pb_posn_ornt, p_lst_has_nan
 
-from env_config import ROBOT_URDF_PATH, _ROT_VEL_SMALL, _Q_HOME, _MIN_X_OFFSET, _BLOCK_SCALE
+from env_config import ( ROBOT_URDF_PATH, _ROT_VEL_SMALL, _Q_HOME, _MIN_X_OFFSET, _BLOCK_SCALE, 
+                         _BASE_POSN, _BASE_ORNT, )
 
 class UR5e_RBT( ERobot ):
     """ PyRBT for UR5e IK """
@@ -43,7 +44,7 @@ class UR5Sim:
     def load_robot( self ):
         """ Load UR5e from description """
         flags = 0 #pb.URDF_USE_SELF_COLLISION
-        robot = pb.loadURDF( ROBOT_URDF_PATH, [0, 0, 0], [0, 0, 0, 1], flags=flags )
+        robot = pb.loadURDF( ROBOT_URDF_PATH, _BASE_POSN, _BASE_ORNT, flags=flags )
         return robot
   
     def __init__( self ):
