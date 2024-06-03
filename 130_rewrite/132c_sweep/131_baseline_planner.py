@@ -892,7 +892,7 @@ class BaselineTAMP:
 if __name__ == "__main__":
 
     planner = BaselineTAMP()
-    planner.solve_task( maxIter = 200 )
+    planner.solve_task( maxIter = 500 )
     
     if 0:
         planner.set_goal()

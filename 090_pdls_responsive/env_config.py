@@ -40,13 +40,14 @@ _BLOCK_ALPHA  = 1.0
 
 _GRASP_VERT_OFFSET = _BLOCK_SCALE * 2.0
 _GRASP_ORNT_XYZW   = np.array( [0, 0.7070727, 0, 0.7071408,] )
-_Q_HOME            = [0.0, 0.0, math.pi/2, -math.pi, -math.pi/4, 0]
+_Q_HOME            = [ 0.0, math.pi/4, -math.pi/2, 
+                       -5.0*math.pi/4, -math.pi/2, math.pi]
 _ROT_VEL_SMALL     = 0.00125
 _CLOSEST_TO_BASE   = 0.300
 _USE_GRAPHICS      = True
 _BASE_POSN         = [0, 0, 0.45]
 # _BASE_ORNT         = [0, 0, 0, 1]
-_BASE_ORNT         = [-0.383, 0, 0, 0.924]
+_BASE_ORNT         = [1.0, 0, 0, 0]
 
 
 ########## BELIEFS #################################################################################
