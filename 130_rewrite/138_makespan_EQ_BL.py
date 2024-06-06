@@ -1,5 +1,6 @@
 ########## INIT ####################################################################################
 from random import random
+from random import choice
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,29 +14,94 @@ from env_config import _MIN_X_OFFSET, _BLOCK_SCALE
 ########## MAKESPAN ESTIMATION #####################################################################
 
 
-def simulate_i_baseline( i, t_mv, t_pl, t_rm, P_Ni, N = 100, mem = None ):
+# def simulate_i_baseline( i, t_mv, t_pl, t_rm, P_Ni, N = 100, mem = None ):
+def simulate_tot_baseline( h, t_mv, t_pl, t_rm, P_Ni, N = 100, iterLim = 500 ):
     """ Simulate serial tower building up to `i` """
+
+    _V = False
+
     T = list()
+
+    blcs = [i+1 for i in range(h)]
+    tabl = [i+1 for i in range(h)]
+    towr = []
+
+    def identify_blocks_table():
+        rtnBlc = []
+        for b in tabl:
+            if random() < P_Ni:
+                rtnBlc.append( choice( [elem for elem in blcs if (elem != b)] ) )
+            else:
+                rtnBlc.append( b )
+        return rtnBlc
+    
+
+    def identify_blocks_tower():
+        rtnBlc = []
+        for b in towr:
+            if random() < P_Ni:
+                rtnBlc.append( choice( [elem for elem in blcs if (elem != b)] ) )
+            else:
+                rtnBlc.append( b )
+        return rtnBlc
+
+    Nscs = 0
+
+    # For trial in trials
     for _ in range(N):
-        towr = [1,]
-        tRun = t_mv + t_pl
+        tabl = [i+1 for i in range(h)]
+        towr = []
+        tRun = 0
         rnng = True
         Nitr = 0
+        curr = 1
         while rnng:
+
             Nitr += 1
-            if Nitr > 500:
+
+            tblID = identify_blocks_table()
+            twrID = identify_blocks_tower()
+
+            twrOK = (twrID == [i+1 for i in range( len( towr ) )])
+
+            if _V:
+                print( f"({twrID})/{twrOK}", end=":" )
+
+            if not twrOK:
+                tRun += t_rm
+                tabl.append( towr[-1] )
+                towr = towr[:-1]
+                curr -= 1
+                if curr < 1:
+                    curr = 1
+                if _V:
+                    print( towr, end=", " )
+                continue
+            elif len( towr ) >= h:
                 rnng = False
-            for j in range( len( towr ) ):
-                if random() <= P_Ni:
-                    tRun += t_rm
-                    towr = towr[:-1]
-                    break
-            if len( towr ) < i:
+                Nscs += 1
+                continue
+            
+            if curr in tblID:
+                popDex = tblID.index( curr )
+                popBlc = tabl[ popDex ]
                 tRun += t_mv + t_pl
-                towr.append( len(towr)+1 )
-            else:
+                towr.append( popBlc )
+                tabl.pop( popDex )
+                curr += 1
+
+                if _V:
+                    print( towr, end=", " )
+            elif _V:
+                print( "DNE", end=", " )
+
+            if Nitr > iterLim:
                 rnng = False
+        if _V:
+            print( towr, end=", " )
+            print('\n')
         T.append( tRun )
+    print( f"Sim. Success Rate: {Nscs/N}" )
     return np.mean( T )
 
 
@@ -130,44 +196,50 @@ _EXCLUDE_PDLS = False
 
 
 if __name__ == "__main__":
-    data = collect_multiple_makespan_datasets( 
-        {
-            f"{np.round(0.001*6.0,2)}" : "./data/",
-            f"{np.round(0.01*6.0,2)}"  : "./132a_sweep/data/",
-            f"{np.round(0.025*6.0,2)}" : "./132b_sweep/data/",
-            f"{np.round(0.05*6.0,2)}"  : "./132c_sweep/data/",
-            f"{np.round(0.075*6.0,2)}" : "./132d_sweep/data/",
-        }, 
-        prefix = "TAMP-Loop" 
-    )
-    for sName, data_i in data.items():
 
-        data_ii = data_i['data']
+    if 1:
+        simulate_tot_baseline( 4, 1, 1, 2, 0.45, N = 1000 )
+    else:
 
-        if not _EXCLUDE_PDLS:
-            mkSpans  = data_i['msTotl']
-            avgMkspn = np.mean( mkSpans )
-        else:
-            mkSpans  = []
-            avgMkspn = 0.0
+        data = collect_multiple_makespan_datasets( 
+            {
+                f"{np.round(0.001*6.0,3)}" : "./data/",
+                f"{np.round(0.01*6.0,3)}"  : "./132a_sweep/data/",
+                f"{np.round(0.025*6.0,3)}" : "./132b_sweep/data/",
+                f"{np.round(0.05*6.0,3)}"  : "./132c_sweep/data/",
+                f"{np.round(0.075*6.0,3)}" : "./132d_sweep/data/",
+            }, 
+            prefix = "TAMP-Loop" 
+        )
+        for sName, data_i in data.items():
 
-        print( f"There are {len(data_ii['trials'])} recorded trials for {sName} Confusion" )
+            data_ii = data_i['data']
 
-        # print( data_i['trials'][0].keys() )
+            if not _EXCLUDE_PDLS:
+                mkSpans  = data_i['msTotl']
+                avgMkspn = np.mean( mkSpans )
+            else:
+                mkSpans  = []
+                avgMkspn = 0.0
 
-        t_mv_all = list()
-        t_pl_all = list()
-        t_rm_all = list()
-        N_bktrk  = 0 # Number of times we backtracked
-        N_blcPln = 0 # Total of all block move plans
-        target   = [ _MIN_X_OFFSET+6.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ]
+            print( f"There are {len(data_ii['trials'])} recorded trials for {sName} Confusion" )
 
-        # For every trial in the series
-        for trial in data_ii['trials']:
+            # print( data_i['trials'][0].keys() )
 
-            ms_i = 0
+            t_mv_all = list()
+            t_pl_all = list()
+            t_rm_all = list()
+            N_bktrk  = 0 # Number of times we backtracked
+            N_blcPln = 0 # Total of all block move plans
+            target   = [ _MIN_X_OFFSET+6.0*_BLOCK_SCALE, 0.000, 1.0*_BLOCK_SCALE,  1,0,0,0 ]
 
-            if trial['result']:
+            # For every trial in the series
+            for trial in data_ii['trials']:
+
+                ms_i = 0
+
+                if not trial['result']:
+                    continue
 
                 # Setup timing vars
                 t_mv_bgn = 0.0
@@ -177,38 +249,51 @@ if __name__ == "__main__":
                 t_pl_i   = 0.0
                 t_rm_i   = 0.0
                 moved    = set(list())
+                start    = False
                 bgnMv    = False
                 p_mstk   = False
                 
                 # For every event in the trial, Extract elems, compute timing, and determine backtracking
                 for (time_e, name_e, mesg_e) in trial['events']:
 
+                    # print( time_e, name_e, mesg_e )
+
                     # Handle beginning and end
                     if (name_e == "Begin Solver"):  # 2024-05-31: For now, Include PDLS in the move time
-                        if not bgnMv:
+                    # if ("Move_" in name_e):  
+                        if not start:
                             N_blcPln += 1
                             t_mv_bgn = time_e
-                            bgnMv    = True
-                        else:
+                            start    = True
+                    
+                    # elif (name_e == "Begin Solver"):  # 2024-05-31: For now, Include PDLS in the move time
+                        if bgnMv:
+                        # else:
                             if p_mstk:
                                 t_rm_i = time_e - t_rm_bgn
                                 t_rm_all.append( t_rm_i )
+                                if _EXCLUDE_PDLS:
+                                    ms_i += t_rm_i
                             else:
                                 if (t_pl_bgn > 0.0):
                                     t_pl_i = time_e - t_pl_bgn
                                 if (t_pl_i > 0.0):
                                     t_mv_all.append( t_mv_i )
                                     t_pl_all.append( t_pl_i )
+                                    if _EXCLUDE_PDLS:
+                                        ms_i += t_mv_i + t_pl_i
                             t_mv_i   = 0.0
                             t_pl_i   = 0.0
                             t_mv_bgn = 0.0
                             t_pl_bgn = 0.0
                             t_rm_bgn = 0.0
                             p_mstk   = False
+                            start    = False
                             bgnMv    = False
 
-                    # Determine if this is a removal
-                    # if ("Move_" in name_e):  
+                    elif ("Move_" in name_e):  
+                        if start:
+                            bgnMv = True
 
                         
                     
@@ -239,33 +324,35 @@ if __name__ == "__main__":
 
                 if _EXCLUDE_PDLS:
                     mkSpans.append( ms_i )
-                    
-        if _EXCLUDE_PDLS:
-            avgMkspn = np.mean( mkSpans )
+                        
+            if _EXCLUDE_PDLS:
+                avgMkspn = np.mean( mkSpans )
 
-        t_mv_avg = np.mean( t_mv_all )
-        t_pl_avg = np.mean( t_pl_all )
-        t_rm_avg = np.mean( t_rm_all )
-        # t_rm_avg = t_mv_avg + t_pl_avg # 2024-05-31: For now, assume re/move take the same amount of time
-        P_repeat = N_bktrk/N_blcPln
+            t_mv_avg = np.mean( t_mv_all )
+            t_pl_avg = np.mean( t_pl_all )
+            t_rm_avg = np.mean( t_rm_all )
+            # t_rm_avg = t_mv_avg + t_pl_avg # 2024-05-31: For now, assume re/move take the same amount of time
+            P_repeat = N_bktrk/N_blcPln
 
-        print( f"\n\nCounted {len(t_mv_all)},{len(t_pl_all)} per-block plans." )
-        print( f"Mean t_mv: {t_mv_avg}" )
-        print( f"Mean t_pl: {t_pl_avg}" )
-        # print( f"Backtrack Rate: {P_repeat}" )
-        print( f"Backtrack Rate: {float(sName)}" )
-        print( f"Average Makespan across all trials: {avgMkspn}" )
+            print( f"\n\nCounted {len(t_mv_all)},{len(t_pl_all)} per-block plans." )
+            print( f"Mean t_mv: {t_mv_avg}" )
+            print( f"Mean t_pl: {t_pl_avg}" )
+            print( f"Mean t_rm: {t_rm_avg}" )
+            # print( f"Backtrack Rate: {P_repeat}" )
+            print( f"Backtrack Rate: {float(sName)}" )
+            print( f"Average Makespan across all trials: {avgMkspn}" )
 
 
-        # totalMkspn4bloc  = simulate_i_baseline( 4, t_mv_avg, t_pl_avg, t_rm_avg, P_repeat )
-        totalMkspn4bloc  = simulate_i_baseline( 4, t_mv_avg, t_pl_avg, t_rm_avg, float(sName) )
-        data_i['msEstm'] = totalMkspn4bloc
-        data_i['msMean'] = avgMkspn
+            # totalMkspn4bloc  = simulate_i_baseline( 4, t_mv_avg, t_pl_avg, t_rm_avg, P_repeat )
+            totalMkspn4bloc  = simulate_tot_baseline( 4, t_mv_avg, t_pl_avg, t_rm_avg, float(sName), 10000 )
+            # totalMkspn4bloc  = simulate_tot_baseline( 4, t_mv_avg, t_pl_avg, t_rm_avg, P_repeat, 10000 )
+            data_i['msEstm'] = totalMkspn4bloc
+            data_i['msMean'] = avgMkspn
 
-        print( f"Estimated Makespan across all trials: {totalMkspn4bloc}\n\n#####################" )
+            print( f"Estimated Makespan across all trials: {totalMkspn4bloc}\n\n#####################" )
 
-    plot_sweep_estimated_makespans( 
-        data, 
-        "TAMP-Baseline-Est", 
-        "Block Tower Makespan -vs- Confusion, Baseline, Estimated", 
-    )
+        plot_sweep_estimated_makespans( 
+            data, 
+            "TAMP-Baseline-Est", 
+            "Block Tower Makespan -vs- Confusion, Baseline, Estimated", 
+        )
