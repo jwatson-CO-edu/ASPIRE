@@ -14,6 +14,30 @@ from env_config import _MIN_X_OFFSET, _BLOCK_SCALE
 ########## MAKESPAN ESTIMATION #####################################################################
 
 
+def est_i_baseline( i, t_mv, t_pl, t_rm, P_Ni, N = 1 ):
+    """ Estimate serial tower building up to `i` """
+    bigSum = prvSum = 0
+    for _ in range( N ):
+        bigSum += t_mv + t_pl
+        bigSum += P_Ni * ( t_rm + prvSum )
+        smlSum = 0
+        for j in range( 1, i ):
+            P_fail_j = 1.0 - ((1.0 - P_Ni) ** (i-j))
+            # print( f"Failure Below: {P_fail_j}" )
+            smlSum += P_fail_j * t_rm
+            for k in range( j, i ):
+                smlSum += P_fail_j * (t_rm + est_i_baseline( k, t_mv, t_pl, t_rm, P_Ni, N) )
+                # smlSum += P_fail_j * (est_i_baseline( k, t_mv, t_pl, t_rm, P_Ni, N) )
+            smlSum += P_fail_j * ( prvSum )
+            # smlSum += P_fail_j * ( t_rm + prvSum )
+        if i > 1:
+            # smlSum /= i-1
+            smlSum /= i
+        bigSum += smlSum
+        prvSum = bigSum
+    return bigSum
+
+
 # def simulate_i_baseline( i, t_mv, t_pl, t_rm, P_Ni, N = 100, mem = None ):
 def simulate_tot_baseline( h, t_mv, t_pl, t_rm, P_Ni, N = 100, iterLim = 500 ):
     """ Simulate serial tower building up to `i` """
@@ -197,7 +221,7 @@ _EXCLUDE_PDLS = False
 
 if __name__ == "__main__":
 
-    if 1:
+    if 0:
         simulate_tot_baseline( 4, 1, 1, 2, 0.45, N = 1000 )
     else:
 
@@ -260,6 +284,7 @@ if __name__ == "__main__":
 
                     # Handle beginning and end
                     if (name_e == "Begin Solver"):  # 2024-05-31: For now, Include PDLS in the move time
+                    # if (name_e == "Begin Solver") or ("BT END" in name_e):  # 2024-05-31: For now, Include PDLS in the move time
                     # if ("Move_" in name_e):  
                         if not start:
                             N_blcPln += 1
@@ -267,6 +292,7 @@ if __name__ == "__main__":
                             start    = True
                     
                     # elif (name_e == "Begin Solver"):  # 2024-05-31: For now, Include PDLS in the move time
+                    # elif ("BT END" in name_e):  
                         if bgnMv:
                         # else:
                             if p_mstk:
@@ -284,6 +310,7 @@ if __name__ == "__main__":
                                         ms_i += t_mv_i + t_pl_i
                             t_mv_i   = 0.0
                             t_pl_i   = 0.0
+                            t_rm_i   = 0.0
                             t_mv_bgn = 0.0
                             t_pl_bgn = 0.0
                             t_rm_bgn = 0.0
@@ -332,7 +359,9 @@ if __name__ == "__main__":
             t_pl_avg = np.mean( t_pl_all )
             t_rm_avg = np.mean( t_rm_all )
             # t_rm_avg = t_mv_avg + t_pl_avg # 2024-05-31: For now, assume re/move take the same amount of time
-            P_repeat = N_bktrk/N_blcPln
+            
+            # P_repeat = N_bktrk/N_blcPln
+            P_repeat = float(sName)
 
             print( f"\n\nCounted {len(t_mv_all)},{len(t_pl_all)} per-block plans." )
             print( f"Mean t_mv: {t_mv_avg}" )
@@ -344,8 +373,9 @@ if __name__ == "__main__":
 
 
             # totalMkspn4bloc  = simulate_i_baseline( 4, t_mv_avg, t_pl_avg, t_rm_avg, P_repeat )
-            totalMkspn4bloc  = simulate_tot_baseline( 4, t_mv_avg, t_pl_avg, t_rm_avg, float(sName), 10000 )
+            # totalMkspn4bloc  = simulate_tot_baseline( 4, t_mv_avg, t_pl_avg, t_rm_avg, float(sName), 10000 )
             # totalMkspn4bloc  = simulate_tot_baseline( 4, t_mv_avg, t_pl_avg, t_rm_avg, P_repeat, 10000 )
+            totalMkspn4bloc = est_i_baseline( 4, t_mv_avg, t_pl_avg, t_rm_avg, P_repeat, N = 1 )
             data_i['msEstm'] = totalMkspn4bloc
             data_i['msMean'] = avgMkspn
 
