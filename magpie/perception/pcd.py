@@ -142,7 +142,7 @@ def get_segment(segments, index, rgbd_image, rsc, type="box", viz_scale=1500.0, 
 
     if type == "box-dbscan": # much cheaper than SAM
         # find largest cluster with dbscan
-        labels = np.array(cpcd.cluster_dbscan(eps=0.01, min_points=50))
+        labels = np.array(cpcd.cluster_dbscan(eps=0.01, min_points=30))
         # Find the label with the maximum count
         unique_labels, label_counts = np.unique(labels, return_counts=True)
         largest_cluster_label = unique_labels[np.argmax(label_counts)]
