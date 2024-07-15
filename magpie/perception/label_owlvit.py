@@ -12,7 +12,7 @@ from transformers import OwlViTProcessor, OwlViTForObjectDetection
 import matplotlib.pyplot as plt
 
 class LabelOWLViT(Label):
-    def __init__(self, topk=3, score_threshold=0.005, pth="google/owlvit-base-patch32"):
+    def __init__(self, topk=4, score_threshold=0.005, pth="google/owlvit-base-patch32"):
         '''
         @param camera camera object, expects realsense_wrapper
         '''
@@ -98,13 +98,16 @@ class LabelOWLViT(Label):
         if not show_plot: plt.close(fig)  # Close the figure to prevent displaying it
 
     def get_preds(self, outputs, target_sizes):
+
         logits = torch.max(outputs["logits"][0], dim=-1)
         scores = torch.sigmoid(logits.values).cpu().detach().numpy()
         # Get prediction labels and boundary boxes
         labels = logits.indices.cpu().detach().numpy()
         # boxes = outputs["pred_boxes"][0].cpu().detach().numpy()
         boxes = outputs["pred_boxes"][0].cpu().detach().numpy()
+        print('Post processing...')
         pboxes = self.processor.post_process_object_detection(outputs=outputs, target_sizes=target_sizes, threshold=self.SCORE_THRESHOLD)[0]['boxes']
+        print('Done post processing.')
         # sort labels by score, high to low
         sorted_indices = np.argsort(scores)[::-1]
 
@@ -132,6 +135,7 @@ class LabelOWLViT(Label):
         img = np.asarray(input_image)
         img_tensor = torch.tensor(img, dtype=torch.float32)
         inputs = self.processor(input_labels, images=img_tensor, padding=True, return_tensors="pt")
+       
         outputs = self.model(**inputs)
         self.dims = img.shape[:2][::-1] # TODO: check if this is correct
         self.W = self.dims[0]
@@ -141,8 +145,10 @@ class LabelOWLViT(Label):
         scores, labels, boxes, pboxes = self.get_preds(outputs, target_sizes)
         image_plt = img.astype(np.float32) / 255.0
         self.plot_predictions(image_plt, abbrev_labels, scores, boxes, labels, topk=topk, show_plot=plot)
+
         bboxes, uboxes = self.get_boxes(input_image, abbrev_labels, scores, boxes, labels)
+        print('Plot box')
         self.boxes = bboxes
         self.labels = np.array([i[1] for i in uboxes])
-        return bboxes, uboxes
+        return bboxes, uboxes, scores
 
