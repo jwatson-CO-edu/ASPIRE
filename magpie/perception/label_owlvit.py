@@ -105,9 +105,7 @@ class LabelOWLViT(Label):
         labels = logits.indices.cpu().detach().numpy()
         # boxes = outputs["pred_boxes"][0].cpu().detach().numpy()
         boxes = outputs["pred_boxes"][0].cpu().detach().numpy()
-        print('Post processing...')
         pboxes = self.processor.post_process_object_detection(outputs=outputs, target_sizes=target_sizes, threshold=self.SCORE_THRESHOLD)[0]['boxes']
-        print('Done post processing.')
         # sort labels by score, high to low
         sorted_indices = np.argsort(scores)[::-1]
 
@@ -150,5 +148,5 @@ class LabelOWLViT(Label):
         print('Plot box')
         self.boxes = bboxes
         self.labels = np.array([i[1] for i in uboxes])
-        return bboxes, uboxes, scores
+        return bboxes, uboxes, scores, labels
 
