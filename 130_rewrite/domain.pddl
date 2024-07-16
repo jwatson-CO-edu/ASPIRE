@@ -1,7 +1,3 @@
-; https://planning.wiki/ref/pddl/domain
-
-; GOAL: Stack 2x towers of 3x Blocks, No Motion
-
 (define (domain pick-place-and-stack)
   (:requirements :strips :negative-preconditions)
 
