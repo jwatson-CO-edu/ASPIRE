@@ -71,6 +71,7 @@ class LabelOWLViT(Label):
             scores = self.sorted_scores[:self.TOP_K]
             boxes  = self.sorted_boxes[:self.TOP_K]
             labels = self.sorted_labels[:self.TOP_K] # oops
+        print(boxes)
         for score, box, label in zip(scores, boxes, labels):
             if score < self.SCORE_THRESHOLD and not topk:
                 continue
@@ -145,7 +146,6 @@ class LabelOWLViT(Label):
         self.plot_predictions(image_plt, abbrev_labels, scores, boxes, labels, topk=topk, show_plot=plot)
 
         bboxes, uboxes = self.get_boxes(input_image, abbrev_labels, scores, boxes, labels)
-        print('Plot box')
         self.boxes = bboxes
         self.labels = np.array([i[1] for i in uboxes])
         return bboxes, uboxes, scores, labels
