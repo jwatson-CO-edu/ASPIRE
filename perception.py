@@ -46,7 +46,11 @@ class Perception:
 
     def start_interface(self):
         """Starts the UR5 interface."""
-        self.ur.start()
+        try:
+            self.ur.start()
+        except Exception as e:
+            logging.error(f"Error starting UR5 interface: {e}")
+            raise e
 
     def stop_interface(self):
         """Stops the UR5 interface."""
