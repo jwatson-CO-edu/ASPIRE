@@ -71,7 +71,6 @@ class LabelOWLViT(Label):
             scores = self.sorted_scores[:self.TOP_K]
             boxes  = self.sorted_boxes[:self.TOP_K]
             labels = self.sorted_labels[:self.TOP_K] # oops
-        print(boxes)
         for score, box, label in zip(scores, boxes, labels):
             if score < self.SCORE_THRESHOLD and not topk:
                 continue
@@ -134,7 +133,7 @@ class LabelOWLViT(Label):
         img = np.asarray(input_image)
         img_tensor = torch.tensor(img, dtype=torch.float32)
         inputs = self.processor(input_labels, images=img_tensor, padding=True, return_tensors="pt")
-       
+
         outputs = self.model(**inputs)
         self.dims = img.shape[:2][::-1] # TODO: check if this is correct
         self.W = self.dims[0]
@@ -144,7 +143,6 @@ class LabelOWLViT(Label):
         scores, labels, boxes, pboxes = self.get_preds(outputs, target_sizes)
         image_plt = img.astype(np.float32) / 255.0
         self.plot_predictions(image_plt, abbrev_labels, scores, boxes, labels, topk=topk, show_plot=plot)
-
         bboxes, uboxes = self.get_boxes(input_image, abbrev_labels, scores, boxes, labels)
         self.boxes = bboxes
         self.labels = np.array([i[1] for i in uboxes])
