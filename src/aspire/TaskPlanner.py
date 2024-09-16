@@ -26,44 +26,23 @@ import numpy as np
 from py_trees.common import Status
 from py_trees.composites import Sequence
 from magpie.BT import Open_Gripper
+from magpie import ur5 as ur5
+from magpie.poses import repair_pose, translation_diff
 import open3d as o3d
 
 ### Local ###
-from env_config import ( _BLOCK_SCALE, _SCORE_DECAY_TAU_S, _NULL_NAME, _OBJ_TIMEOUT_S, _BLOCK_NAMES, _VERBOSE, 
-                         _MIN_X_OFFSET, _MIN_Y_OFFSET, _X_WRK_SPAN, _Y_WRK_SPAN,
-                         _ACCEPT_POSN_ERR, _MIN_SEP, _USE_GRAPHICS, _N_XTRA_SPOTS, _MAX_UPDATE_RAD_M, _UPDATE_PERIOD_S,
-                         _BT_UPDATE_HZ, _BT_ACT_TIMEOUT_S, _LKG_SEP, _RECORD_SYM_SEQ, _CUT_SCORE_FRAC, _CUT_MERGE_S_FRAC,
-                         _REIFY_SUPER_BEL, _SCORE_DIV_FAIL, )
-sys.path.append( "./task_planning/" )
-from task_planning.symbols import ( ObjectReading, ObjPose, GraspObj, extract_pose_as_homog, 
-                                    euclidean_distance_between_symbols, p_symbol_inside_workspace_bounds )
-from task_planning.utils import ( DataLogger, diff_norm, match_name, )
-from task_planning.actions import ( display_PDLS_plan, get_BT_plan_until_block_change, BT_Runner, 
-                                    Interleaved_MoveFree_and_PerceiveScene, MoveFree, GroundedAction, )
-from task_planning.belief import ObjectMemory
-sys.path.append( "./magpie/" )
-from magpie import ur5 as ur5
-from magpie.poses import repair_pose, translation_diff, vec_unit
-
+from symbols import ( ObjPose, GraspObj, extract_pose_as_homog, 
+                                    euclidean_distance_between_symbols )
+from utils import ( DataLogger, diff_norm,  )
+from actions import ( display_PDLS_plan, get_BT_plan_until_block_change, BT_Runner, 
+                      Interleaved_MoveFree_and_PerceiveScene, MoveFree, GroundedAction, )
 
 ### PDDLStream ### 
-sys.path.append( "./pddlstream/" )
+sys.path.append( "../../pddlstream/" )
 from pddlstream.utils import read, INF, get_file_path
 from pddlstream.language.generator import from_gen_fn, from_test
 from pddlstream.language.constants import print_solution, PDDLProblem
 from pddlstream.algorithms.meta import solve
-
-
-
-########## HELPER FUNCTIONS ########################################################################
-
-        
-
-
-########## BASELINE PLANNER ########################################################################
-
-##### Planning Params #####################################################
-
 
 
 
@@ -78,10 +57,7 @@ class TaskPlanner:
     def open_file( self ):
         """ Set the name of the current file """
         dateStr     = datetime.now().strftime("%m-%d-%Y_%H-%M-%S")
-        if _RECORD_SYM_SEQ:
-            self.outNam = f"Sym-Confidence_{dateStr}.txt"
-        else:
-            self.outNam = f"Responsive-Planner_{dateStr}.txt"
+        self.outNam = f"Task-Planner_{dateStr}.txt"
         self.outFil = open( os.path.join( self.outDir, self.outNam ), 'w' )
 
 
@@ -113,9 +89,8 @@ class TaskPlanner:
         self.open_file()
 
 
-    def __init__( self, world = None, noViz = False, noBot = False ):
+    def __init__( self, noViz = False, noBot = False ):
         """ Create a pre-determined collection of poses and plan skeletons """
-        # NOTE: The planner will start the Perception Process and the UR5 connection as soon as it is instantiated
         self.reset_symbols()
         self.reset_state()
         self.robot  = ur5.UR5_Interface() if (not noBot) else None
@@ -137,20 +112,12 @@ class TaskPlanner:
             self.robot.stop()
 
 
-    def perceive_scene( self, xform = None ):
-        """ Integrate one noisy scan into the current beliefs """
-        scan = self.world.full_scan_noisy( xform )
-        # LKG and Belief are updated SEPARATELY and merged LATER as symbols
-        self.world.rectify_readings( copy_readings_as_LKG( scan ) )
-        self.memory.belief_update( scan, xform, maxRadius = _MAX_UPDATE_RAD_M )
-
-
     ##### Stream Helpers ##################################################
 
     def get_grounded_pose_or_new( self, homog ):
         """ If there is a `Waypoint` approx. to `homog`, then return it, Else create new `ObjPose` """
         for fact in self.facts:
-            if fact[0] == 'Waypoint' and ( euclidean_distance_between_symbols( homog, fact[1] ) <= _ACCEPT_POSN_ERR):
+            if fact[0] == 'Waypoint' and ( euclidean_distance_between_symbols( homog, fact[1] ) <= os.environ["_ACCEPT_POSN_ERR"]):
                 return fact[1]
         return ObjPose( homog )
 
@@ -159,276 +126,59 @@ class TaskPlanner:
         """ Does this exist as a `Waypoint`? """
         homog = extract_pose_as_homog( poseOrObj )
         for fact in self.facts:
-            if fact[0] == 'Waypoint' and ( euclidean_distance_between_symbols( homog, fact[1] ) <= _ACCEPT_POSN_ERR):
+            if fact[0] == 'Waypoint' and ( euclidean_distance_between_symbols( homog, fact[1] ) <= os.environ["_ACCEPT_POSN_ERR"]):
                 return True
         return False
-    
 
-    ##### Stream Creators #################################################
-
-    def get_above_pose_stream( self ):
-        """ Return a function that returns poses """
-
-        def stream_func( *args ):
-            """ A function that returns poses """
-
-            if _VERBOSE:
-                print( f"\nEvaluate ABOVE LABEL stream with args: {args}\n" )
-
-            objcName = args[0]
-
-            for sym in self.symbols:
-                if sym.label == objcName:
-                    upPose = extract_pose_as_homog( sym )
-                    upPose[2,3] += _BLOCK_SCALE
-
-                    rtnPose = self.get_grounded_fact_pose_or_new( upPose )
-                    print( f"FOUND a pose {rtnPose} supported by {objcName}!" )
-
-                    yield (rtnPose,)
-
-        return stream_func
-    
-
-    def get_placement_pose_stream( self ):
-        """ Return a function that returns poses """
-
-        def stream_func( *args ):
-            """ A function that returns poses """
-
-            if _VERBOSE:
-                print( f"\nEvaluate PLACEMENT POSE stream with args: {args}\n" )
-
-            placed   = False
-            testPose = None
-            while not placed:
-                testPose  = rand_table_pose()
-                print( f"\t\tSample: {testPose}" )
-                for sym in self.symbols:
-                    if euclidean_distance_between_symbols( testPose, sym ) < ( _MIN_SEP ):
-                        collide = True
-                        break
-                if not collide:
-                    placed = True
-            yield (ObjPose(testPose),)
-
-        return stream_func
-
-
-    def get_free_placement_test( self ):
-        """ Return a function that checks placement poses """
-
-        def test_func( *args ):
-            """ a function that checks placement poses """
-            print( f"\nEvaluate PLACEMENT test with args: {args}\n" )
-            # ?pose
-            chkPose   = args[0]
-            print( f"Symbols: {self.symbols}" )
-
-            for sym in self.symbols:
-                if euclidean_distance_between_symbols( chkPose, sym ) < ( _MIN_SEP ):
-                    print( f"PLACEMENT test FAILURE\n" )
-                    return False
-            print( f"PLACEMENT test SUCCESS\n" )
-            return True
-        
-        return test_func
 
 
     ##### Task Planning Helpers ###########################################
 
-    def pddlstream_from_problem( self ):
+    def pddlstream_from_problem( self, pdls_stream_map = None ):
         """ Set up a PDDLStream problem with the UR5 """
 
         domain_pddl  = read( get_file_path( __file__, os.path.join( 'task_planning/', 'domain.pddl' ) ) )
         stream_pddl  = read( get_file_path( __file__, os.path.join( 'task_planning/', 'stream.pddl' ) ) )
         constant_map = {}
-        stream_map = {
-            ### Symbol Streams ###
-            'sample-above'        : from_gen_fn( self.get_above_pose_stream()     ), 
-            # 'sample-free-placment': from_gen_fn( self.get_placement_pose_stream() ), 
-            ### Symbol Tests ###
-            'test-free-placment': from_test( self.get_free_placement_test() ),
-        }
+        stream_map = pdls_stream_map if ( pdls_stream_map is not None ) else dict()
 
-        if _VERBOSE:
+        if os.environ["_VERBOSE"]:
             print( "About to create problem ... " )
 
         return PDDLProblem( domain_pddl, constant_map, stream_pddl, stream_map, self.facts, self.goal )
     
 
-    def set_goal( self ):
+    def set_goal( self, nuGoal ):
         """ Set the goal """
 
-        # FIXME: COLORS AND POSES INCORRECT!
-
-        self.goal = ( 'and',
+        self.goal = nuGoal
+        
+        # ( 'and',
             
-            ('GraspObj', 'grnBlock' , _trgtGrn  ), # ; Tower
-            ('Supported', 'ylwBlock', 'grnBlock'), 
-            ('Supported', 'bluBlock', 'ylwBlock'),
-            # ('Supported', 'redBlock', 'bluBlock'),
+        #     ('GraspObj', 'grnBlock' , _trgtGrn  ), # ; Tower
+        #     ('Supported', 'ylwBlock', 'grnBlock'), 
+        #     ('Supported', 'bluBlock', 'ylwBlock'),
 
-            ('HandEmpty',),
-        )
+        #     ('HandEmpty',),
+        # )
 
-        if _VERBOSE:
+        if os.environ["_VERBOSE"]:
             print( f"\n### Goal ###" )
             pprint( self.goal )
             print()
+
 
     def p_failed( self ):
         """ Has the system encountered a failure? """
         return (self.status == Status.FAILURE)
     
 
-    ##### Object Permanence ###############################################
-
-    def merge_and_reconcile_object_memories( self, tau = _SCORE_DECAY_TAU_S, cutScoreFrac = 0.5  ):
-        """ Calculate a consistent object state from LKG Memory and Beliefs """
-        mrgLst  = list()
-        tCurr   = now()
-        totLst  = self.memory.beliefs[:]
-        LKGmem  = self.world.get_last_best_readings()
-        totLst.extend( LKGmem )
-
-        def cut_bottom_fraction( objs, frac ):
-            """ Return a version of `objs` with the bottom `frac` scores removed """
-            rtnObjs = sorted( objs, key = lambda item: item.score, reverse = True )
-            keepNum  = len( rtnObjs ) - int( frac * len( rtnObjs ) )
-            return rtnObjs[ 0:keepNum ]
-        
-        # Filter and Decay stale readings
-        for r in totLst:
-            if ((tCurr - r.ts) <= _OBJ_TIMEOUT_S):
-                score_r = np.exp( -(tCurr - r.ts) / tau ) * r.score
-                if isnan( score_r ):
-                    print( f"\nWARN: Got a NaN score with count {r.count}, distribution {r.labels}, and age {tCurr - r.ts}\n" )
-                    score_r = 0.0
-                r.score = score_r
-                mrgLst.append( r )
-
-        if (1.0 > cutScoreFrac > 0.0):
-            mrgLst = cut_bottom_fraction( mrgLst, cutScoreFrac )
-        
-        # Enforce consistency and return
-        return self.world.rectify_readings( mrgLst, suppressStorage = True )
-        
-
-    def most_likely_objects( self, objList, method = "unique-non-null", cutScoreFrac = 0.5 ):
-        """ Get the `N` most likely combinations of object classes """
-        # FIXME: THIS IS PROBABLY WRONG WAS APPLICABLE TO THE SIMULATION ONLY BUT NOT 
-        #        A VARIABLE COLLECTION OF OBJECTS, POSSIBLE SOURCE OF BAD BAD ERRORS
-
-        def cut_bottom_fraction( objs, frac ):
-            """ Return a version of `objs` with the bottom `frac` scores removed """
-            rtnObjs = sorted( objs, key = lambda item: item.score, reverse = True )
-            keepNum  = len( rtnObjs ) - int( frac * len( rtnObjs ) )
-            return rtnObjs[ 0:keepNum ]
-
-        ### Combination Generator ###
-
-        def gen_combos( objs ):
-            ## Init ##
-            if (1.0 > cutScoreFrac > 0.0):
-                objs = cut_bottom_fraction( objs, cutScoreFrac )
-            comboList = [ [1.0,[],], ]
-            ## Generate all class combinations with joint probabilities ##
-            for bel in objs:
-                nuCombos = []
-                for combo_i in comboList:
-                    for label_j, prob_j in bel.labels.items():
-                        prob_ij = combo_i[0] * prob_j
-
-                        objc_ij = GraspObj( label = label_j, pose = bel.pose, 
-                                            prob = prob_j, score = bel.score, labels = bel.labels )
-                        
-                        nuCombos.append( [prob_ij, combo_i[1]+[objc_ij,],] )
-                comboList = nuCombos
-            ## Sort all class combinations with decreasing probabilities ##
-            comboList.sort( key = (lambda x: x[0]), reverse = True )
-            return comboList
-
-        ### Filtering Methods ###
-
-        def p_unique_labels( objs ):
-            """ Return true if there are as many classes as there are objects """
-            lbls = set([sym.label for sym in objs])
-            return len( lbls ) == len( objs )
-        
-        def p_unique_non_null_labels( objs ):
-            """ Return true if there are as many classes as there are objects """
-            lbls = set([sym.label for sym in objs])
-            if _NULL_NAME in lbls: 
-                return False
-            return len( lbls ) == len( objs )
-        
-        def clean_dupes_prob( objLst ):
-            """ Return a version of `objLst` with duplicate objects removed """
-            dctMax = {}
-            for sym in objLst:
-                if not sym.label in dctMax:
-                    dctMax[ sym.label ] = sym
-                elif sym.prob > dctMax[ sym.label ].prob:
-                    dctMax[ sym.label ] = sym
-            return list( dctMax.values() )
-        
-        def clean_dupes_score( objLst ):
-            """ Return a version of `objLst` with duplicate objects removed """
-            dctMax = {}
-            for sym in objLst:
-                if not sym.label in dctMax:
-                    dctMax[ sym.label ] = sym
-                elif sym.score > dctMax[ sym.label ].score:
-                    dctMax[ sym.label ] = sym
-            return list( dctMax.values() )
-
-        ### Apply the chosen Filtering Method to all possible combinations ###
-
-        totCombos  = gen_combos( objList )
-        rtnSymbols = list()
-
-        if (method == "unique"):
-            for combo in totCombos:
-                if p_unique_labels( combo[1] ):
-                    rtnSymbols = combo[1]
-                    break
-        elif (method == "unique-non-null"):
-            for combo in totCombos:
-                if p_unique_non_null_labels( combo[1] ):
-                    rtnSymbols = combo[1]
-                    break
-        elif (method == "clean-dupes"):
-            rtnSymbols = clean_dupes_prob( totCombos[0][1] )
-        elif (method == "clean-dupes-score"):
-            rtnSymbols = clean_dupes_score( totCombos[0][1] )
-        else:
-            raise ValueError( f"`ResponsiveTaskPlanner.most_likely_objects`: Filtering method \"{method}\" is NOT recognized!" )
-        
-        ### Return all non-null symbols ###
-        rtnLst = [sym for sym in rtnSymbols if sym.label != _NULL_NAME]
-        print( f"\nDeterminized {len(rtnLst)} objects!\n" )
-        return rtnLst
     
-    
-    def reify_chosen_beliefs( self, objs, chosen, factor = _REIFY_SUPER_BEL ):
-        """ Super-believe in the beliefs we believed in. 
-            That is: Refresh the timestamp and score of readings that ultimately became grounded symbols """
-        posen = [ extract_pose_as_homog( ch ) for ch in chosen ]
-        maxSc = 0.0
-        for obj in objs:
-            if obj.score > maxSc:
-                maxSc = obj.score
-        for obj in objs:
-            for cPose in posen:
-                if (translation_diff( cPose, extract_pose_as_homog( obj ) ) <= _LKG_SEP):
-                    obj.score = maxSc * factor
-                    obj.ts    = now()
                 
 
     ##### Noisy Task Monitoring ###########################################
 
-    def get_sampled_block( self, label ):
+    def get_labeled_symbol( self, label ):
         """ If a block with `label` was sampled, then return a reference to it, Otherwise return `None` """
         for sym in self.symbols:
             if sym.label == label:
@@ -446,7 +196,7 @@ class TaskPlanner:
         return ObjPose( homog )
     
     
-    def ground_relevant_predicates_noisy( self ):
+    def ground_relevant_predicates( self ):
         """ Scan the environment for evidence that the task is progressing, using current beliefs """
         rtnFacts = []
         ## Gripper Predicates ##
@@ -463,7 +213,7 @@ class TaskPlanner:
             if g[0] == 'GraspObj':
                 pLbl = g[1]
                 pPos = g[2]
-                tObj = self.get_sampled_block( pLbl )
+                tObj = self.get_labeled_symbol( pLbl )
                 if (tObj is not None) and (euclidean_distance_between_symbols( pPos, tObj ) <= _ACCEPT_POSN_ERR):
                     rtnFacts.append( g ) # Position goal met
         # B. No need to ground the rest
@@ -622,7 +372,7 @@ class TaskPlanner:
                     self.facts.append( ('Waypoint', blockPose,) )
 
             ## Fetch Relevant Facts ##
-            self.facts.extend( self.ground_relevant_predicates_noisy() )
+            self.facts.extend( self.ground_relevant_predicates() )
 
             ## Populate Spots for Block Movements ##, 2024-04-25: Injecting this for now, Try a stream later ...
             self.facts.extend( self.allocate_table_swap_space( _N_XTRA_SPOTS ) )

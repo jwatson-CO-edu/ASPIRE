@@ -92,51 +92,30 @@ class ObjPose:
 
 class GraspObj:
     """ The concept of a named object at a pose """
-    # FIXME: JUST MERGE THIS WITH `ObjectReading` THEY ARE THE SAME NOW
+    
     num = count()
 
-    def __init__( self, label = None, pose = None, prob = None, score = None, labels = None ):
+    def __init__( self, label = None, pose = None, prob = None, score = None, labels = None, ts = None, count = 0 ):
         """ Set components used by planners """
-        self.label  = label if (label is not None) else _NULL_NAME
-        self.labels = labels if (labels is not None) else dict()
-        self.pose   = pose if (pose is not None) else ObjPose( np.eye(4) )
+        ### Single Object ###
         self.index  = next( self.num )
+        self.label  = label if (label is not None) else _NULL_NAME
         self.prob   = prob if (prob is not None) else 0.0 # 2024-07-22: This is for sorting dupes in the planner and is NOT used by PDDLStream
+        self.pose   = pose if (pose is not None) else ObjPose( np.eye(4) )
+        ### Distribution ###
+        self.labels  = labels if (labels is not None) else {} # Current belief in each class
+        self.visited = False # -------------------------------- Flag: Was this belief associated with a relevant reading
+        ### Object Memory ###
+        self.ts      = ts if (ts is not None) else now() # ---- When was this reading created? [epoch time]
+        self.count   = count # -------------------------------- How many bounding boxes generated this reading?
         self.score  = score if (score is not None) else 0.0 # 2024-07-25: This is for sorting dupes in the planner and is NOT used by PDDLStream
+        self.LKG     = False # -------------------------------- Flag: Part of the Last-Known-Good collection?
+
 
 
     def __repr__( self ):
         """ Text representation of noisy reading """
         return f"<GraspObj {self.index} @ {extract_position( self.pose )}, Class: {str(self.label)}, Score: {str(self.score)}>"
-    
-    def get_dict( self ):
-        """ Return a verison of the `GraspObj` suitable for a TXT file """
-        return {
-            'name'  : self.__class__.__name__,
-            'time'  : now(),
-            'label' : self.label,
-            'labels': self.labels,
-            'pose'  : extract_pose_as_homog( self.pose ).tolist(),
-            'index' : self.index,
-            'prob'  : self.prob,
-            'score' : self.score,
-        }
-
-
-
-class ObjectReading( GraspObj ):
-    """ Represents a signal coming from the vision pipeline """
-
-    def __init__( self, labels = None, pose = None, ts = None, count = 0, score = 0.0 ):
-        """ Init distribution and  """
-        super().__init__( None, pose )
-        self.labels  = labels if (labels is not None) else {} # Current belief in each class
-        self.visited = False # -------------------------------- Flag: Was this belief associated with a relevant reading
-        self.ts      = ts if (ts is not None) else now() # ---- When was this reading created? [epoch time]
-        self.count   = count # -------------------------------- How many bounding boxes generated this reading?
-        self.score   = score # -------------------------------- Quality rating for this information
-        self.LKG     = False # -------------------------------- Flag: Part of the Last-Known-Good collection?
-
 
     def __repr__( self ):
         """ Text representation of noisy reading """
@@ -158,10 +137,11 @@ class ObjectReading( GraspObj ):
             'index' : self.index,
             'score' : self.score,
         }
+    
 
     def copy( self ):
         """ Make a copy of this belief """
-        rtnObj = ObjectReading()
+        rtnObj = GraspObj()
         rtnObj.labels  = deepcopy( self.labels ) # Current belief in each class
         rtnObj.pose    = self.pose
         rtnObj.visited = False # ----------------- Flag: Was this belief associated with a relevant reading
@@ -177,3 +157,25 @@ class ObjectReading( GraspObj ):
         rtnObj = self.copy()
         rtnObj.LKG = True
         return rtnObj
+    
+
+    def get_dict( self ):
+        """ Return a verison of the `GraspObj` suitable for a TXT file """
+        return {
+            'name'  : self.__class__.__name__,
+            'time'  : now(),
+            'label' : self.label,
+            'labels': self.labels,
+            'pose'  : extract_pose_as_homog( self.pose ).tolist(),
+            'index' : self.index,
+            'prob'  : self.prob,
+            'score' : self.score,
+        }
+
+
+
+
+        
+
+
+    
