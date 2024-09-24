@@ -100,7 +100,6 @@ class TaskPlanner:
 
     def shutdown( self ):
         """ Stop the Perception Process and the UR5 connection """
-        self.world.stop()
         self.dump_to_file( openNext = False )
         if not self.noBot:
             self.robot.stop()
