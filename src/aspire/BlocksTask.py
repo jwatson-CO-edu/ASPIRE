@@ -12,6 +12,7 @@ _poseGrn = np.eye(4)
 _poseGrn[0:3,3] = [ _MIN_X_OFFSET+_X_WRK_SPAN/2.0, _MIN_Y_OFFSET+_Y_WRK_SPAN/2.0, 0.5*_BLOCK_SCALE, ]
 
 from symbols import ObjPose, extract_pose_as_homog, euclidean_distance_between_symbols
+from utils import diff_norm
 
 
 ########## ENVIRONMENT #############################################################################
@@ -56,13 +57,15 @@ def rand_table_pose():
 
 
 
-########## Stream Creators #########################################################################
+########## STREAM CREATORS && HELPER FUNCTIONS #####################################################
 
-class BlockStreams:
+class BlockFunctions:
 
     def __init__( self, planner ):
         """ Attach to Planner """
         self.planner = planner
+
+    ##### Stream Creators #################################################
 
     def get_above_pose_stream( self ):
         """ Return a function that returns poses """
@@ -131,3 +134,87 @@ class BlockStreams:
             return True
         
         return test_func
+    
+
+    ##### Helper Functions ################################################
+
+    def ground_relevant_predicates( self ):
+        """ Scan the environment for evidence that the task is progressing, using current beliefs """
+        rtnFacts = []
+        ## Gripper Predicates ##
+        if len( self.planner.grasp ):
+            for graspedLabel in self.planner.grasp:
+                # [hndl,pDif,bOrn,] = grasped
+                # labl = self.world.get_handle_name( hndl )
+                rtnFacts.append( ('Holding', graspedLabel,) )
+        else:
+            rtnFacts.append( ('HandEmpty',) )
+        ## Obj@Loc Predicates ##
+        # A. Check goals
+        for g in self.planner.goal[1:]:
+            if g[0] == 'GraspObj':
+                pLbl = g[1]
+                pPos = g[2]
+                tObj = self.planner.get_labeled_symbol( pLbl )
+                if (tObj is not None) and (euclidean_distance_between_symbols( pPos, tObj ) <= os.environ["_ACCEPT_POSN_ERR"]):
+                    rtnFacts.append( g ) # Position goal met
+        # B. No need to ground the rest
+
+        ## Support Predicates && Blocked Status ##
+        # Check if `sym_i` is supported by `sym_j`, blocking `sym_j`, NOTE: Table supports not checked
+        supDices = set([])
+        for i, sym_i in enumerate( self.planner.symbols ):
+            for j, sym_j in enumerate( self.planner.symbols ):
+                if i != j:
+                    lblUp = sym_i.label
+                    lblDn = sym_j.label
+                    posUp = extract_pose_as_homog( sym_i )
+                    posDn = extract_pose_as_homog( sym_j )
+                    xySep = diff_norm( posUp[0:2,3], posDn[0:2,3] )
+                    zSep  = posUp[2,3] - posDn[2,3] # Signed value
+                    if ((xySep <= 1.65*os.environ["_BLOCK_SCALE"]) and (1.65*os.environ["_BLOCK_SCALE"] >= zSep >= 0.9*os.environ["_BLOCK_SCALE"])):
+                        supDices.add(i)
+                        rtnFacts.extend([
+                            ('Supported', lblUp, lblDn,),
+                            ('Blocked', lblDn,),
+                            ('PoseAbove', self.get_grounded_fact_pose_or_new( posUp ), lblDn,),
+                        ])
+        for i, sym_i in enumerate( self.symbols ):
+            if i not in supDices:
+                rtnFacts.extend( [
+                    ('Supported', sym_i.label, 'table',),
+                    ('PoseAbove', self.get_grounded_fact_pose_or_new( sym_i ), 'table',),
+                ] )
+        ## Where the robot at? ##
+        robotPose = ObjPose( self.robot.get_tcp_pose() )
+        rtnFacts.extend([ 
+            ('AtPose', robotPose,),
+            ('WayPoint', robotPose,),
+        ])
+        ## Return relevant predicates ##
+        return rtnFacts
+    
+
+    def allocate_table_swap_space( self, Nspots = os.environ["_N_XTRA_SPOTS"] ):
+        """ Find some open poses on the table for performing necessary swaps """
+        rtnFacts  = []
+        freeSpots = []
+        occuSpots = [extract_pose_as_homog( sym ) for sym in self.planner.symbols]
+        while len( freeSpots ) < Nspots:
+            nuPose = rand_table_pose()
+            print( f"\t\tSample: {nuPose}" )
+            collide = False
+            for spot in occuSpots:
+                if euclidean_distance_between_symbols( spot, nuPose ) < ( os.environ["_MIN_SEP"] ):
+                    collide = True
+                    break
+            if not collide:
+                freeSpots.append( ObjPose( nuPose ) )
+                occuSpots.append( nuPose )
+        for objPose in freeSpots:
+            rtnFacts.extend([
+                ('Waypoint', objPose,),
+                ('Free', objPose,),
+                ('PoseAbove', objPose, 'table'),
+            ])
+        return rtnFacts
