@@ -17,20 +17,9 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-  'dynamixel_sdk',
   'numpy',
   'py_trees',
-  'spatialmath_python',
-  'splines',
-  'open3d',
-  'pyrealsense2',
-  'Pillow',
-  'open3d',
-  'scipy',
-  'ur_rtde',
-  'pyserial',
   'psutil',
-  'magpie_control',
 ]
 
 [project.urls]
