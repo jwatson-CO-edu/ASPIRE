@@ -2,7 +2,7 @@
 
 ##### Imports #####
 ### Standard ###
-import time
+import time, os
 now = time.time
 from copy import deepcopy
 from itertools import count
@@ -11,10 +11,8 @@ from itertools import count
 import numpy as np
 
 ### Local ###
-from graphics.homog_utils import R_quat, homog_xform
 from magpie.poses import translation_diff
-from env_config import ( _NULL_NAME, _NULL_NAME, 
-                         _MIN_X_OFFSET, _MAX_X_OFFSET, _MIN_Y_OFFSET, _MAX_Y_OFFSET, _MAX_Z_BOUND, )
+
 
 
 
@@ -26,7 +24,7 @@ def extract_np_array_pose( obj_or_arr ):
         return np.array( obj_or_arr )
     elif isinstance( obj_or_arr, ObjPose ):
         return np.array( obj_or_arr.pose )
-    elif isinstance( obj_or_arr, (GraspObj, ObjectReading,) ):
+    elif isinstance( obj_or_arr, (GraspObj,) ):
         return np.array( obj_or_arr.pose.pose )
     else:
         return None
@@ -55,7 +53,7 @@ def extract_position( obj_or_arr ):
 def p_symbol_inside_workspace_bounds( obj_or_arr ):
     """ Return True if inside the bounding box, Otherwise return False """
     posn = extract_position( obj_or_arr )      
-    return (_MIN_X_OFFSET <= posn[0] <= _MAX_X_OFFSET) and (_MIN_Y_OFFSET <= posn[1] <= _MAX_Y_OFFSET) and (0.0 < posn[2] <= _MAX_Z_BOUND)
+    return (os.environ["_MIN_X_OFFSET"] <= posn[0] <= os.environ["_MAX_X_OFFSET"]) and (os.environ["_MIN_Y_OFFSET"] <= posn[1] <= os.environ["_MAX_Y_OFFSET"]) and (0.0 < posn[2] <= os.environ["_MAX_Z_BOUND"])
 
 
 def euclidean_distance_between_symbols( sym1, sym2 ):
@@ -99,7 +97,7 @@ class GraspObj:
         """ Set components used by planners """
         ### Single Object ###
         self.index  = next( self.num )
-        self.label  = label if (label is not None) else _NULL_NAME
+        self.label  = label if (label is not None) else os.environ["_NULL_NAME"]
         self.prob   = prob if (prob is not None) else 0.0 # 2024-07-22: This is for sorting dupes in the planner and is NOT used by PDDLStream
         self.pose   = pose if (pose is not None) else ObjPose( np.eye(4) )
         ### Distribution ###
@@ -116,14 +114,6 @@ class GraspObj:
     def __repr__( self ):
         """ Text representation of noisy reading """
         return f"<GraspObj {self.index} @ {extract_position( self.pose )}, Class: {str(self.label)}, Score: {str(self.score)}>"
-
-    def __repr__( self ):
-        """ Text representation of noisy reading """
-        cleanDict = {}
-        objAge    = now() - self.ts
-        for k, v in self.labels.items():
-            cleanDict[ k[:3] ] = np.round( v, 3 )
-        return f"<ObjectReading @ {extract_position( self.pose )}, Dist: {str(cleanDict)}, Score: {self.score:.4f}, Age: {objAge:.2f} >"
     
     
     def get_dict( self ):
